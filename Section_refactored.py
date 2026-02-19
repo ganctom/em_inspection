@@ -1178,6 +1178,37 @@ class Section:
         return mean, std
 
 
+    def refine_coarse_offset_eval_ov(
+            self,
+            offset: Vector,
+            tile_pair: tuple[Tile, Tile],
+            is_vert: bool,
+            max_ext: int,
+            stride: int,
+
+    ) -> Optional[tuple[Vector, tuple[GridXY, GridXY]]]:
+
+        # Create set of shift vectors
+        shift_grid, gx, gy = utils.get_shift_grid(max_ext, stride, offset, is_vert)
+
+        # Refine offset and return best result
+        gz = []
+        for offset in shift_grid:
+            seam_ssim = self.eval_ov(tile_pair=tile_pair, offset=offset)
+            if seam_ssim is None:
+                break
+            seam_res = 1 / seam_ssim
+            gz.append(seam_res)
+        if not gz:
+            logging.warning(f'Refining offset not successful. Check image masks and consider disabling them.')
+            return None
+
+        # Select best offset from computed offset field
+        best_offset, refine_data = utils.interp_coarse_grid((gx, gy), gz)
+        logging.debug(f'estimated offset: {best_offset}')
+
+        return best_offset, refine_data
+
 
     def refine_coarse_offset(
             self,
@@ -1679,8 +1710,8 @@ def fine_align_section(
     # # Create margin masks for warping
     # section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
 
-    # # Compute flows betwe_fleen overlaps
-    # section.compute_finows(patch_size, stride, masking, overwrite=overwrite, ext=None)
+    # # Compute flows between overlaps
+    # section.compute_fie_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
 
     # #  Compute fine meshes
     # cfg = mesh.IntegrationConfig(
@@ -1719,8 +1750,8 @@ if __name__ == "__main__":
     exp = configs[cfg.ExperimentName.ROLI_F1]
 
     # # # FINE ALIGN
-    # sec_nums = list(range(3000, 3005))
-    # main_fine_align_sections(exp, sec_nums)
+    sec_nums = list(range(3000, 3005))
+    main_fine_align_sections(exp, sec_nums)
 
     # DEBUG
     # debug_cxcy()

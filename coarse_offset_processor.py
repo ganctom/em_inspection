@@ -62,9 +62,26 @@ class CoarseOffsetProcessor:
         """Public accessor for the section lookup table."""
         return self._get_section_lookup(sec_key)
 
+    def update_shift_vec(
+            self,
+            z: int | str,
+            axis: int,
+            y: int,
+            x: int,
+            shift_vec: npt.NDArray[np.float64] | Tuple[int, int]
+    ) -> None:
+        z_key = str(z)
+        new_vec = np.asarray(shift_vec).astype(np.float64)
+        print(f'updating cxyz with shift vec: {new_vec}')
+        print(f'old cxyz: {self.cxyz_obj[z_key][axis, :, y, x]}')
+        self.cxyz_obj[z_key][axis, :, y, x] = new_vec
+        print(f'new cxyz: {self.cxyz_obj[z_key][axis, :, y, x]}')
+        return None
+
     def get_shift_vec(self, z: int | str, axis: int, y: int, x: int) -> npt.NDArray[np.float64]:
         """Returns [dx, dy] for a specific section, axis (H/V), and grid coord."""
         z_key = str(z)  # Or f"{int(z):04d}" if your files use padding
+        print(f'getting shift vec: {z, axis, y, x}')
         return self.cxyz_obj[z_key][axis, :, y, x]
 
     def get_full_vector_stack(self, z: int | str, y: int, x: int) -> npt.NDArray[np.float64]:
@@ -73,14 +90,35 @@ class CoarseOffsetProcessor:
         return self.cxyz_obj[z_key][:, :, y, x].ravel()
 
 
+    # def load_all_offsets_and_tile_id_maps_from_npz(self):
+    #     """Standardized loading method called by the Owner (Inspection)."""
+    #     if not self.path_cxyz.exists() or not self.path_id_maps.exists():
+    #         raise FileNotFoundError("Offset or ID map files missing in _inspect folder.")
+    #
+    #     self.cxyz_obj = np.load(self.path_cxyz, allow_pickle=False)
+    #     self.tile_id_maps_obj = np.load(self.path_id_maps, allow_pickle=False)
+    #     logging.info("CoarseOffsetProcessor: Data loaded successfully.")
+
     def load_all_offsets_and_tile_id_maps_from_npz(self):
-        """Standardized loading method called by the Owner (Inspection)."""
+        """Standardized loading method. Loads data into mutable memory."""
         if not self.path_cxyz.exists() or not self.path_id_maps.exists():
             raise FileNotFoundError("Offset or ID map files missing in _inspect folder.")
 
-        self.cxyz_obj = np.load(self.path_cxyz, allow_pickle=False)
-        self.tile_id_maps_obj = np.load(self.path_id_maps, allow_pickle=False)
-        logging.info("CoarseOffsetProcessor: Data loaded successfully.")
+        # Load NpzFile objects
+        with np.load(self.path_cxyz, allow_pickle=False) as data:
+            self.cxyz_obj = {key: data[key].copy() for key in data.files}
+
+        with np.load(self.path_id_maps, allow_pickle=False) as data:
+            self.tile_id_maps_obj = {key: data[key].copy() for key in data.files}
+
+        logging.info("CoarseOffsetProcessor: Data loaded into mutable memory.")
+
+
+    def save_offsets_to_disk(self):
+        """Persists in-memory modifications back to the .npz file."""
+        if self.cxyz_obj is not None:
+            np.savez(self.path_cxyz, **self.cxyz_obj)
+            logging.info(f"Saved updated offsets to {self.path_cxyz}")
 
 
     def process_tile_id_outliers(

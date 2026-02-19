@@ -9,6 +9,7 @@ from interactive_inspector.layouts.components import create_grid_navigator
 def create_layout():
     return dbc.Container([
         dcc.Store(id='selection-store', data=[]),
+        dcc.Store(id='active-item-index', data=None),  # Tracks which basket item is on screen
 
         # Dark mode switch
         html.Div([
@@ -90,6 +91,24 @@ def create_layout():
                                   children="Select a trace",
                                   className="text-muted small")
                     ], className="px-3 py-1 bg-light border-bottom"),
+
+                    # Nudge Controls Row
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.ButtonGroup([
+                                dbc.Button("←", id="nudge-left", size="sm", color="secondary", outline=True),
+                                dbc.Button("↑", id="nudge-up", size="sm", color="secondary", outline=True),
+                                dbc.Button("↓", id="nudge-down", size="sm", color="secondary", outline=True),
+                                dbc.Button("→", id="nudge-right", size="sm", color="secondary", outline=True),
+                            ]),
+                        ], width="auto"),
+                        dbc.Col([
+                            dbc.Input(id="nudge-step", type="number", value=10, size="sm", style={'width': '70px'})
+                        ], width="auto"),
+                        dbc.Col(html.Small(id="current-nudge-display", className="text-info"), width="auto")
+                    ], className="bg-dark p-1 g-1 align-items-center"),
+
+                    dcc.Store(id='manual-nudge-store', data={'dx': 0, 'dy': 0}),
 
                     dcc.Graph(
                         id="integrated-overlap-graph",
