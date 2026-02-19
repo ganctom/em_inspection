@@ -21,7 +21,9 @@ import pandas as pd
 import skimage
 import yaml
 import zarr
-from matplotlib import pyplot as plt
+import matplotlib
+matplotlib.use('Agg')  # Must be called before importing pyplot
+import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from tqdm import tqdm
 from scipy.interpolate import CloughTocher2DInterpolator
@@ -939,7 +941,9 @@ def plot_thin_image(
         path_plot: Optional[str],
         show_plot: bool,
         blur: float,
-        rotate_vert=False) -> tuple[np.ndarray, np.ndarray]:
+        rotate_vert=False,
+        return_array: bool = False
+) -> np.ndarray:
     """Plot a thin section of an image and save or show the result.
 
         Args:
@@ -949,6 +953,8 @@ def plot_thin_image(
             show_plot (bool): Flag to show the plot.
             blur (float): Gaussian blur sigma value.
             rotate_vert (bool): Flag to rotate the image vertically.
+            return_array (bool): Return image array only, do not use matplotlib
+                                (switch for InteractiveProcessor)
 
         Returns:
             np.ndarray: The processed image.
@@ -968,6 +974,11 @@ def plot_thin_image(
     if blur > 1.0:
         img = skimage.filters.gaussian(img, sigma=blur)
 
+    # Return image immediately
+    if return_array:
+        final_img = np.rot90(img, k=-1) if (rotate_vert and not is_vertical) else img
+        return final_img
+
     # Normalize image to 8-bit depth
     image_8bit = norm_img(img)  # Ensure `norm_img` is defined elsewhere
 
@@ -976,7 +987,8 @@ def plot_thin_image(
     fig, ax = plt.subplots(figsize=(w / 100, h / 100))
 
     # Plot the image with minimal empty space
-    ax.imshow(image_8bit, cmap='gray', aspect='equal', extent=(0, w, h, 0), vmin=0, vmax=255)
+    ax.imshow(
+        image_8bit, cmap='gray', aspect='equal', extent=(0, w, h, 0), vmin=0, vmax=255)
     ax.axis('off')
 
     # Save the plot and show if needed
@@ -1019,8 +1031,48 @@ def insert_image(canvas, image, x, y, alpha_on=False):
         Updated canvas with the inserted greyscale image.
     """
 
+    x = int(round(float(x)))
+    y = int(round(float(y)))
+    h, w = image.shape[:2]
+    h, w = int(h), int(w)
+    cnv_h, cnv_w = canvas.shape[:2]
+
+    # Bounds check using the now-safe integers
+    if x < 0 or y < 0 or x + w > cnv_w or y + h > cnv_h:
+        logging.info(f"Invalid insertion: x={x}, y={y} exceeds canvas {cnv_w}x{cnv_h}")
+        return canvas  # Better to return original canvas than None to avoid cascading crashes
+
+    if alpha_on:
+        alpha = 0.5
+        canvas[y:y + h, x:x + w] = (
+                alpha * image[:, :] + (1 - alpha) * canvas[y:y + h, x:x + w]
+        )
+    else:
+        canvas[y:y + h, x:x + w] = image[:, :]
+
+    return canvas
+
+
+def insert_image_orig(canvas, image, x, y, alpha_on=False):
+    """Inserts image data into a canvas at specific coordinates.
+
+    Args:
+        canvas: numpy array representing the canvas (2D array)
+        image: numpy array representing the greyscale image to be inserted
+        x, y: coordinates to place the top-left corner of the image on the canvas
+        alpha_on: set to True to visualize the images in transparent mode
+
+    Returns:
+        Updated canvas with the inserted greyscale image.
+    """
+
     cnv_h, cnv_w = canvas.shape
+    print(cnv_h, cnv_w)
     h, w = image.shape
+    print(f'hw:{h, w}')
+    print(f'x, y: {x, y}')
+    print(f'x+w, y+h: {x+w, y+h}')
+
 
     if x < 0 or y < 0 or x + w > cnv_w or y + h > cnv_h:
         logging.info("Invalid insertion coordinates. Image exceeds canvas boundaries.")
@@ -1079,7 +1131,7 @@ def plot_tile_pair(
         return None
 
     pad = 1000  # Black border around the image pair  TODO parameter into f-def?
-    canv = np.zeros((h * 2 + pad, w * 2 + pad))
+    canvas = np.zeros((h * 2 + pad, w * 2 + pad))
 
     # Define order in which the images will be rendered
     or_a = (0, 0)
@@ -1094,27 +1146,26 @@ def plot_tile_pair(
 
         # Get image offset coordinates (with respect to the canvas top-left corner)
         dx, dy = origins[i]
-        x0 = int(pad / 2) + dx + coord[0] * w
-        y0 = int(pad / 2) + dy + coord[1] * h
+        x0 = int(int(pad / 2) + dx + coord[0] * w)
+        y0 = int(int(pad / 2) + dy + coord[1] * h)
 
         if blur > 1:
             img = skimage.filters.gaussian(img, sigma=blur)
 
         logging.debug(f"Inserting img at location {x0, y0}")
-        canv = insert_image(canv, img, x0, y0, alpha_on)
+        canvas = insert_image(canvas, img, x0, y0, alpha_on)
 
-        if canv is None:
+        if canvas is None:
             return None
 
     # Render canvas
+    img_out = canvas
     if scaling_factor is not None:
-        output_img = skimage.transform.rescale(canv, scaling_factor, anti_aliasing=True)
-    else:
-        output_img = canv
+        img_out = skimage.transform.rescale(canvas, scaling_factor, anti_aliasing=True)
 
     # Plot canvas
     if not img_only:
-        plt.imshow(output_img, cmap='grey')
+        plt.imshow(img_out, cmap='grey')
         fig = plt.gcf()
 
         if show_plot:
@@ -1127,24 +1178,7 @@ def plot_tile_pair(
 
         plt.close(fig)
 
-    return output_img
-
-def tst_compute_tileid_map():
-
-    grid_shape = (30, 25)
-
-    tile_ids = (
-        386, 387, 388, 389,
-        411, 412, 413, 414,
-        436, 437, 438, 439,
-        461, 462, 463, 464,
-        488, 489
-    )
-
-
-    tile_id_map = compute_tile_id_map(grid_shape, tile_ids)
-    print(tile_id_map)
-    return
+    return img_out
 
 
 def build_tiles_coords(

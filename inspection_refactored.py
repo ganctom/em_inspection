@@ -39,6 +39,10 @@ class Inspection:
         self._initialize_paths()
         self._initialize_section_data()
         self._initialize_stitched_data()
+        self._setup_offset_processor_paths()
+
+        self.co_processor = CoarseOffsetProcessor(self.config, self.offset_processor_paths)
+        self.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
 
     def __str__(self):
         return (
@@ -62,13 +66,23 @@ class Inspection:
         self.create_inspection_dirs()
 
     def _initialize_paths(self):
-        # self.path_exp_notes = self.root.parent / 'exp_notes.yaml'
         self.path_cxyz = self._get_inspect_path('all_offsets.npz')
         self.path_id_maps = self._get_inspect_path('all_tile_id_maps.npz')
+        self.fp_missing_sections = self.root / 'missing_sections.yaml'
+        self.fp_co_outliers = self.dir_inspect / 'coarse_offset_outliers.txt'
+        self.fp_inf_vals = self.dir_inspect / 'inf_vals.txt'
         # self.fp_eval_ov = self._get_overlaps_path('overlap_quality_smr.npz')
         # self.fp_est_ff_cfg = self.root / 'fine_alignment_config.yaml'
-        self.fp_missing_sections = self.root / 'missing_sections.yaml'
-        ...
+
+    def _setup_offset_processor_paths(self):
+        """Single Source of Truth for the filesystem structure."""
+        self.offset_processor_paths = {
+            'inspect': self.dir_inspect,
+            'cxyz': self.path_cxyz,
+            'tid_maps': self.path_id_maps,
+            'co_outliers': self.fp_co_outliers
+        }
+
 
     def _initialize_section_data(self):
         self.section_dirs: Optional[list[Path]] = None
@@ -285,9 +299,9 @@ class Inspection:
     ) -> None:
 
         sec_nums = []
-        fp = self.dir_inspect / 'coarse_offset_outliers.txt'
+        fp = self.fp_co_outliers
         if inf:
-            fp = self.dir_inspect / 'inf_vals.txt'
+            fp = self.fp_inf_vals
 
         if not Path(fp).exists():
             logging.info(f'No outliers/inf values fetched from {fp}')
@@ -968,7 +982,7 @@ def _prepare_sections(
 ) -> Optional[list[int]]:
     """Helper to handle the repetitive range creation and initialization."""
     try:
-        sec_nums = list(range(start, end))
+        sec_nums = list(range(start, end+1))
         init_specific_section_dirs(inspection, sec_nums)
         return sec_nums
     except ValueError as e:
@@ -1014,7 +1028,8 @@ def main_get_cxyz_outliers(config: cfg.ExpConfig):
     n_after: int = 0
     n_sigmas: float = 20.0
 
-    td = CoarseOffsetProcessor(config)
+    inspection = Inspection(config)
+    td = CoarseOffsetProcessor(config, inspection.offset_processor_paths)
     try:
         td.load_all_offsets_and_tile_id_maps_from_npz()  # Load cxyz tensor and all tile-id maps
     except FileNotFoundError as e:
@@ -1022,13 +1037,13 @@ def main_get_cxyz_outliers(config: cfg.ExpConfig):
 
     # Process all tile-IDs
     if not tile_ids:
-        td.process_all_tile_ids(n_before, n_after, n_sigmas)
+        td.process_all_tile_ids_outliers(n_before, n_after, n_sigmas)
         td.store_outliers()
         return
 
     # Process specific tile-IDs
     for tile_id in tile_ids:
-        td.process_tile_id(tile_id, n_before, n_after, n_sigmas)
+        td.process_tile_id_outliers(tile_id, n_before, n_after, n_sigmas)
     td.store_outliers()
 
     return
@@ -1114,17 +1129,17 @@ if __name__ == "__main__":
 
 
     ### DETECT BEAD COARSE OFFSETS
-    # main_get_cxyz_outliers(config=exp_config)
+    main_get_cxyz_outliers(config=exp_config)
 
 
     # PLOTTING OVs
     # main_par_plot_ovs_specific_tile_pair(exp)
-    # main_plot_ovs_all_tilepairs(exp)
-    # plot_ovs_from_out_or_inf_file(exp)
+    main_plot_ovs_all_tilepairs(exp)
+    plot_ovs_from_out_or_inf_file(exp)
 
 
     # FIX COARSE OFFSETS
-    # main_fix_outliers_and_infinities(exp)
+    main_fix_outliers_and_infinities(exp)
 
 
 

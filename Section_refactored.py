@@ -1,5 +1,9 @@
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import pickle
 import platform
+from functools import lru_cache
 from pathlib import Path
 from typing import Union, Optional, Any
 import logging
@@ -25,6 +29,13 @@ Vector = Union[tuple[int, int], tuple[int, int, int], Union[tuple[int], tuple[An
 MaskMap = dict[TileXY, Optional[np.ndarray]]
 TileMap = dict[TileXY, np.ndarray]
 GridXY = tuple[Any, Any, Any]
+
+
+@lru_cache(maxsize=32)
+def cached_read_image(path: str):
+    # This ensures that if the same tile is requested twice,
+    # it returns the numpy array from RAM instantly.
+    return skimage.io.imread(path)
 
 class Section:
     def __init__(self, path: Union[Path, str]):
@@ -169,7 +180,7 @@ class Section:
     def load_image(self) -> Optional[np.ndarray]:
 
         if self.path.resolve().suffix == '.tif':
-            data = skimage.io.imread(self.path)
+            data = cached_read_image(str(self.path))
 
         elif self.path.resolve().suffix == '.zarr':
             fp = self.path / '0'
@@ -535,7 +546,6 @@ class Section:
         logging.info(f'Loaded coarse offset: {co}')
         return co
 
-
     def plot_ov(self,
                 tid_a: int,
                 tid_b: int,
@@ -545,7 +555,9 @@ class Section:
                 show_plot=False,
                 clahe=False,
                 rotate_vert=False,
-                store_to_root=False) -> None:
+                store_to_root=False,
+                return_img: bool = False
+        ) -> Optional[np.ndarray]:
 
         """Visualize overlap region of a tile-pair. Shift vector must be
         computed in advance.
@@ -565,7 +577,8 @@ class Section:
                             clockwise
         :param store_to_root: If True, save resulting image into a dir_out folder
                                 otherwise create a sub-folder in dir_out.
-        :return: None
+        :param return_img: If True, return overlap image as np.ndarray
+        :return: img array if return_img is set to True
         """
         assert tid_a != tid_b
 
@@ -574,7 +587,7 @@ class Section:
 
         if tid_a not in self.tile_dicts or tid_b not in self.tile_dicts:
             logging.info('plot_ov: wrong tile_ids specification')
-            return
+            return None
 
         # Fix ordering of tiles
         tid_a, tid_b = min(tid_a, tid_b), max(tid_a, tid_b)
@@ -582,30 +595,31 @@ class Section:
         path_a = self.tile_dicts[tid_a]
         path_b = self.tile_dicts[tid_b]
 
-        # Load image data
-        if Path(path_a).exists() and Path(path_b).exists():
-            img_a = skimage.io.imread(path_a)
-            img_b = skimage.io.imread(path_b)
-            if clahe:
-                img_a, img_b = [utils.apply_clahe(img) for img in (img_a, img_b)]
-            is_vert = utils.pair_is_vertical(self.tile_id_map, tid_a, tid_b)
-
-            tile_map = {(0, 0): img_a}
-            if is_vert:
-                axis = 1
-                tile_map[(0, 1)] = img_b
-            else:
-                tile_map[(1, 0)] = img_b
-                axis = 0
-        else:
+        if not Path(path_a).exists() or not Path(path_b).exists():
             logging.warning("Image files could not be loaded:")
             logging.warning(path_a)
             logging.warning(path_b)
-            return
+            return None
+
+        # Load image data
+        img_a = cached_read_image(str(path_a))
+        img_b = cached_read_image(str(path_b))
+        if clahe:
+            img_a, img_b = [utils.apply_clahe(img) for img in (img_a, img_b)]
+        is_vert = utils.pair_is_vertical(self.tile_id_map, tid_a, tid_b)
+
+        # Construct tile-map
+        tile_map = {(0, 0): img_a}
+        if is_vert:
+            axis = 1
+            tile_map[(0, 1)] = img_b
+        else:
+            tile_map[(1, 0)] = img_b
+            axis = 0
 
         if not tile_map:
             logging.info("Tile_map is empty!")
-            return
+            return None
 
         # Get shift vector if not specified in input
         if shift_vec is None or None in shift_vec:
@@ -615,8 +629,9 @@ class Section:
         # Visualize and store overlap image
         if shift_vec is None:
             logging.info(f"t{tid_a}: nothing to plot")
-            return
+            return None
 
+        path_plot = None  # Do not store the OV image to HDD
         if dir_out is not None:
             dir_ov = Path(dir_out)
             str_tid_a, str_tid_b = f't{tid_a:04d}', f't{tid_b:04d}'
@@ -628,8 +643,6 @@ class Section:
             plot_name = f's{self.section_num:04d}_{str_tid_a}_{str_tid_b}_ov.jpg'
             path_plot = str(dir_ov / plot_name)
             logging.info(f'plotting: {path_plot}')
-        else:
-            path_plot = None  # Do not store the OV image to HDD
 
         # Get stitched image
         img_pair = utils.plot_tile_pair(
@@ -639,9 +652,18 @@ class Section:
 
         # Crop overlap from stitched image and save it
         if img_pair is not None:
-            _ = utils.plot_thin_image(img_pair, is_vert, path_plot, show_plot, blur, rotate_vert)
-
-        return
+            ov_img = utils.plot_thin_image(
+                img_pair,
+                is_vert,
+                path_plot,
+                show_plot,
+                blur,
+                rotate_vert,
+                return_array=return_img
+            )
+            if return_img:
+                return ov_img
+        return None
 
     def load_image_pair(self,
                         id_a: int,
