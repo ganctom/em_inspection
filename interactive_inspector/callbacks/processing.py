@@ -163,44 +163,43 @@ def handle_nudging(l, r, u, d, ov_clicks, step, current_nudge, current_active):
     [Output('registration-log', 'children'),
      Output('integrated-overlap-graph', 'figure'),
      Output('integrated-ov-status', 'children')],
-    [Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
+    [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
-     Input('manual-nudge-store', 'data')],  # Re-plot whenever the nudge changes
+     Input('active-item-index', 'data')], # Trigger refresh when active item changes
     [State('selection-store', 'data'),
-     State('manual-nudge-store', 'data')],
+     State('manual-nudge-store', 'data'),
+     State('active-item-index', 'data')],
     prevent_initial_call=True
 )
-def handle_actions(ov_clicks, calc_clicks, nudge_data, selection_data, nudge_state):
-    trig = ctx.triggered_id
-    if not trig: return no_update, no_update, no_update
-
-    # 1. Determine which item is active
-    # We find the index of the button that was clicked
-    active_idx = None
-    if isinstance(trig, dict):
-        active_idx = trig.get('index')
-
-    # If the trigger was the nudge store, we need to know WHICH item we are nudging.
-    # For now, let's assume the last item in the basket is active,
-    # OR you can add an "active-selection-store" to track this more robustly.
-    if active_idx is None:
-        active_idx = len(selection_data) - 1  # Default to last selected
-
-    if active_idx < 0 or active_idx >= len(selection_data):
-        return no_update, no_update, no_update
+def handle_actions(nudge_trigger, calc_clicks, active_trigger, selection_data, nudge_state, active_idx):
+    # If no item is active, we have nothing to do
+    if active_idx is None or active_idx >= len(selection_data):
+        return no_update, no_update, "No tile selected"
 
     item = selection_data[active_idx]
     nudge = (nudge_state['dx'], nudge_state['dy'])
 
-    # 2. Logic for Plotting (Initial or Nudge update)
-    if (isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn') or trig == 'manual-nudge-store':
+    trig = ctx.triggered_id
+
+    # LOGIC: Re-Plot (Nudge or Active Item changed)
+    if trig == 'manual-nudge-store' or trig == 'active-item-index':
         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-        status = f"T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
+        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
         return no_update, fig, status
 
-    # 3. Logic for Calculating (Refining)
+    # LOGIC: Calculate
     if isinstance(trig, dict) and trig.get('type') == 'compute-single-btn':
-        result = service.compute_coarse_shift(item['tid'], item['z'], item['overlap'], initial_nudge=nudge)
+        # Ensure we only calculate for the button actually pressed
+        # or verify the pressed button matches the active index
+        btn_idx = trig.get('index')
+        calc_item = selection_data[btn_idx]
+
+        # Use the nudge only if the button clicked is the one currently on screen
+        current_nudge = nudge if btn_idx == active_idx else (0, 0)
+
+        result = service.compute_coarse_shift(
+            calc_item['tid'], calc_item['z'], calc_item['overlap'],initial_nudge=current_nudge
+        )
 
         if isinstance(result, str):  # Error
             return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
