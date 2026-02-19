@@ -2,12 +2,33 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import create_grid_navigator
-
+from dash_extensions import EventListener
 
 # In layouts/main_layout.py
 
 def create_layout():
+    # Define which keys we want the browser to capture
+    keys_to_watch = [
+        {"key": "ArrowUp"},
+        {"key": "ArrowDown"},
+        {"key": "ArrowLeft"},
+        {"key": "ArrowRight"}
+    ]
+
     return dbc.Container([
+        # --- KEYBOARD LISTENER ---
+        # This captures global keydown events and passes them to our callback
+        EventListener(
+            id="keyboard-listener",
+            # preventDefault=True stops the browser from scrolling
+            events=[{
+                "event": "keydown",
+                "props": ["key", "n_events"],
+                "preventDefault": True
+            }],
+            logging=False
+        ),
+
         dcc.Store(id='selection-store', data=[]),
         dcc.Store(id='active-item-index', data=None),  # Tracks which basket item is on screen
 
@@ -76,14 +97,14 @@ def create_layout():
                     style={'height': '5vh'}
                 ),
 
-                # 1. Main Trace Plot: Reduced from 65vh to 50vh
+                # 1. Main Trace Plot
                 dcc.Graph(
                     id='quad-plot',
-                    style={'height': '60vh'},
+                    style={'height': '55vh'},
                     config={'modeBarButtonsToAdd': ['drawrect', 'select2d'], 'scrollZoom': True}
                 ),
 
-                # 2. Integrated Overlap Viewer & Log: Remaining ~43vh
+                # 2. Integrated Overlap Viewer & Log
                 html.Div([
                     html.Div([
                         html.Span("Overlap Inspection: ", className="fw-bold small"),
@@ -112,12 +133,13 @@ def create_layout():
 
                     dcc.Graph(
                         id="integrated-overlap-graph",
-                        style={'height': '20vh'},
+                        style={'flex': '1'}, # Allow graph to fill the container
                         config={'scrollZoom': True, 'displaylogo': False}
                     ),
 
                 ], className="border rounded m-2 shadow-sm",
-                    style={'backgroundColor': 'black', 'height': '0vh'})
+                    # FIXED: Height changed from 0vh to 35vh to make it visible
+                    style={'backgroundColor': 'black', 'height': '35vh', 'display': 'flex', 'flexDirection': 'column'})
 
             ], width=9, style={'display': 'flex', 'flexDirection': 'column'})
 

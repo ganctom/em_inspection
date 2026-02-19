@@ -124,36 +124,50 @@ from interactive_inspector.data_service import service
 # --- CALLBACK 1: MANAGE THE NUDGE STATE ---
 @callback(
     [Output('manual-nudge-store', 'data'),
-     Output('active-item-index', 'data')],  # ADD THIS OUTPUT
+     Output('active-item-index', 'data')],
     [Input('nudge-left', 'n_clicks'),
      Input('nudge-right', 'n_clicks'),
      Input('nudge-up', 'n_clicks'),
      Input('nudge-down', 'n_clicks'),
-     Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks')],
-    [State('nudge-step', 'value'),
+     Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
+     Input('keyboard-listener', 'n_events')],  # Trigger on the count, not just the key name
+    [State('keyboard-listener', 'event'),  # Get the actual key from State instead
+     State('nudge-step', 'value'),
      State('manual-nudge-store', 'data'),
      State('active-item-index', 'data')],
     prevent_initial_call=True
 )
-def handle_nudging(l, r, u, d, ov_clicks, step, current_nudge, current_active):
+def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nudge, current_active):
     trig = ctx.triggered_id
 
-    # CASE: New Tile Selected
+    # 1. Handle Selection Reset
     if isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn':
-        new_idx = trig.get('index')
-        return {'dx': 0, 'dy': 0}, new_idx  # Reset nudge AND update active index
+        return {'dx': 0, 'dy': 0}, trig.get('index')
 
-    # CASE: Nudging existing tile
     if current_active is None:
         return no_update, no_update
 
     dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
     step = step if step else 10
 
-    if trig == 'nudge-left':  dx -= step
-    if trig == 'nudge-right': dx += step
-    if trig == 'nudge-up':    dy -= step
-    if trig == 'nudge-down':  dy += step
+    # 2. Logic for Keyboard (triggered by n_events)
+    if trig == 'keyboard-listener' and key_event:
+        key = key_event.get('key')
+        if key == "ArrowLeft":
+            dx -= step
+        elif key == "ArrowRight":
+            dx += step
+        elif key == "ArrowUp":
+            dy -= step
+        elif key == "ArrowDown":
+            dy += step
+
+    # 3. Logic for Buttons
+    else:
+        if trig == 'nudge-left':  dx -= step
+        if trig == 'nudge-right': dx += step
+        if trig == 'nudge-up':    dy -= step
+        if trig == 'nudge-down':  dy += step
 
     return {'dx': dx, 'dy': dy}, no_update
 
