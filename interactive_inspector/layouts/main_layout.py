@@ -65,9 +65,9 @@ def create_layout():
                         html.Div(
                             id='selection-list-container',
                             style={
-                                'flex': '1 1 0', 'overflowY': 'auto', 'minHeight': '0',
-                                'border': '1px solid #dee2e6', 'borderRadius': '4px',
-                                'backgroundColor': '#fff'
+                                'flex': '1 1 0', 'overflowY': 'auto', 'maxHeight': '25vh',
+                                'minHeight': '0', 'border': '1px solid #dee2e6',
+                                'borderRadius': '4px', 'backgroundColor': '#fff'
                             }
                         )
                     ], className="d-flex flex-column flex-grow-1 mt-3", style={'minHeight': '0'}),
