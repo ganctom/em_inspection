@@ -177,3 +177,11 @@ def handle_persist_to_disk(n_clicks):
         ])
     except Exception as e:
         return html.Div(f"Save Failed: {str(e)}", className="text-danger")
+
+
+@callback(
+    Output("manual-input-container", "style"),
+    Input("guess-mode-select", "value")
+)
+def toggle_manual_input(mode):
+    return {"display": "block"} if mode == "manual" else {"display": "none"}

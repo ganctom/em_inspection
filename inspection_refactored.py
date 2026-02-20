@@ -970,7 +970,6 @@ def init_specific_section_dirs(exp: Inspection, sec_nums: Sequence[int]) -> None
     exp.section_names  = names
     exp.section_dirs   = dirs_
     exp.section_dicts  = {n: str(p) for n, p in zip(valid_nums, dirs_)}
-
     return None
 
 
