@@ -1,122 +1,3 @@
-# from dash import html, Input, Output, State, callback, ctx, no_update, ALL
-# from interactive_inspector.data_service import service
-#
-# """
-# This file handles the buttons that actually do something with your data.
-# By separating this from the navigation, you can easily add heavy-duty backend
-# tasks (like starting a Celery worker or a subprocess) without cluttering your plotting code.
-# """
-#
-#
-# # @callback(
-# #     [Output('registration-log', 'children'),
-# #      Output('integrated-overlap-graph', 'figure'),
-# #      Output('integrated-ov-status', 'children')],
-# #     [Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
-# #      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
-# #      Input('open-sofima', 'n_clicks')],
-# #     [State('selection-store', 'data')],
-# #     prevent_initial_call=True
-# # )
-# # def handle_actions(ov_clicks, calc_clicks, sofima_n, data):
-# #     trig = ctx.triggered_id
-# #     if not trig or not ctx.triggered:
-# #         return no_update, no_update, no_update
-# #
-# #     triggered_val = ctx.triggered[0]['value']
-# #     if triggered_val is None or triggered_val == 0:
-# #         return no_update, no_update, no_update
-# #
-# #     # 1. Handle Integrated Overlap Plotting
-# #     if isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn':
-# #         idx = trig.get('index')
-# #         if idx >= len(data): return no_update, no_update, no_update
-# #         item = data[idx]
-# #         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
-# #         status_msg = f"Tile {item['tid']} | Z={item['z']} | Type: {item['overlap']}"
-# #         log_msg = f"Loaded Overlap: {status_msg}"
-# #         return log_msg, fig, status_msg
-# #
-# #     # 2. Handle Global SOFIMA
-# #     if trig == 'open-sofima':
-# #         return f"Running SOFIMA on {len(data)} items...", no_update, "Processing batch..."
-# #
-# #     # 3. Handle Single Calculation
-# #     if isinstance(trig, dict) and trig.get('type') == 'compute-single-btn':
-# #         idx = trig.get('index')
-# #         if idx >= len(data): return no_update, no_update, no_update
-# #
-# #         item = data[idx]
-# #         tid, z, ov_type = item['tid'], item['z'], item['overlap']
-# #
-# #         # Perform computation
-# #         print(f'computing shift: {tid, z, ov_type}')
-# #         new_vec = service.compute_coarse_shift(tid, z, ov_type)
-# #
-# #         # Generate the updated figure with the new vector applied
-# #         fig = service.get_overlap_figure(tid, z, ov_type)
-# #
-# #         status_msg = f"Re-calculated T{tid} | New Vector: {new_vec}"
-# #         log_msg = f"{status_msg}"
-# #
-# #         return log_msg, fig, status_msg
-# #
-# #
-# #     return no_update, no_update, no_update
-#
-#
-# @callback(
-#     [Output('registration-log', 'children'),
-#      Output('integrated-overlap-graph', 'figure'),
-#      Output('integrated-ov-status', 'children')],
-#     [Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
-#      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
-#      Input('manual-nudge-store', 'data')],  # Now responds to nudges!
-#     [State('selection-store', 'data'),
-#      State('manual-nudge-store', 'data')],
-#     prevent_initial_call=True
-# )
-# def handle_actions(ov_clicks, calc_clicks, nudge_input, data, nudge_state):
-#     trig = ctx.triggered_id
-#     if not trig: return no_update, no_update, no_update
-#
-#     # Determine which item we are talking about
-#     # Usually we track the "active" item in a Store, but for now we'll use the last clicked index
-#     idx = trig.get('index') if isinstance(trig, dict) else 0
-#     item = data[idx]
-#
-#     # Current nudge values from the store
-#     nudge = (nudge_state['dx'], nudge_state['dy'])
-#
-#     # CASE A: User clicked "OV" or moved the "Nudge" buttons
-#     if (isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn') or trig == 'manual-nudge-store':
-#         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-#         status = f"T{item['tid']} | Nudge: {nudge}"
-#         return no_update, fig, status
-#
-#     # CASE B: User clicked "Calc"
-#     if isinstance(trig, dict) and trig.get('type') == 'compute-single-btn':
-#         result = service.compute_coarse_shift(item['tid'], item['z'], item['overlap'], initial_nudge=nudge)
-#
-#         if isinstance(result, str):  # Error message
-#             return html.Div(result, className="text-danger"), no_update, "Error"
-#
-#         # Success: Show the journey from DB -> Nudge -> Final
-#         log_msg = html.Div([
-#             html.P("Refinement Successful", className="text-success fw-bold"),
-#             html.Small(f"DB Vector: {result['initial']}"), html.Br(),
-#             html.Small(f"User Nudge Start: {result['nudged_start']}", className="text-info"), html.Br(),
-#             html.P(f"FINAL: {result['refined']}", className="text-white fw-bold")
-#         ])
-#
-#         # Refresh figure with final refined vector (nudge reset to 0 internally now)
-#         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
-#         return log_msg, fig, "Refinement Complete"
-#
-#     return no_update, no_update, no_update
-#
-
-
 from dash import html, Input, Output, State, callback, ctx, no_update, ALL
 from interactive_inspector.data_service import service
 
@@ -172,50 +53,45 @@ def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nud
     return {'dx': dx, 'dy': dy}, no_update
 
 
-# --- CALLBACK 2: EXECUTE ACTIONS (PLOTTING & CALC) ---
 @callback(
     [Output('registration-log', 'children'),
      Output('integrated-overlap-graph', 'figure'),
      Output('integrated-ov-status', 'children')],
     [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
-     Input('active-item-index', 'data')], # Trigger refresh when active item changes
+     Input('active-item-index', 'data')],
     [State('selection-store', 'data'),
-     State('manual-nudge-store', 'data'),
-     State('active-item-index', 'data')],
+     State('manual-nudge-store', 'data')],
     prevent_initial_call=True
 )
-def handle_actions(nudge_trigger, calc_clicks, active_trigger, selection_data, nudge_state, active_idx):
-    # If no item is active, we have nothing to do
-    if active_idx is None or active_idx >= len(selection_data):
+def handle_actions(nudge_trigger, calc_clicks, active_idx, selection_data, nudge_state):
+    # 1. Gatekeeper: If no index is active or basket is empty, abort.
+    if active_idx is None or not selection_data or active_idx >= len(selection_data):
         return no_update, no_update, "No tile selected"
 
+    trig = ctx.triggered_id
     item = selection_data[active_idx]
     nudge = (nudge_state['dx'], nudge_state['dy'])
 
-    trig = ctx.triggered_id
+    # 2. Identify specifically what happened
+    # Check if a 'compute-single-btn' was clicked
+    is_compute_trigger = isinstance(trig, dict) and trig.get('type') == 'compute-single-btn'
 
-    # LOGIC: Re-Plot (Nudge or Active Item changed)
-    if trig == 'manual-nudge-store' or trig == 'active-item-index':
-        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
-        return no_update, fig, status
+    # We verify that at least one button in the ALL list has actually been clicked
+    # This prevents the callback from running 'Calculate' logic on page load/selection
+    btn_clicked = any(click is not None for click in calc_clicks)
 
-    # LOGIC: Calculate
-    if isinstance(trig, dict) and trig.get('type') == 'compute-single-btn':
-        # Ensure we only calculate for the button actually pressed
-        # or verify the pressed button matches the active index
+    # LOGIC: Calculate (Only if the button was the trigger)
+    if is_compute_trigger and btn_clicked:
         btn_idx = trig.get('index')
         calc_item = selection_data[btn_idx]
-
-        # Use the nudge only if the button clicked is the one currently on screen
         current_nudge = nudge if btn_idx == active_idx else (0, 0)
 
         result = service.compute_coarse_shift(
-            calc_item['tid'], calc_item['z'], calc_item['overlap'],initial_nudge=current_nudge
+            calc_item['tid'], calc_item['z'], calc_item['overlap'], initial_nudge=current_nudge
         )
 
-        if isinstance(result, str):  # Error
+        if isinstance(result, str):
             return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
 
         log_msg = html.Div([
@@ -223,8 +99,17 @@ def handle_actions(nudge_trigger, calc_clicks, active_trigger, selection_data, n
             html.Small(f"Final Vector: {result['refined']}", className="text-white-50")
         ])
 
-        # Plot the final result
         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
         return log_msg, fig, "Refinement Applied"
+
+    # LOGIC: Re-Plot (Nudge or Active Item changed)
+    # We use an 'elif' to ensure we don't try to plot while calculating
+    elif trig == 'manual-nudge-store' or trig == 'active-item-index':
+        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
+        if fig is None:
+            return no_update, no_update, "Failed to load overlap image"
+
+        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
+        return no_update, fig, status
 
     return no_update, no_update, no_update

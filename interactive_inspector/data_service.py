@@ -1,10 +1,6 @@
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 import logging
-from typing import Optional, Tuple, Any, Dict
+from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
 
@@ -61,7 +57,6 @@ class DataService:
             return None
 
         raw_vec = self.processor.get_shift_vec(z, axis, y, x)
-        print(f'raw_vec: {raw_vec}')
         shift_vec: Vector = tuple(np.round(raw_vec).astype(int))
 
         return OverlapContext(
@@ -79,8 +74,6 @@ class DataService:
         ctx = self._get_overlap_context(tid_a, z, overlap_type)
         if not ctx:
             return None
-
-        print(f'plotting ov with shift vec.: {ctx.shift_vec}')
 
         try:
             img_array = ctx.section.plot_ov(
@@ -101,6 +94,7 @@ class DataService:
             return None
 
         return self._build_plotly_figure(img_array, tid_a, ctx['tid_b'], overlap_type.upper(), z)
+
 
     def get_overlap_figure(
             self,
@@ -136,6 +130,7 @@ class DataService:
         except Exception as e:
             logging.error(f"Nudge plot failed: {e}")
             return None
+
 
     def _resolve_overlap_context(
             self, z_str: str, tid_a: int, ov_type: str
@@ -186,74 +181,20 @@ class DataService:
         return self._section_cache[sec_path]
 
 
-    def compute_coarse_shift_(self, tid_a: str, z: int, overlap_type: str):
-        """
-        Calculates a new shift vector using the backend processor.
-        """
-        ctx = self._get_overlap_context(tid_a, z, overlap_type)
-        if not ctx:
-            return "Context Error"
-
-        # Run refining using pyramidal search
-        levels: int = 4
-        max_ext: int = 250
-        stride: int = 60
-
-        section: Section = ctx.section
-        orig_shift: Vector = ctx.shift_vec
-        print(f'old vec: {orig_shift}')
-        tid_a: int = ctx.tid_a
-        tid_b: int = ctx.tid_b
-        is_vert: bool = bool(ctx.axis)
-
-        try:
-            current_shift = orig_shift
-            t1 = Tile(section.tile_dicts[tid_a])
-            t2 = Tile(section.tile_dicts[tid_b])
-
-            for i, (max_ext, stride) in enumerate(utils.get_pyramid(
-                    levels, max_ext, stride)
-            ):
-                try:
-                    current_shift, _ = section.refine_coarse_offset_eval_ov(
-                        offset=current_shift,
-                        tile_pair=(t1, t2),
-                        is_vert=is_vert,
-                        max_ext=max_ext,
-                        stride=stride
-                    )
-                except TypeError as e:
-                    current_shift = (np.nan, np.nan)  # Refining offset failed for some reason
-                    logging.error(f"Calculation failed: {e}")
-                    continue
-
-            # Optionally update the internal processor state so get_overlap_figure
-            # picks up the new vector immediately on the next call
-            print(f'new_vec: {current_shift}')
-
-            if np.nan in current_shift:
-                logging.error(f"Calculation failed: {current_shift}")
-                return f"Error: {current_shift}"
-
-            self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
-            return current_shift
-
-        except Exception as e:
-            logging.error(f"Calculation failed: {e}")
-            return f"Error: {e}"
-
-    def compute_coarse_shift(self, tid_a: str, z: int, overlap_type: str, initial_nudge: Tuple[int, int] = (0, 0)):
+    def compute_coarse_shift(
+            self, tid_a: str, z: int, overlap_type: str, initial_nudge: Tuple[int, int] = (0, 0)):
         """
         Calculates a new shift vector using a manual nudge as the starting point.
         """
-        ctx = self._get_overlap_context(tid_a, z, overlap_type)
-        if not ctx:
-            return "Context Error"
 
         # Pyramidal parameters - can be tuned
         levels: int = 1
         max_ext: int = 30
         stride: int = 5
+
+        ctx = self._get_overlap_context(tid_a, z, overlap_type)
+        if not ctx:
+            return "Context Error"
 
         section: Section = ctx.section
         start_offset: Vector = (
@@ -261,21 +202,17 @@ class DataService:
             ctx.shift_vec[1] + initial_nudge[1]
         )
 
-        tid_a_int: int = ctx.tid_a
-        tid_b: int = ctx.tid_b
-        is_vert: bool = bool(ctx.axis)
-
         try:
             current_shift = start_offset
-            t1 = Tile(section.tile_dicts[tid_a_int])
-            t2 = Tile(section.tile_dicts[tid_b])
+            t1 = Tile(section.tile_dicts[ctx.tid_a])
+            t2 = Tile(section.tile_dicts[ctx.tid_b])
 
             for max_ext, stride in utils.get_pyramid(levels, max_ext, stride):
                 try:
                     current_shift, _ = section.refine_coarse_offset_eval_ov(
                         offset=current_shift,
                         tile_pair=(t1, t2),
-                        is_vert=is_vert,
+                        is_vert=bool(ctx.axis),
                         max_ext=max_ext,
                         stride=stride
                     )
@@ -303,22 +240,18 @@ class DataService:
     @staticmethod
     def _build_plotly_figure(img: np.ndarray, t1: str, t2: int, ov: str, z: int):
         fig = px.imshow(img, binary_string=True, origin='upper')
-
         fig.update_layout(
             title=dict(
                 text=f"<b>OVERLAP {ov}</b> | {t1} ↔ {t2} | Z={z}",
                 x=0.5, y=0.98, xanchor='center',
                 font=dict(family="Monospace", size=14, color="#00FFCC")
             ),
-            margin=dict(l=0, r=0, b=0, t=40),
-            # Ensure axes are enabled for interaction even if invisible
+            margin=dict(l=0, r=0, b=0, t=10),
             xaxis=dict(visible=False, fixedrange=False),
             yaxis=dict(visible=False, fixedrange=False),
-
             paper_bgcolor='black',
             plot_bgcolor='black',
             dragmode='pan',
-            # This helps the image fill the container
             autosize=True
         )
 
