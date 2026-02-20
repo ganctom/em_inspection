@@ -59,6 +59,7 @@ def create_layout():
                     html.Div([
                         html.Div([
                             html.H6("Selection Basket", className="mb-0"),
+                            dbc.Button("Store CXYZ", id='save-cxyz-btn', color="warning", size="sm", className="me-2"),
                             dbc.Button("Clear All", id='clear-selection', color="link", size="sm")
                         ], className="d-flex justify-content-between align-items-center mb-2 flex-shrink-0"),
 

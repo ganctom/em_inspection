@@ -145,8 +145,6 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
         showlegend=False,
         uirevision=str(raw_tid)
     )
-
-
     return fig
 
 
@@ -161,3 +159,21 @@ def update_grid_highlight(click_data):
 
     # Generate the grid with the highlight
     return create_grid_navigator(service.tile_ids, active_tid=active_tid)
+
+
+@callback(
+    Output('registration-log', 'children', allow_duplicate=True),
+    Input('save-cxyz-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def handle_persist_to_disk(n_clicks):
+    if not n_clicks:
+        return no_update
+    try:
+        service.processor.save_offsets_to_disk()
+        return html.Div([
+            html.P("💾 CXYZ File Updated", className="text-warning mb-0 fw-bold"),
+            html.Small("Modifications persisted to disk.", className="text-white-50")
+        ])
+    except Exception as e:
+        return html.Div(f"Save Failed: {str(e)}", className="text-danger")
