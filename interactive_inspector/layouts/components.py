@@ -1,10 +1,7 @@
-from typing import Dict, Any
 from dash import html
 import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 import numpy as np
-from interactive_inspector.constants import UIConstants
-
 
 def create_grid_navigator(tile_ids: np.ndarray, active_tid: str = None) -> go.Figure:
     rows, cols = tile_ids.shape
@@ -22,7 +19,6 @@ def create_grid_navigator(tile_ids: np.ndarray, active_tid: str = None) -> go.Fi
         coords = np.argwhere(tile_ids.astype(str) == str(active_tid))
         if coords.size > 0:
             r, c = coords[0]
-            # Cyan Neon Border
             fig.add_shape(
                 type="rect", x0=c-0.5, y0=r-0.5, x1=c+0.5, y1=r+0.5,
                 line=dict(color="#00d2d3", width=2),

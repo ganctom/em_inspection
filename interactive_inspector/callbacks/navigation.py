@@ -123,10 +123,25 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     theme = "plotly_dark" if is_dark else "plotly_white"
 
     fig.update_layout(
+        title={
+            'text': "Trace Explorer",
+            'y': 0.98,
+            'x': 0.02,
+            'xanchor': 'left',
+            'yanchor': 'top',
+            'font': {'size': 14, 'color': 'gray'}  # Clean, muted grey to match "Navigation" header
+        },
         template=theme,
         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-        height=600, margin=dict(l=50, r=20, t=40, b=50),
+        autosize=True,
+        modebar=dict(
+            orientation='h',
+            bgcolor='rgba(0,0,0,0)',
+            color='#7f7f7f',
+            activecolor='#1f77b4'
+        ),
+        margin=dict(l=40, r=10, t=50, b=30),
         showlegend=False,
         uirevision=str(raw_tid)
     )
