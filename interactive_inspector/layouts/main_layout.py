@@ -17,10 +17,8 @@ def create_layout():
 
     return dbc.Container([
         # --- KEYBOARD LISTENER ---
-        # This captures global keydown events and passes them to our callback
         EventListener(
             id="keyboard-listener",
-            # preventDefault=True stops the browser from scrolling
             events=[{
                 "event": "keydown",
                 "props": ["key", "n_events"],
@@ -30,7 +28,7 @@ def create_layout():
         ),
 
         dcc.Store(id='selection-store', data=[]),
-        dcc.Store(id='active-item-index', data=None),  # Tracks which basket item is on screen
+        dcc.Store(id='active-item-index', data=None),
 
         # Dark mode switch
         html.Div([
@@ -57,7 +55,7 @@ def create_layout():
                         ),
                     ], className="flex-shrink-0"),
 
-                    # B. Selection Basket (The Scroll Area)
+                    # B. Selection Basket
                     html.Div([
                         html.Div([
                             html.H6("Selection Basket", className="mb-0"),
@@ -90,19 +88,29 @@ def create_layout():
 
             # --- MAIN DISPLAY COLUMN ---
             dbc.Col([
+                # SLIMMED NAVBAR: Pulls the plots upward
                 dbc.NavbarSimple(
                     brand="Coarse Offset Trace Explorer",
+                    brand_style={"fontSize": "1.1rem", "fontWeight": "bold"},
                     color="white",
-                    className="mb-1 shadow-none",
-                    style={'height': '5vh'}
+                    className="mb-0 py-0 shadow-none border-bottom",
+                    style={'height': '3.5vh', 'minHeight': '35px'}
                 ),
 
-                # 1. Main Trace Plot
-                dcc.Graph(
-                    id='quad-plot',
-                    style={'height': '55vh'},
-                    config={'modeBarButtonsToAdd': ['drawrect', 'select2d'], 'scrollZoom': True}
-                ),
+                # 1. Main Trace Plot (Trace Explorer)
+                html.Div([
+                    dcc.Graph(
+                        id='quad-plot',
+                        style={'height': '100%', 'width': '100%'},
+                        config={
+                            'modeBarButtonsToAdd': ['drawrect', 'select2d'],
+                            'scrollZoom': True,
+                            'displaylogo': False,
+                            'displayModeBar': True,
+                            'watermark': False,
+                        }
+                    )
+                ], style={'height': '56.5vh', 'padding': '0', 'marginTop': '0px'}),
 
                 # 2. Integrated Overlap Viewer & Log
                 html.Div([
@@ -133,15 +141,17 @@ def create_layout():
 
                     dcc.Graph(
                         id="integrated-overlap-graph",
-                        style={'flex': '1'}, # Allow graph to fill the container
+                        style={'flex': '1'},
                         config={'scrollZoom': True, 'displaylogo': False}
                     ),
-
-                ], className="border rounded m-2 shadow-sm",
-                    # FIXED: Height changed from 0vh to 35vh to make it visible
-                    style={'backgroundColor': 'black', 'height': '35vh', 'display': 'flex', 'flexDirection': 'column'})
-
-            ], width=9, style={'display': 'flex', 'flexDirection': 'column'})
-
+                ],
+                className="border-top mt-auto",
+                style={
+                    'backgroundColor': 'black',
+                    'height': '38vh',
+                    'display': 'flex',
+                    'flexDirection': 'column'
+                })
+            ], width=9, style={'height': '100vh', 'display': 'flex', 'flexDirection': 'column'})
         ], className="g-0")
     ], fluid=True, style={'height': '98vh', 'overflow': 'hidden'})
