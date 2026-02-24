@@ -59,7 +59,7 @@ def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nud
      Output('integrated-ov-status', 'children')],
     [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
-     Input('run-sofima-btn', 'n_clicks'),
+     Input('run-batch-btn', 'n_clicks'),
      Input('active-item-index', 'data')],
     [State('selection-store', 'data'),
      State('guess-mode-select', 'value'),
@@ -83,7 +83,7 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
     item = selection_data[active_idx]
 
     # --- CASE A: BATCH (THE LOOPED VERSION) ---
-    if trig == 'run-sofima-btn' and (trig_val or 0) > 0:
+    if trig == 'run-batch-btn' and (trig_val or 0) > 0:
         results = []
         is_manual = (guess_mode == "manual")
 

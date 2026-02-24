@@ -28,77 +28,6 @@ def create_layout():
         ], className="px-3"),
 
         dbc.Row([
-            # # --- SIDEBAR COLUMN ---
-            # dbc.Col([
-            #     html.Div([
-            #         # A. Navigation Grid
-            #         html.Div([
-            #             html.H6("Navigation", className="mt-3 text-uppercase text-muted"),
-            #             dcc.Graph(
-            #                 id='master-grid',
-            #                 figure=create_grid_navigator(service.tile_ids),
-            #                 config={'displayModeBar': False}
-            #             ),
-            #         ], className="flex-shrink-0"),
-            #
-            #         # B. Selection Basket
-            #         html.Div([
-            #             html.Div([
-            #                 html.H6("Selection Basket", className="mb-0"),
-            #                 html.Div([
-            #                     dbc.Button("Store CXYZ", id='save-cxyz-btn', color="warning", size="sm",
-            #                                className="me-1"),
-            #                     dbc.Button("Clear", id='clear-selection', color="link", size="sm")
-            #                 ])
-            #             ], className="d-flex justify-content-between align-items-center mb-2 flex-shrink-0"),
-            #
-            #             html.Div(
-            #                 id='selection-list-container',
-            #                 style={
-            #                     'flex': '1 1 0', 'overflowY': 'auto', 'maxHeight': '25vh',
-            #                     'minHeight': '0', 'border': '1px solid #dee2e6',
-            #                     'borderRadius': '4px', 'backgroundColor': '#fff'
-            #                 }
-            #             )
-            #         ], className="d-flex flex-column flex-grow-1 mt-3", style={'minHeight': '0'}),
-            #
-            #         # C. Global Operations (Updated with Settings Popover)
-            #         html.Div([
-            #             dbc.ButtonGroup([
-            #                 dbc.Button("Run SOFIMA", id='run-sofima-btn', color="primary", className="flex-grow-1"),
-            #                 dbc.Button("⚙️", id="sofima-settings-target", color="primary", outline=True),
-            #             ], className="w-100"),
-            #
-            #             dbc.Popover([
-            #                 dbc.PopoverHeader("Initial Guess Settings"),
-            #                 dbc.PopoverBody([
-            #                     dbc.Label("Guess Mode:", className="small"),
-            #                     dbc.Select(
-            #                         id="guess-mode-select",
-            #                         options=[
-            #                             {"label": "Current View (Nudge)", "value": "nudge"},
-            #                             {"label": "Manual Vector", "value": "manual"},
-            #                         ],
-            #                         value="nudge", size="sm"
-            #                     ),
-            #                     html.Div([
-            #                         dbc.Row([
-            #                             dbc.Col(dbc.Input(id="manual-dx", type="number", placeholder="dx", size="sm"),
-            #                                     width=6),
-            #                             dbc.Col(dbc.Input(id="manual-dy", type="number", placeholder="dy", size="sm"),
-            #                                     width=6),
-            #                         ], className="g-1 mt-2")
-            #                     ], id="manual-input-container", style={"display": "none"})
-            #                 ])
-            #             ], target="sofima-settings-target", trigger="click", placement="top"),
-            #
-            #             html.Div(id='registration-log',
-            #                      className="mt-3 p-2 small border rounded bg-dark text-success font-monospace",
-            #                      style={'height': '100px', 'fontSize': '10px', 'overflowY': 'auto'})
-            #         ], className="flex-shrink-0 mt-auto pb-3")
-            #
-            #     ], style={'height': '100vh', 'display': 'flex', 'flexDirection': 'column', 'padding': '0 15px'})
-            # ], width=3, className="border-end bg-light"),
             # --- SIDEBAR COLUMN ---
             dbc.Col([
                 html.Div([
@@ -131,8 +60,8 @@ def create_layout():
                     # C. Run Button (Moved just below Basket)
                     html.Div([
                         dbc.ButtonGroup([
-                            dbc.Button("Run SOFIMA", id='run-sofima-btn', color="primary", className="flex-grow-1"),
-                            dbc.Button("⚙️", id="sofima-settings-target", color="primary", outline=True),
+                            dbc.Button("Run batch registration", id='run-batch-btn', color="primary", className="flex-grow-1"),
+                            dbc.Button("⚙️", id="batch-settings-target", color="primary", outline=True),
                         ], className="w-100 mt-2"),
 
                         # THE POPOVER MUST BE AT THE SAME LEVEL AS THE TARGET
@@ -155,7 +84,7 @@ def create_layout():
                                     ], className="g-1 mt-2")
                                 ], id="manual-input-container", style={"display": "none"})
                             ])
-                        ], target="sofima-settings-target", trigger="click", placement="right"),
+                        ], target="batch-settings-target", trigger="click", placement="right"),
                     ], className="flex-shrink-0"),
 
                     # D. Expanded Logger
