@@ -114,8 +114,13 @@ def create_layout():
                     dcc.Graph(
                         id='quad-plot',
                         style={'height': '100%', 'width': '100%'},
-                        config={'modeBarButtonsToAdd': ['drawrect', 'select2d'], 'scrollZoom': True,
-                                'displaylogo': False}
+                        config={
+                            'modeBarButtonsToAdd': ['drawrect', 'select2d'],
+                            'scrollZoom': True,
+                            'displaylogo': False,
+                            'showTips': False,
+                            'doubleClick': 'reset+autosize'
+                        }
                     )
                 ], style={'height': '56.5vh', 'padding': '0'}),
 

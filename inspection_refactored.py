@@ -1091,7 +1091,7 @@ def plot_ovs_from_out_or_inf_file(inspection: Inspection):
 
     # Plot overlaps
     exp.plot_specific_ovs_refactored(ov_dict, dir_name_out)
-    
+
     return
 
 
@@ -1165,26 +1165,25 @@ if __name__ == "__main__":
 
 
     ### POSTPROCESS COARSE SHIFTS
-    # main_postprocess_coarse_shifts(
-    #     exp, plot_traces=True, trace_ids=None)
+    main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
 
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT
-    main_par_multiproc(exp)
+    # main_par_multiproc(exp)
 
 
     ### DETECT BEAD COARSE OFFSETS
-    main_get_cxyz_outliers(config=exp_config)
+    # main_get_cxyz_outliers(config=exp_config)
 
 
     # PLOTTING OVs
     # main_par_plot_ovs_specific_tile_pair(exp)
-    main_plot_ovs_all_tilepairs(exp)
-    plot_ovs_from_out_or_inf_file(exp)
+    # main_plot_ovs_all_tilepairs(exp)
+    # plot_ovs_from_out_or_inf_file(exp)
 
 
     # FIX COARSE OFFSETS
-    main_fix_outliers_and_infinities(exp)
+    # main_fix_outliers_and_infinities(exp)
 
 
 

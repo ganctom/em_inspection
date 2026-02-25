@@ -130,22 +130,24 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
             'x': 0.02,
             'xanchor': 'left',
             'yanchor': 'top',
-            'font': {'size': 14, 'color': 'gray'}  # Clean, muted grey to match "Navigation" header
+            'font': {'size': 14, 'color': 'gray'}
         },
         template=theme,
         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         autosize=True,
+        hovermode='x unified',
         modebar=dict(
             orientation='h',
             bgcolor='rgba(0,0,0,0)',
             color='#7f7f7f',
-            activecolor='#1f77b4'
+            activecolor='#1f77b4',
         ),
         margin=dict(l=40, r=10, t=50, b=30),
         showlegend=False,
         uirevision=str(raw_tid)
     )
+
     return fig
 
 
