@@ -98,10 +98,15 @@ class DataService:
         ctx = self._get_overlap_context(tid_a, z, overlap_type)
         if not ctx: return None
 
-        # Apply the nudge to the loaded shift vector
+        dx, dy = manual_nudge
+        if overlap_type.upper().startswith('H'):
+            corrected_nudge = (dy, -dx)
+        else:
+            corrected_nudge = (dx, dy)
+
         nudged_vec = (
-            ctx.shift_vec[0] + manual_nudge[0],
-            ctx.shift_vec[1] + manual_nudge[1]
+            ctx.shift_vec[0] + corrected_nudge[0],
+            ctx.shift_vec[1] + corrected_nudge[1]
         )
 
         try:
