@@ -49,7 +49,7 @@ class DataService:
     def get_trace(self, tid: str):
         return self.processor.get_full_trace(tid)
 
-    @lru_cache(maxsize=64)
+
     def _get_overlap_context(self, tid_a: str, z: int, overlap_type: str) -> Optional[OverlapContext]:
         z_str = str(z)
         tid_a_int = int(tid_a)
@@ -75,7 +75,7 @@ class DataService:
         else:
             shift_vec = tuple(map(int, np.round(raw_vec)))
 
-        logging.debug(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
+        logging.info(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
 
         return OverlapContext(
             section=section,
@@ -201,15 +201,20 @@ class DataService:
         section: Section = ctx.section
         section.tile_dicts = utils.get_tile_dicts(section.path)  # Optimize
 
+        if overlap_type.upper().startswith('H'):
+            aligned_nudge = (initial_nudge[1], -initial_nudge[0])
+        else:
+            aligned_nudge = initial_nudge
+
         if override_vector is not None:
             start_offset = override_vector
             print(f"BATCH MODE: Using override vector {start_offset}")
         else:
             start_offset: Vector = (
-                ctx.shift_vec[0] + initial_nudge[0],
-                ctx.shift_vec[1] + initial_nudge[1]
+                ctx.shift_vec[0] + aligned_nudge[0],
+                ctx.shift_vec[1] + aligned_nudge[1]
             )
-            print(f"NUDGE MODE: {ctx.shift_vec} + {initial_nudge} = {start_offset}")
+            print(f"NUDGE MODE: {ctx.shift_vec} + {aligned_nudge} = {start_offset}")
 
         try:
             current_shift = start_offset
@@ -234,7 +239,7 @@ class DataService:
 
             # Commit to memory/processor
             self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
-
+            print(f'REFINED VECTOR: {current_shift}')
             return {
                 "initial": ctx.shift_vec,
                 "start_used": start_offset,
