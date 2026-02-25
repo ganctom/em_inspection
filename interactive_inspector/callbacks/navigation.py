@@ -2,6 +2,7 @@ from dash import Input, Output, State, callback, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import inspection_refactored
 from interactive_inspector.constants import UIConstants, OverlapType
 from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
@@ -179,9 +180,33 @@ def handle_persist_to_disk(n_clicks):
         return html.Div(f"Save Failed: {str(e)}", className="text-danger")
 
 
+
 @callback(
     Output("manual-input-container", "style"),
     Input("guess-mode-select", "value")
 )
 def toggle_manual_input(mode):
     return {"display": "block"} if mode == "manual" else {"display": "none"}
+
+
+@callback(
+    Output('registration-log', 'children', allow_duplicate=True),
+    Input('export-sections-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def handle_export_sections(n_clicks):
+    if not n_clicks:
+        return no_update
+
+    try:
+        service.store_offsets_to_yamls()
+
+        return html.Div([
+            html.P("🚀 Storing coarse offsets to section cx_cy files", className="text-info mb-0 fw-bold"),
+            html.Small("Coarse offsets have been stored.", className="text-white-50")
+        ])
+    except Exception as e:
+        return html.Div([
+            html.P("❌ Export Failed", className="text-danger mb-0 fw-bold"),
+            html.Small(str(e), className="text-white small")
+        ])

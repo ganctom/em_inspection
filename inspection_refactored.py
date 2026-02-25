@@ -4,11 +4,12 @@ import multiprocessing
 import os
 from platform import system
 from pathlib import Path
-from typing import Optional, Iterable, Union, Sequence
+from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple
 from functools import partial
 
 import jax
 import numpy as np
+from tqdm import tqdm
 
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
@@ -19,6 +20,7 @@ from coarse_offset_processor import CoarseOffsetProcessor
 UniPath = Union[str, Path]
 
 ### Set up logging
+logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 # logging.basicConfig(level=logging.INFO)
 logging.basicConfig(level=logging.WARNING)
@@ -1089,9 +1091,53 @@ def plot_ovs_from_out_or_inf_file(inspection: Inspection):
 
     # Plot overlaps
     exp.plot_specific_ovs_refactored(ov_dict, dir_name_out)
-
+    
     return
 
+
+def _get_update_targets(
+    cxyz_file: np.lib.npyio.NpzFile,
+    new_cxyz: Dict[str, np.ndarray]
+) -> Iterator[Tuple[str, np.ndarray]]:
+    """Yields (key, value) from new_cxyz if they differ from backup."""
+    for k, v in new_cxyz.items():
+        if k in cxyz_file.files and np.array_equal(cxyz_file[k], v, equal_nan=True):
+            continue
+        yield k, v
+
+
+def store_cxyz_to_offset_files(
+        insp: Inspection,
+        new_cxyz: Optional[Dict[str, np.ndarray]] = None
+) -> None:
+    """Stores updated coarse offset arrays from new_cxyz into section cx_cy.json files"""
+
+    if not new_cxyz: return
+    if not insp.path_cxyz.exists():
+        logger.error("Backup missing: %s", insp.path_cxyz)
+        return
+
+    try:
+        with np.load(insp.path_cxyz, mmap_mode='r') as backup:
+            targets = list(_get_update_targets(backup, new_cxyz))
+            if not targets:
+                print(f"All {len(new_cxyz)} items match. Skipping.")
+                return
+
+            stats = {"ok": 0, "err": 0}
+            for k, v in tqdm(targets, desc="Updating"):
+                sec_path = insp.dir_sections / f"s{k}_g{insp.grid_nr}"
+                p = utils.cross_platform_path(str(sec_path))
+                try:
+                    utils.save_coarse_mat(v, p, file_format='json')
+                    stats["ok"] += 1
+                except (IOError, OSError) as e:
+                    logger.error("Error s%s: %s", k, e)
+                    stats["err"] += 1
+
+            print(f"\nWritten: {stats['ok']} | Skipped: {len(new_cxyz)-stats['ok']} | Errors: {stats['err']}")
+    except Exception as e:
+        logger.critical("Failed: %s", e, exc_info=True)
 
 
 if __name__ == "__main__":

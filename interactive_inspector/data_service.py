@@ -4,7 +4,7 @@ from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
 
-from inspection_refactored import Inspection, Section, _prepare_sections, Vector, utils
+from inspection_refactored import Inspection, Section, _prepare_sections, Vector, utils, store_cxyz_to_offset_files
 from Tile_refactored import Tile
 import experiment_configs as cfg
 
@@ -229,6 +229,13 @@ class DataService:
             logging.error(f"Calculation failed: {e}")
             return str(e)
 
+
+    def store_offsets_to_yamls(self):
+        """Stores updated coarse shift vectors into respective sections cx_cy.json files"""
+        store_cxyz_to_offset_files(self.inspection, self.processor.cxyz_obj)
+        return
+
+
     @staticmethod
     def _build_plotly_figure(img: np.ndarray, t1: str, t2: int, ov: str, z: int):
         fig = px.imshow(img, binary_string=True, origin='upper')
@@ -248,6 +255,8 @@ class DataService:
         )
 
         return fig
+
+
 
 # Initialize single instance
 service = DataService()
