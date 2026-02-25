@@ -1,3 +1,4 @@
+import numpy as np
 from dash import Input, Output, State, callback, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -57,6 +58,100 @@ def sync_selection_ui(data):
     return [selection_card(i, item) for i, item in enumerate(data)]
 
 
+# @callback(
+#     Output('quad-plot', 'figure'),
+#     [Input('master-grid', 'clickData'),
+#      Input('selection-store', 'data'),
+#      Input('theme-switch', 'value')]
+# )
+# def render_main_visuals_(grid_click, selection_store, dark_mode):
+#     """Renders the 4-panel trace view with current selections highlighted."""
+#     raw_tid = grid_click['points'][0]['text'] if grid_click else None
+#     if not raw_tid:
+#         return go.Figure()
+#
+#     trace_data = service.get_trace(str(raw_tid))
+#     if not trace_data or trace_data.shift_vectors is None:
+#         return go.Figure()
+#
+#     sec_nums = trace_data.section_numbers
+#     shifts = trace_data.shift_vectors
+#
+#     fig = make_subplots(
+#         rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
+#         subplot_titles=("H-Overlap: Δx", "V-Overlap: Δx", "H-Overlap: Δy", "V-Overlap: Δy")
+#     )
+#
+#     # Standardized trace configurations (Row, Col, Index in shift_vectors, Label)
+#     configs = [
+#         (1, 1, 0, "H-dx"), (2, 1, 1, "H-dy"),
+#         (1, 2, 2, "V-dx"), (2, 2, 3, "V-dy")
+#     ]
+#
+#     for r, c, idx, label in configs:
+#         fig.add_trace(go.Scatter(
+#             x=sec_nums, y=shifts[idx, :],
+#             mode='lines+markers', name=label,
+#             marker=dict(size=4, color=UIConstants.TRACE_COLOR),
+#             line=dict(width=1), hoverinfo='x+y'
+#         ), row=r, col=c)
+#
+#     # Dynamic Highlights for the selected Tile
+#     current_tid_selections = [s for s in selection_store if str(s['tid']) == str(raw_tid)]
+#     for pt in current_tid_selections:
+#         try:
+#             z_val = int(pt['z'])
+#             data_idx = list(sec_nums).index(z_val)
+#             is_h = (pt['overlap'] == OverlapType.HORIZONTAL)
+#
+#             col, idx_x, idx_y = (1, 0, 1) if is_h else (2, 2, 3)
+#             marker_style = dict(
+#                 size=12, color=UIConstants.HIGHLIGHT_COLOR,
+#                 symbol='circle-open', line=dict(width=2)
+#             )
+#
+#             # Highlight on both X and Y drift plots for that overlap
+#             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_x, data_idx]],
+#                                      mode='markers', marker=marker_style, hoverinfo='skip'),
+#                           row=1, col=col)
+#             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_y, data_idx]],
+#                                      mode='markers', marker=marker_style, hoverinfo='skip'),
+#                           row=2, col=col)
+#         except (ValueError, IndexError):
+#             continue
+#
+#     # Determine theme
+#     is_dark = len(dark_mode) > 0
+#     theme = "plotly_dark" if is_dark else "plotly_white"
+#
+#     fig.update_layout(
+#         title={
+#             'text': "Trace Explorer",
+#             'y': 0.98,
+#             'x': 0.02,
+#             'xanchor': 'left',
+#             'yanchor': 'top',
+#             'font': {'size': 14, 'color': 'gray'}
+#         },
+#         template=theme,
+#         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
+#         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
+#         autosize=True,
+#         hovermode='x unified',
+#         modebar=dict(
+#             orientation='h',
+#             bgcolor='rgba(0,0,0,0)',
+#             color='#7f7f7f',
+#             activecolor='#1f77b4',
+#         ),
+#         margin=dict(l=40, r=10, t=50, b=30),
+#         showlegend=False,
+#         uirevision=str(raw_tid)
+#     )
+#
+#     return fig
+#
+
 @callback(
     Output('quad-plot', 'figure'),
     [Input('master-grid', 'clickData'),
@@ -64,7 +159,7 @@ def sync_selection_ui(data):
      Input('theme-switch', 'value')]
 )
 def render_main_visuals(grid_click, selection_store, dark_mode):
-    """Renders the 4-panel trace view with current selections highlighted."""
+    # 1. Exit early if no tile selected
     raw_tid = grid_click['points'][0]['text'] if grid_click else None
     if not raw_tid:
         return go.Figure()
@@ -74,14 +169,31 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
         return go.Figure()
 
     sec_nums = trace_data.section_numbers
-    shifts = trace_data.shift_vectors
+    shifts = trace_data.shift_vectors  # Shape: (4, num_sections)
 
+    # 2. Determine Column-Specific Auto-Zoom Ranges
+    def get_range_for_indices(indices):
+        sub_shifts = shifts[indices, :]
+        # Check if there is at least one non-NaN value in this subset
+        mask = ~np.isnan(sub_shifts).all(axis=0)
+        if np.any(mask):
+            valid_idx = np.where(mask)[0]
+            return [int(sec_nums[valid_idx[0]]) - 2, int(sec_nums[valid_idx[-1]]) + 2]
+        return [int(min(sec_nums)), int(max(sec_nums))]
+
+    # H-Overlap uses indices 0, 1 | V-Overlap uses indices 2, 3
+    range_h = get_range_for_indices([0, 1])
+    range_v = get_range_for_indices([2, 3])
+
+    # 3. Create Subplots
     fig = make_subplots(
-        rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
+        rows=2, cols=2,
+        shared_xaxes=True,
+        vertical_spacing=0.08,
         subplot_titles=("H-Overlap: Δx", "V-Overlap: Δx", "H-Overlap: Δy", "V-Overlap: Δy")
     )
 
-    # Standardized trace configurations (Row, Col, Index in shift_vectors, Label)
+    # Standardized trace configurations
     configs = [
         (1, 1, 0, "H-dx"), (2, 1, 1, "H-dy"),
         (1, 2, 2, "V-dx"), (2, 2, 3, "V-dy")
@@ -90,26 +202,26 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     for r, c, idx, label in configs:
         fig.add_trace(go.Scatter(
             x=sec_nums, y=shifts[idx, :],
-            mode='lines+markers', name=label,
+            mode='markers+lines', name=label,
             marker=dict(size=4, color=UIConstants.TRACE_COLOR),
             line=dict(width=1), hoverinfo='x+y'
         ), row=r, col=c)
 
-    # Dynamic Highlights for the selected Tile
+    # 4. Dynamic Highlights
     current_tid_selections = [s for s in selection_store if str(s['tid']) == str(raw_tid)]
     for pt in current_tid_selections:
         try:
             z_val = int(pt['z'])
             data_idx = list(sec_nums).index(z_val)
             is_h = (pt['overlap'] == OverlapType.HORIZONTAL)
+            col = 1 if is_h else 2
+            idx_x, idx_y = (0, 1) if is_h else (2, 3)
 
-            col, idx_x, idx_y = (1, 0, 1) if is_h else (2, 2, 3)
             marker_style = dict(
                 size=12, color=UIConstants.HIGHLIGHT_COLOR,
                 symbol='circle-open', line=dict(width=2)
             )
 
-            # Highlight on both X and Y drift plots for that overlap
             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_x, data_idx]],
                                      mode='markers', marker=marker_style, hoverinfo='skip'),
                           row=1, col=col)
@@ -119,24 +231,30 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
         except (ValueError, IndexError):
             continue
 
-    # Determine theme
+    # 5. Final Layout
     is_dark = len(dark_mode) > 0
     theme = "plotly_dark" if is_dark else "plotly_white"
 
     fig.update_layout(
         title={
-            'text': "Trace Explorer",
-            'y': 0.98,
-            'x': 0.02,
-            'xanchor': 'left',
-            'yanchor': 'top',
+            'text': f"Trace Explorer: Tile {raw_tid}",
+            'y': 0.98, 'x': 0.02,
+            'xanchor': 'left', 'yanchor': 'top',
             'font': {'size': 14, 'color': 'gray'}
         },
         template=theme,
         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-        autosize=True,
         hovermode='x unified',
+
+        # COLUMN 1 (Horizontal Overlaps) - xaxis and xaxis3
+        xaxis=dict(range=range_h, autorange=False),
+        xaxis3=dict(range=range_h, autorange=False),
+
+        # COLUMN 2 (Vertical Overlaps) - xaxis2 and xaxis4
+        xaxis2=dict(range=range_v, autorange=False),
+        xaxis4=dict(range=range_v, autorange=False),
+
         modebar=dict(
             orientation='h',
             bgcolor='rgba(0,0,0,0)',
@@ -149,7 +267,6 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     )
 
     return fig
-
 
 @callback(
     Output('master-grid', 'figure'),

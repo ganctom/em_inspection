@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 import logging
 from pathlib import Path
-from typing import Optional, Any, Dict, Tuple
+from typing import Optional, Any, Dict, Tuple, List, Set
 import matplotlib.pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -241,115 +241,53 @@ class CoarseOffsetProcessor:
 
         return trace_dict if trace_dict else None
 
-    # def get_full_trace(self, tile_id: str) -> Optional[CoarseOffsetTrace]:
-    #     if not (self.cxyz_obj and self.tile_id_maps_obj):
-    #         logging.error("Data objects not initialized.")
-    #         return None
-    #
-    #     sec_keys = sorted(self.tile_id_maps_obj.keys(), key=int)
-    #     sec_nums_all = [int(k) for k in sec_keys]
-    #     t_id_int = int(tile_id)
-    #
-    #     # Create a continuous range of section numbers for the X-axis
-    #     first, last = sec_nums_all[0], sec_nums_all[-1]
-    #     full_range_x = list(range(first, last + 1))
-    #
-    #     num_sections = len(full_range_x)
-    #     traces = np.full((4, num_sections), np.nan)
-    #
-    #     trace_obj = CoarseOffsetTrace(
-    #         tile_id=tile_id,
-    #         section_numbers=full_range_x,  # Full range ensures X aligns with array
-    #         shift_vectors=traces,
-    #     )
-    #
-    #     if t_id_int not in self.get_unique_tile_ids():
-    #         return trace_obj
-    #
-    #     for str_num in sec_keys:
-    #         lookup = self._get_section_lookup(str_num)
-    #         coord = lookup.get(t_id_int)
-    #         if coord:
-    #             y, x = coord
-    #             # Calculate the correct index relative to 'first'
-    #             idx = int(str_num) - first
-    #             try:
-    #                 traces[:, idx] = self.cxyz_obj[str_num][:, :, y, x].ravel()
-    #             except (IndexError, ValueError) as e:
-    #                 logging.warning(f"Failed extraction at s{str_num} t{tile_id}: {e}")
-    #
-    #     return trace_obj
-    #
-    # def get_full_trace(self, tile_id: int | str) -> CoarseOffsetTrace:
-    #     """Builds a trace across all sections for a given Tile ID."""
-    #     t_id_int = int(tile_id)
-    #     sec_keys = sorted(self.tile_id_maps_obj.keys(), key=int)
-    #
-    #     # Establish consistent X-axis range
-    #     first, last = int(sec_keys[0]), int(sec_keys[-1])
-    #     full_range = list(range(first, last + 1))
-    #
-    #     # Initialize empty results with NaNs (Shape: 4 components x N sections)
-    #     traces = np.full((4, len(full_range)), np.nan)
-    #
-    #     for z_str in sec_keys:
-    #         lookup = self._get_section_lookup(z_str)
-    #         if t_id_int in lookup:
-    #             y, x = lookup[t_id_int]
-    #             idx = int(z_str) - first
-    #             traces[:, idx] = self.get_full_vector_stack(z_str, y, x)
-    #
-    #     return CoarseOffsetTrace(
-    #         tile_id=str(tile_id),
-    #         shift_vectors=traces,
-    #         section_numbers=full_range
-    #     )
-
+ 
     def get_full_trace(self, tile_id: str) -> Optional[CoarseOffsetTrace]:
         """
         Extracts the 4-component shift vector trace for a given tile ID.
         Uses the slotted SectionIndex cache for O(1) coordinate lookups.
         """
+
         if not (self.cxyz_obj and self.tile_id_maps_obj):
             logging.error("Data objects not initialized. Call load_all_offsets first.")
             return None
 
-        # 1. Prepare the global section range
-        sec_keys = sorted(self.tile_id_maps_obj.keys(), key=int)
-        if not sec_keys:
+        # 1. Determine valid section range efficiently
+        available_secs = {int(k) for k in self.tile_id_maps_obj.keys()}
+        config_range = set(range(self.config.first_sec, self.config.last_sec + 1))
+        valid_secs = sorted(available_secs.intersection(config_range))
+
+        if not valid_secs:
             return None
 
-        first, last = int(sec_keys[0]), int(sec_keys[-1])
-        full_range_x = list(range(first, last + 1))
-        num_sections = len(full_range_x)
+        first, last = valid_secs[0], valid_secs[-1]
+        full_range = list(range(first, last + 1))
+        num_sections = len(full_range)
 
-        # 2. Initialize the empty traces matrix (4 components x Total Sections)
-        # Using NaN ensures Plotly shows 'gaps' in the line chart
+        # 2. Initialize traces with NaN
         traces = np.full((4, num_sections), np.nan)
+        tile_id_int = int(tile_id)
 
-        t_id_int = int(tile_id)
-
-        # 3. Iterate and Extract
-        # We only iterate over sec_keys that actually exist in the .npz
-        for str_num in sec_keys:
+        # 3. Vectorized-style extraction loop
+        for sec_num in valid_secs:
+            str_num = str(sec_num)
             index = self._get_section_lookup(str_num)
-            coord = index.get_coords(t_id_int)
 
-            if coord:
-                y, x = coord
-                # Calculate column index in our matrix relative to the first section
-                col_idx = int(str_num) - first
+            # Get coordinates for the specific tile
+            coord = index.get_coords(tile_id_int)
+            if not coord:
+                continue
 
-                try:
-                    # Extract Axis (2) x Component (2) and flatten to 4
-                    # Order: [H-dx, H-dy, V-dx, V-dy]
-                    traces[:, col_idx] = self.cxyz_obj[str_num][:, :, y, x].ravel()
-                except (IndexError, ValueError) as e:
-                    logging.warning(f"Data mismatch at section {str_num} for tile {tile_id}: {e}")
+            y, x = coord
+            col_idx = sec_num - first
+            try:
+                traces[:, col_idx] = self.cxyz_obj[str_num][:, :, y, x].ravel()
+            except (IndexError, KeyError, ValueError) as e:
+                logging.warning(f"Data mismatch | Section: {str_num} | Tile: {tile_id} | Error: {e}")
 
         return CoarseOffsetTrace(
             tile_id=tile_id,
-            section_numbers=full_range_x,
+            section_numbers=full_range,
             shift_vectors=traces
         )
 
