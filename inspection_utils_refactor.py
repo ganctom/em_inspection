@@ -356,7 +356,7 @@ def aggregate_coarse_offsets(
 
     for p in section_dirs:
         path_to_check = Path(p) / fn_coarse_offsets
-        sec_num = str(get_section_num(p))
+        sec_num_str = str(get_section_num(p))
 
         if path_to_check.exists():
             coarse_data: CoarseData = read_coarse_mat(path_to_check)
@@ -369,10 +369,10 @@ def aggregate_coarse_offsets(
                 cx = cx[:, 0, 0, ...]
                 cy = cy[:, 0, 0, ...]
             cxy = np.asarray((cx, cy), dtype=float)
-            offsets[sec_num] = cxy
+            offsets[sec_num_str] = cxy
         else:
-            logging.debug(f's{sec_num} coarse-offsets file does not exist')
-            failed_paths.append(f's{sec_num}\n')
+            logging.debug(f's{sec_num_str} coarse-offsets file does not exist')
+            failed_paths.append(f's{sec_num_str}\n')
 
     return offsets, failed_paths
 

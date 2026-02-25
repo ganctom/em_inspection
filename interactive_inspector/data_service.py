@@ -4,9 +4,16 @@ from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
 
-from inspection_refactored import Inspection, Section, _prepare_sections, Vector, utils
+from inspection_refactored import Inspection, Section, _prepare_sections, Vector, utils, store_cxyz_to_offset_files
 from Tile_refactored import Tile
 import experiment_configs as cfg
+
+import logging
+
+### Set up logging
+# logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -68,33 +75,6 @@ class DataService:
             x=x,
             shift_vec=shift_vec
         )
-
-
-    def get_overlap_figure_(self, tid_a: str, z: int, overlap_type: str) -> Optional[px.imshow]:
-        ctx = self._get_overlap_context(tid_a, z, overlap_type)
-        if not ctx:
-            return None
-
-        try:
-            img_array = ctx.section.plot_ov(
-                tid_a=ctx.tid_a,
-                tid_b=ctx.tid_b,
-                shift_vec=ctx.shift_vec,
-                blur=1.2,
-                clahe=True,
-                rotate_vert=True,
-                return_img=True,
-                show_plot=False,
-            )
-        except Exception as e:
-            logging.error(f"Failed to plot overlap for Z:{z} T:{tid_a}: {e}")
-            return None
-
-        if img_array is None:
-            return None
-
-        return self._build_plotly_figure(img_array, tid_a, ctx['tid_b'], overlap_type.upper(), z)
-
 
     def get_overlap_figure(
             self,
@@ -177,14 +157,20 @@ class DataService:
                 section.read_tile_id_map()
 
             self._section_cache[sec_path] = section
-
         return self._section_cache[sec_path]
 
-
     def compute_coarse_shift(
-            self, tid_a: str, z: int, overlap_type: str, initial_nudge: Tuple[int, int] = (0, 0)):
+            self,
+            tid_a: str,
+            z: int,
+            overlap_type: str,
+            initial_nudge: Tuple[int, int] = (0, 0),
+            override_vector: Optional[Vector] = None
+    ):
         """
-        Calculates a new shift vector using a manual nudge as the starting point.
+        Calculates a new shift vector.
+        If override_vector is provided, it uses that as the absolute starting point.
+        Otherwise, it adds initial_nudge to the existing coarse offset.
         """
 
         # Pyramidal parameters - can be tuned
@@ -197,24 +183,31 @@ class DataService:
             return "Context Error"
 
         section: Section = ctx.section
-        start_offset: Vector = (
-            ctx.shift_vec[0] + initial_nudge[0],
-            ctx.shift_vec[1] + initial_nudge[1]
-        )
+        section.tile_dicts = utils.get_tile_dicts(section.path)  # Optimize
+
+        if override_vector is not None:
+            start_offset = override_vector
+            print(f"BATCH MODE: Using override vector {start_offset}")
+        else:
+            start_offset: Vector = (
+                ctx.shift_vec[0] + initial_nudge[0],
+                ctx.shift_vec[1] + initial_nudge[1]
+            )
+            print(f"NUDGE MODE: {ctx.shift_vec} + {initial_nudge} = {start_offset}")
 
         try:
             current_shift = start_offset
             t1 = Tile(section.tile_dicts[ctx.tid_a])
             t2 = Tile(section.tile_dicts[ctx.tid_b])
 
-            for max_ext, stride in utils.get_pyramid(levels, max_ext, stride):
+            for m_ext, s in utils.get_pyramid(levels, max_ext, stride):
                 try:
                     current_shift, _ = section.refine_coarse_offset_eval_ov(
                         offset=current_shift,
                         tile_pair=(t1, t2),
                         is_vert=bool(ctx.axis),
-                        max_ext=max_ext,
-                        stride=stride
+                        max_ext=m_ext,
+                        stride=s
                     )
                 except TypeError:
                     current_shift = (np.nan, np.nan)
@@ -223,18 +216,24 @@ class DataService:
             if np.isnan(current_shift).any():
                 return "Refinement failed to converge."
 
-            # Update the processor so the change persists in the session
+            # Commit to memory/processor
             self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
 
             return {
-                "initial": ctx.shift_vec,  # The very first one from DB
-                "nudged_start": start_offset,  # Where the user moved it to
-                "refined": current_shift  # The final result
+                "initial": ctx.shift_vec,
+                "start_used": start_offset,
+                "refined": current_shift
             }
 
         except Exception as e:
             logging.error(f"Calculation failed: {e}")
             return str(e)
+
+
+    def store_offsets_to_yamls(self):
+        """Stores updated coarse shift vectors into respective sections cx_cy.json files"""
+        store_cxyz_to_offset_files(self.inspection, self.processor.cxyz_obj)
+        return
 
 
     @staticmethod
@@ -256,6 +255,8 @@ class DataService:
         )
 
         return fig
+
+
 
 # Initialize single instance
 service = DataService()

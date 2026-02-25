@@ -59,32 +59,61 @@ def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nud
      Output('integrated-ov-status', 'children')],
     [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
+     Input('run-batch-btn', 'n_clicks'),
      Input('active-item-index', 'data')],
     [State('selection-store', 'data'),
-     State('manual-nudge-store', 'data')],
+     State('guess-mode-select', 'value'),
+     State('manual-dx', 'value'),
+     State('manual-dy', 'value')],
     prevent_initial_call=True
 )
-def handle_actions(nudge_trigger, calc_clicks, active_idx, selection_data, nudge_state):
-    # 1. Gatekeeper: If no index is active or basket is empty, abort.
-    if active_idx is None or not selection_data or active_idx >= len(selection_data):
-        return no_update, no_update, "No tile selected"
+def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
+                   selection_data, guess_mode, m_dx, m_dy):
+    # 1. Boilerplate Safety
+    if not selection_data or active_idx is None or active_idx >= len(selection_data):
+        return no_update, no_update, "Waiting for selection..."
 
     trig = ctx.triggered_id
+    trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
+
+    # Standardize Nudge
+    safe_nudge = nudge_trigger if isinstance(nudge_trigger, dict) else {'dx': 0, 'dy': 0}
+    nudge = (safe_nudge.get('dx', 0), safe_nudge.get('dy', 0))
+    manual_ref = (m_dx or 0, m_dy or 0)
     item = selection_data[active_idx]
-    nudge = (nudge_state['dx'], nudge_state['dy'])
 
-    # 2. Identify specifically what happened
-    # Check if a 'compute-single-btn' was clicked
-    is_compute_trigger = isinstance(trig, dict) and trig.get('type') == 'compute-single-btn'
+    # --- CASE A: BATCH (THE LOOPED VERSION) ---
+    if trig == 'run-batch-btn' and (trig_val or 0) > 0:
+        results = []
+        is_manual = (guess_mode == "manual")
 
-    # We verify that at least one button in the ALL list has actually been clicked
-    # This prevents the callback from running 'Calculate' logic on page load/selection
-    btn_clicked = any(click is not None for click in calc_clicks)
+        for s_item in selection_data:
+            res = service.compute_coarse_shift(
+                s_item['tid'],
+                s_item['z'],
+                s_item['overlap'],
+                initial_nudge=nudge if not is_manual else (0, 0),
+                override_vector=manual_ref if is_manual else None
+            )
+            results.append((s_item, res))
 
-    # LOGIC: Calculate (Only if the button was the trigger)
-    if is_compute_trigger and btn_clicked:
+        # Format Log
+        log_entries = []
+        for s_item, res in results:
+            if isinstance(res, dict):
+                log_entries.append(html.Div(f"T{s_item['tid']}: {res['refined']}", className="text-success small"))
+            else:
+                log_entries.append(html.Div(f"T{s_item['tid']}: FAILED", className="text-danger small"))
+
+        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
+        return html.Div(log_entries), fig, "Batch Complete"
+
+    # --- CASE B: SINGLE CALCULATION ---
+    elif isinstance(trig, dict) and trig.get('type') == 'compute-single-btn' and (trig_val or 0) > 0:
         btn_idx = trig.get('index')
         calc_item = selection_data[btn_idx]
+
+        # Use nudge only if it's the item we're looking at
         current_nudge = nudge if btn_idx == active_idx else (0, 0)
 
         result = service.compute_coarse_shift(
@@ -95,21 +124,13 @@ def handle_actions(nudge_trigger, calc_clicks, active_idx, selection_data, nudge
             return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
 
         log_msg = html.Div([
-            html.P(f"Refinement Successful (T{item['tid']})", className="text-success mb-0"),
+            html.P(f"Refinement Successful (T{calc_item['tid']})", className="text-success mb-0"),
             html.Small(f"Final Vector: {result['refined']}", className="text-white-50")
         ])
-
         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
         return log_msg, fig, "Refinement Applied"
 
-    # LOGIC: Re-Plot (Nudge or Active Item changed)
-    # We use an 'elif' to ensure we don't try to plot while calculating
-    elif trig == 'manual-nudge-store' or trig == 'active-item-index':
-        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-        if fig is None:
-            return no_update, no_update, "Failed to load overlap image"
-
-        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
-        return no_update, fig, status
-
-    return no_update, no_update, no_update
+    # --- CASE C: RE-PLOT ---
+    fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
+    status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
+    return no_update, fig, status

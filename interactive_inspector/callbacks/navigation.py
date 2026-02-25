@@ -2,6 +2,7 @@ from dash import Input, Output, State, callback, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+import inspection_refactored
 from interactive_inspector.constants import UIConstants, OverlapType
 from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
@@ -129,23 +130,23 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
             'x': 0.02,
             'xanchor': 'left',
             'yanchor': 'top',
-            'font': {'size': 14, 'color': 'gray'}  # Clean, muted grey to match "Navigation" header
+            'font': {'size': 14, 'color': 'gray'}
         },
         template=theme,
         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         autosize=True,
+        hovermode='x unified',
         modebar=dict(
             orientation='h',
             bgcolor='rgba(0,0,0,0)',
             color='#7f7f7f',
-            activecolor='#1f77b4'
+            activecolor='#1f77b4',
         ),
         margin=dict(l=40, r=10, t=50, b=30),
         showlegend=False,
         uirevision=str(raw_tid)
     )
-
 
     return fig
 
@@ -161,3 +162,53 @@ def update_grid_highlight(click_data):
 
     # Generate the grid with the highlight
     return create_grid_navigator(service.tile_ids, active_tid=active_tid)
+
+
+@callback(
+    Output('registration-log', 'children', allow_duplicate=True),
+    Input('save-cxyz-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def handle_persist_to_disk(n_clicks):
+    if not n_clicks:
+        return no_update
+    try:
+        service.processor.save_offsets_to_disk()
+        return html.Div([
+            html.P("💾 CXYZ File Updated", className="text-warning mb-0 fw-bold"),
+            html.Small("Modifications persisted to disk.", className="text-white-50")
+        ])
+    except Exception as e:
+        return html.Div(f"Save Failed: {str(e)}", className="text-danger")
+
+
+
+@callback(
+    Output("manual-input-container", "style"),
+    Input("guess-mode-select", "value")
+)
+def toggle_manual_input(mode):
+    return {"display": "block"} if mode == "manual" else {"display": "none"}
+
+
+@callback(
+    Output('registration-log', 'children', allow_duplicate=True),
+    Input('export-sections-btn', 'n_clicks'),
+    prevent_initial_call=True
+)
+def handle_export_sections(n_clicks):
+    if not n_clicks:
+        return no_update
+
+    try:
+        service.store_offsets_to_yamls()
+
+        return html.Div([
+            html.P("🚀 Storing coarse offsets to section cx_cy files", className="text-info mb-0 fw-bold"),
+            html.Small("Coarse offsets have been stored.", className="text-white-50")
+        ])
+    except Exception as e:
+        return html.Div([
+            html.P("❌ Export Failed", className="text-danger mb-0 fw-bold"),
+            html.Small(str(e), className="text-white small")
+        ])
