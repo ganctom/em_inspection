@@ -3,7 +3,6 @@ from dash import Input, Output, State, callback, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-import inspection_refactored
 from interactive_inspector.constants import UIConstants, OverlapType
 from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
@@ -13,35 +12,59 @@ from interactive_inspector.layouts.components import selection_card, create_grid
     Output('selection-store', 'data'),
     [Input('quad-plot', 'selectedData'),
      Input('clear-selection', 'n_clicks'),
+     Input('import-inf-btn', 'n_clicks'),
      Input({'type': 'remove-btn', 'index': ALL}, 'n_clicks')],
     [State('selection-store', 'data'), State('master-grid', 'clickData')],
     prevent_initial_call=True
 )
-def handle_selection_state(sel_data, clear_n, remove_n, current_store, grid_click):
+def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store, grid_click):
     trigger = ctx.triggered_id
 
-    # 1. Clear All
+    # 1. Handle Clear All
     if trigger == 'clear-selection':
         return []
 
-    # 2. Remove Specific Item (Pattern Matching)
+    # 2. Handle Individual Removal
     if isinstance(trigger, dict) and trigger.get('type') == 'remove-btn':
         return [item for i, item in enumerate(current_store) if i != trigger.get('index')]
 
-    # 3. Add New Selections from Graph
-    if sel_data and 'points' in sel_data:
-        tid = grid_click['points'][0]['text'] if grid_click else "N/A"
-        new_store = list(current_store)
+    # Ensure we know which tile we are working with
+    active_tid = grid_click['points'][0]['text'] if grid_click else None
+    if not active_tid:
+        return current_store
 
-        for p in sel_data['points']:
-            overlap = UIConstants.SELECTION_MAP.get(p.get('curveNumber'))
-            if not overlap:
-                continue
+    new_store = list(current_store)
 
-            entry = {'tid': tid, 'z': p['x'], 'overlap': overlap}
+    # 3. Import of INF offsets
+    if trigger == 'import-inf-btn':
+        inf_failures = service.processor.find_inf_offsets_for_tile(str(active_tid))
+        for err in inf_failures:
+            entry = {
+                'tid': active_tid,
+                'z': err['z'],
+                'overlap': err['overlap'],
+                'type': 'INF_ERROR'
+            }
             if entry not in new_store:
                 new_store.append(entry)
+        return new_store
 
+    # 4. Handle Graphical Selection (Lasso/Box/Click)
+    if trigger == 'quad-plot' and sel_data and 'points' in sel_data:
+        for p in sel_data['points']:
+            if 'customdata' not in p or not p['customdata']:
+                continue
+
+            overlap, entry_type = p['customdata']
+            entry = {
+                'tid': active_tid,
+                'z': p['x'],
+                'overlap': overlap,
+                'type': entry_type
+            }
+
+            if entry not in new_store:
+                new_store.append(entry)
         return new_store
 
     return no_update
@@ -57,100 +80,6 @@ def sync_selection_ui(data):
         return html.Div("No vectors selected.", className="text-muted small italic p-2")
     return [selection_card(i, item) for i, item in enumerate(data)]
 
-
-# @callback(
-#     Output('quad-plot', 'figure'),
-#     [Input('master-grid', 'clickData'),
-#      Input('selection-store', 'data'),
-#      Input('theme-switch', 'value')]
-# )
-# def render_main_visuals_(grid_click, selection_store, dark_mode):
-#     """Renders the 4-panel trace view with current selections highlighted."""
-#     raw_tid = grid_click['points'][0]['text'] if grid_click else None
-#     if not raw_tid:
-#         return go.Figure()
-#
-#     trace_data = service.get_trace(str(raw_tid))
-#     if not trace_data or trace_data.shift_vectors is None:
-#         return go.Figure()
-#
-#     sec_nums = trace_data.section_numbers
-#     shifts = trace_data.shift_vectors
-#
-#     fig = make_subplots(
-#         rows=2, cols=2, shared_xaxes=True, vertical_spacing=0.08,
-#         subplot_titles=("H-Overlap: Δx", "V-Overlap: Δx", "H-Overlap: Δy", "V-Overlap: Δy")
-#     )
-#
-#     # Standardized trace configurations (Row, Col, Index in shift_vectors, Label)
-#     configs = [
-#         (1, 1, 0, "H-dx"), (2, 1, 1, "H-dy"),
-#         (1, 2, 2, "V-dx"), (2, 2, 3, "V-dy")
-#     ]
-#
-#     for r, c, idx, label in configs:
-#         fig.add_trace(go.Scatter(
-#             x=sec_nums, y=shifts[idx, :],
-#             mode='lines+markers', name=label,
-#             marker=dict(size=4, color=UIConstants.TRACE_COLOR),
-#             line=dict(width=1), hoverinfo='x+y'
-#         ), row=r, col=c)
-#
-#     # Dynamic Highlights for the selected Tile
-#     current_tid_selections = [s for s in selection_store if str(s['tid']) == str(raw_tid)]
-#     for pt in current_tid_selections:
-#         try:
-#             z_val = int(pt['z'])
-#             data_idx = list(sec_nums).index(z_val)
-#             is_h = (pt['overlap'] == OverlapType.HORIZONTAL)
-#
-#             col, idx_x, idx_y = (1, 0, 1) if is_h else (2, 2, 3)
-#             marker_style = dict(
-#                 size=12, color=UIConstants.HIGHLIGHT_COLOR,
-#                 symbol='circle-open', line=dict(width=2)
-#             )
-#
-#             # Highlight on both X and Y drift plots for that overlap
-#             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_x, data_idx]],
-#                                      mode='markers', marker=marker_style, hoverinfo='skip'),
-#                           row=1, col=col)
-#             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_y, data_idx]],
-#                                      mode='markers', marker=marker_style, hoverinfo='skip'),
-#                           row=2, col=col)
-#         except (ValueError, IndexError):
-#             continue
-#
-#     # Determine theme
-#     is_dark = len(dark_mode) > 0
-#     theme = "plotly_dark" if is_dark else "plotly_white"
-#
-#     fig.update_layout(
-#         title={
-#             'text': "Trace Explorer",
-#             'y': 0.98,
-#             'x': 0.02,
-#             'xanchor': 'left',
-#             'yanchor': 'top',
-#             'font': {'size': 14, 'color': 'gray'}
-#         },
-#         template=theme,
-#         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-#         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-#         autosize=True,
-#         hovermode='x unified',
-#         modebar=dict(
-#             orientation='h',
-#             bgcolor='rgba(0,0,0,0)',
-#             color='#7f7f7f',
-#             activecolor='#1f77b4',
-#         ),
-#         margin=dict(l=40, r=10, t=50, b=30),
-#         showlegend=False,
-#         uirevision=str(raw_tid)
-#     )
-#
-#     return fig
-#
 
 @callback(
     Output('quad-plot', 'figure'),
@@ -169,19 +98,17 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
         return go.Figure()
 
     sec_nums = trace_data.section_numbers
-    shifts = trace_data.shift_vectors  # Shape: (4, num_sections)
+    shifts = trace_data.shift_vectors
 
     # 2. Determine Column-Specific Auto-Zoom Ranges
     def get_range_for_indices(indices):
         sub_shifts = shifts[indices, :]
-        # Check if there is at least one non-NaN value in this subset
         mask = ~np.isnan(sub_shifts).all(axis=0)
         if np.any(mask):
             valid_idx = np.where(mask)[0]
             return [int(sec_nums[valid_idx[0]]) - 2, int(sec_nums[valid_idx[-1]]) + 2]
         return [int(min(sec_nums)), int(max(sec_nums))]
 
-    # H-Overlap uses indices 0, 1 | V-Overlap uses indices 2, 3
     range_h = get_range_for_indices([0, 1])
     range_v = get_range_for_indices([2, 3])
 
@@ -193,74 +120,109 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
         subplot_titles=("H-Overlap: Δx", "V-Overlap: Δx", "H-Overlap: Δy", "V-Overlap: Δy")
     )
 
-    # Standardized trace configurations
     configs = [
         (1, 1, 0, "H-dx"), (2, 1, 1, "H-dy"),
         (1, 2, 2, "V-dx"), (2, 2, 3, "V-dy")
     ]
 
+    def get_inf_y_positions(data_row):
+        finite_data = data_row[np.isfinite(data_row)]
+        return np.max(finite_data) if len(finite_data) > 0 else 0
+
+    # Pull pre-indexed Inf offsets from the Registry
+    inf_failures = service.processor.find_inf_offsets_for_tile(str(raw_tid))
+
+    # --- SECTION 3: Main Data Plotting (Refactored) ---
     for r, c, idx, label in configs:
+        # Determine overlap enum for this specific subplot config
+        ov_type = OverlapType.HORIZONTAL if c == 1 else OverlapType.VERTICAL
+
+        # We store [OverlapType, EntryType] in each point
+        c_data = [[ov_type, "MANUAL"]] * len(sec_nums)
+
         fig.add_trace(go.Scatter(
             x=sec_nums, y=shifts[idx, :],
-            mode='markers+lines', name=label,
+            mode='lines+markers', name=label,
+            customdata=c_data,  # <--- Metadata attached here
             marker=dict(size=4, color=UIConstants.TRACE_COLOR),
             line=dict(width=1), hoverinfo='x+y'
         ), row=r, col=c)
 
-    # 4. Dynamic Highlights
+    # --- SECTION 4: Integrated INF Failures (Grouped & CustomData) ---
+    for ov_type, col in [(OverlapType.HORIZONTAL, 1), (OverlapType.VERTICAL, 2)]:
+        axis_errors = [e for e in inf_failures if e['overlap'] == ov_type]
+        if not axis_errors: continue
+
+        inf_x = [e['z'] for e in axis_errors]
+        # Metadata for INF points
+        inf_c_data = [[ov_type, "INF_ERROR"]] * len(inf_x)
+
+        for row_pos, comp_idx in ([(1, 0), (2, 1)] if col == 1 else [(1, 2), (2, 3)]):
+            y_ceil = get_inf_y_positions(shifts[comp_idx, :])
+
+            fig.add_trace(go.Scatter(
+                x=inf_x, y=[y_ceil] * len(inf_x),
+                mode='markers',
+                marker=dict(color='red', symbol='x', size=10),
+                name=f"INF-{ov_type}",
+                customdata=inf_c_data,  # <--- Metadata attached here
+                hovertext=f"Solver Fail: {ov_type}"
+            ), row=row_pos, col=col)
+
+    # 5. Dynamic Highlights (Manual + Failures in Basket)
     current_tid_selections = [s for s in selection_store if str(s['tid']) == str(raw_tid)]
     for pt in current_tid_selections:
         try:
             z_val = int(pt['z'])
+            if z_val not in sec_nums:
+                continue
+
+            # Map Z-value to matrix index
             data_idx = list(sec_nums).index(z_val)
-            is_h = (pt['overlap'] == OverlapType.HORIZONTAL)
+
+            # Robust Enum Check
+            pt_ov = pt.get('overlap')
+            is_h = (pt_ov == OverlapType.HORIZONTAL or str(pt_ov).endswith('HORIZONTAL'))
+
             col = 1 if is_h else 2
             idx_x, idx_y = (0, 1) if is_h else (2, 3)
 
+            # Style: Orange for INF failures, Cyan/Theme for manual
+            is_inf = pt.get('type') == 'INF_ERROR'
+            h_color = "#FF851B" if is_inf else UIConstants.HIGHLIGHT_COLOR
+
             marker_style = dict(
-                size=12, color=UIConstants.HIGHLIGHT_COLOR,
+                size=14, color=h_color,
                 symbol='circle-open', line=dict(width=2)
             )
 
-            fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_x, data_idx]],
-                                     mode='markers', marker=marker_style, hoverinfo='skip'),
-                          row=1, col=col)
-            fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_y, data_idx]],
-                                     mode='markers', marker=marker_style, hoverinfo='skip'),
-                          row=2, col=col)
-        except (ValueError, IndexError):
+            # Define Row 1 (dx) and Row 2 (dy) plotting logic
+            for row_num, shift_idx in [(1, idx_x), (2, idx_y)]:
+                y_val = shifts[shift_idx, data_idx]
+
+                # If we are highlighting an INF point, don't let the circle float to infinity
+                if np.isinf(y_val):
+                    y_val = get_inf_y_positions(shifts[shift_idx, :])
+
+                fig.add_trace(go.Scatter(
+                    x=[z_val], y=[y_val],
+                    mode='markers', marker=marker_style, hoverinfo='skip'
+                ), row=row_num, col=col)
+
+        except (ValueError, IndexError, KeyError):
             continue
 
-    # 5. Final Layout
+    # 6. Final Layout
     is_dark = len(dark_mode) > 0
-    theme = "plotly_dark" if is_dark else "plotly_white"
-
     fig.update_layout(
-        title={
-            'text': f"Trace Explorer: Tile {raw_tid}",
-            'y': 0.98, 'x': 0.02,
-            'xanchor': 'left', 'yanchor': 'top',
-            'font': {'size': 14, 'color': 'gray'}
-        },
-        template=theme,
+        template="plotly_dark" if is_dark else "plotly_white",
         paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
         hovermode='x unified',
-
-        # COLUMN 1 (Horizontal Overlaps) - xaxis and xaxis3
         xaxis=dict(range=range_h, autorange=False),
         xaxis3=dict(range=range_h, autorange=False),
-
-        # COLUMN 2 (Vertical Overlaps) - xaxis2 and xaxis4
         xaxis2=dict(range=range_v, autorange=False),
         xaxis4=dict(range=range_v, autorange=False),
-
-        modebar=dict(
-            orientation='h',
-            bgcolor='rgba(0,0,0,0)',
-            color='#7f7f7f',
-            activecolor='#1f77b4',
-        ),
         margin=dict(l=40, r=10, t=50, b=30),
         showlegend=False,
         uirevision=str(raw_tid)
@@ -268,18 +230,25 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
 
     return fig
 
+
 @callback(
     Output('master-grid', 'figure'),
-    Input('master-grid', 'clickData'),
-    prevent_initial_call=False  # Run on startup to draw the initial grid
+    [Input('master-grid', 'clickData'),
+     Input('selection-store', 'data')]
 )
-def update_grid_highlight(click_data):
-    # Extract TID from click
+def update_grid_highlight(click_data, basket_data):
+    # Identify the currently clicked tile
     active_tid = click_data['points'][0]['text'] if click_data else None
 
-    # Generate the grid with the highlight
-    return create_grid_navigator(service.tile_ids, active_tid=active_tid)
+    # Get the TIDs with Inf offsets
+    registry = getattr(service.processor, '_inf_registry', {})
+    dirty_tids = set(registry.keys())
 
+    return create_grid_navigator(
+        service.tile_ids,
+        active_tid=active_tid,
+        dirty_tids=dirty_tids
+    )
 
 @callback(
     Output('registration-log', 'children', allow_duplicate=True),

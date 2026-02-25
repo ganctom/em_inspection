@@ -92,6 +92,8 @@ def create_layout():
                     # D. Expanded Logger
                     html.Div([
                         html.H6("Process Log", className="mt-3 text-uppercase text-muted small"),
+                        dbc.Button("📥 Import Inf offsets", id='import-inf-btn', color="danger", size="sm",
+                                   className="ms-auto"),
                         html.Div(id='registration-log',
                                  className="p-2 border rounded bg-dark text-success font-monospace flex-grow-1",
                                  style={'fontSize': '10px', 'overflowY': 'auto', 'marginBottom': '10px'})

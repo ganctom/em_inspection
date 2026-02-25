@@ -55,18 +55,27 @@ class DataService:
         tid_a_int = int(tid_a)
         ov_type = overlap_type.upper()
 
-        context = self._resolve_overlap_context(z_str, tid_a_int, ov_type)
-        if not context:
+        res = self._resolve_overlap_context(z_str, tid_a_int, ov_type)
+        if not res:
             return None
-        y, x, tid_b, axis = context
+        y, x, tid_b, axis = res
 
+        # 2. Early exit for section initialization
         section = self._get_initialized_section(z)
         if not section:
             return None
 
+        # 3. Handle Vector Logic
         raw_vec = self.processor.get_shift_vec(z, axis, y, x)
-        shift_vec: Vector = tuple(np.round(raw_vec).astype(int))
-        print(f'raw_vec, z, axis, y, x, shift_vec: {raw_vec, z, axis, y, x, shift_vec}')
+
+        # Check for INF or NaN to ensure plotting safety
+        if not np.isfinite(raw_vec).all():
+            logging.info(f"Invalid vector (Inf/NaN) at Z={z}, T={tid_a_int}. Defaulting to (0,0).")
+            shift_vec = (0, 0)
+        else:
+            shift_vec = tuple(map(int, np.round(raw_vec)))
+
+        logging.debug(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
 
         return OverlapContext(
             section=section,
@@ -258,6 +267,11 @@ class DataService:
 
         return fig
 
+
+    def find_inf_offsets_for_tile(self, tile_id: str):
+        """Pass-through to the processor logic."""
+        # Assuming 'self.inspection' is where your CoarseOffsetProcessor lives
+        return self.processor.find_inf_offsets_for_tile(tile_id)
 
 
 # Initialize single instance

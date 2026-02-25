@@ -8,6 +8,7 @@ import numpy.typing as npt
 
 import inspection_utils_refactor as utils
 import experiment_configs as cfg
+from interactive_inspector.constants import OverlapType
 
 TileXY = tuple[int, int]
 
@@ -58,6 +59,7 @@ class CoarseOffsetProcessor:
         self.co_traces: dict[str, Optional[CoarseOffsetTrace]]
         self._coord_cache: Dict[str, SectionIndex] = {}
         self._all_unique_ids: Optional[set[int]] = None
+        self._inf_registry: Dict[str, List[Dict[str, Any]]] = {}
 
     def get_section_lookup(self, sec_key: str):
         """Public accessor for the section lookup table."""
@@ -87,18 +89,51 @@ class CoarseOffsetProcessor:
         return self.cxyz_obj[z_key][:, :, y, x].ravel()
 
     def load_all_offsets_and_tile_id_maps_from_npz(self):
-        """Standardized loading method. Loads data into mutable memory."""
+        """Modified to index errors immediately upon loading."""
         if not self.path_cxyz.exists() or not self.path_id_maps.exists():
-            raise FileNotFoundError("Offset or ID map files missing in _inspect folder.")
+            raise FileNotFoundError("Files missing.")
 
-        # Load NpzFile objects
         with np.load(self.path_cxyz, allow_pickle=False) as data:
             self.cxyz_obj = {key: data[key].copy() for key in data.files}
 
         with np.load(self.path_id_maps, allow_pickle=False) as data:
             self.tile_id_maps_obj = {key: data[key].copy() for key in data.files}
 
-        logging.info("CoarseOffsetProcessor: Data loaded into mutable memory.")
+        # Trigger the global scan once
+        self._build_inf_registry()
+        logging.info("CoarseOffsetProcessor: Data loaded and INF values indexed.")
+
+    def _build_inf_registry(self):
+        """One-time scan of all offsets to find Inf values."""
+        self._inf_registry = {}
+        for z_str, offsets in self.cxyz_obj.items():
+            for axis in [0, 1]:
+                inf_mask = np.isinf(offsets[axis, ...]).any(axis=0)
+                if not np.any(inf_mask):
+                    continue
+
+                y_coords, x_coords = np.where(inf_mask)
+                tid_map = self.tile_id_maps_obj[z_str]
+
+                for y, x in zip(y_coords, x_coords):
+                    tid = str(int(tid_map[y, x]))
+                    if tid == "-1": continue  # Background
+
+                    ov_type = OverlapType.HORIZONTAL if axis == 0 else OverlapType.VERTICAL
+
+                    if tid not in self._inf_registry:
+                        self._inf_registry[tid] = []
+
+                    self._inf_registry[tid].append({
+                        'z': int(z_str),
+                        'overlap': ov_type,
+                        'type': 'INF_ERROR'
+                    })
+
+
+    def find_inf_offsets_for_tile(self, tile_id: str) -> List[Dict]:
+        """Now O(1) - just retrieves from the pre-computed registry."""
+        return [dict(item, tid=tile_id) for item in self._inf_registry.get(str(tile_id), [])]
 
 
     def save_offsets_to_disk(self):
