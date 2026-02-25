@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import logging
+from functools import lru_cache
 from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
@@ -48,7 +49,7 @@ class DataService:
     def get_trace(self, tid: str):
         return self.processor.get_full_trace(tid)
 
-
+    @lru_cache(maxsize=64)
     def _get_overlap_context(self, tid_a: str, z: int, overlap_type: str) -> Optional[OverlapContext]:
         z_str = str(z)
         tid_a_int = int(tid_a)
@@ -65,6 +66,7 @@ class DataService:
 
         raw_vec = self.processor.get_shift_vec(z, axis, y, x)
         shift_vec: Vector = tuple(np.round(raw_vec).astype(int))
+        print(f'raw_vec, z, axis, y, x, shift_vec: {raw_vec, z, axis, y, x, shift_vec}')
 
         return OverlapContext(
             section=section,

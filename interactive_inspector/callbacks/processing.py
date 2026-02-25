@@ -131,6 +131,11 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
         return log_msg, fig, "Refinement Applied"
 
     # --- CASE C: RE-PLOT ---
-    fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-    status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
-    return no_update, fig, status
+    if active_idx is not None:
+        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
+        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
+        return no_update, fig, status
+
+    return no_update, no_update, no_update
+
+
