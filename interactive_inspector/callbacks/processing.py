@@ -166,3 +166,26 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
     return no_update, no_update, no_update
 
 
+@callback(
+    Output('selection-list-container', 'aria-busy'),
+    Input('selection-store', 'data'),
+    prevent_initial_call=True
+)
+def handle_background_preload(selection_data):
+    if selection_data and len(selection_data) > 0:
+        service.preload_source_images(selection_data)
+        return "true"
+    return "false"
+
+# --- CALLBACK: CLEAR BASKET & CACHE ---
+@callback(
+    [Output('selection-store', 'data', allow_duplicate=True),
+     Output('active-item-index', 'data', allow_duplicate=True)],
+    Input('clear-selection', 'n_clicks'),
+    prevent_initial_call=True
+)
+def handle_clear_basket(n):
+    if n:
+        service.clear_cache() # Clear RAM
+        return [], None
+    return no_update, no_update

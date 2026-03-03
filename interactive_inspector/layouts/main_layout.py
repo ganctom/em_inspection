@@ -49,7 +49,7 @@ def create_layout():
                                 dbc.Button("Store offsets", id='export-sections-btn', color="info", size="sm",
                                            className="me-1"),
                                 dbc.Button("Store offset container", id='save-cxyz-btn', color="warning", size="sm", className="me-1"),
-                                dbc.Button("Clear basket", id='clear-selection', color="link", size="sm")
+                                dbc.Button("Clear basket", id='clear-selection', color="link", size="sm"),
                             ])
                         ], className="d-flex justify-content-between align-items-center mb-2"),
                         html.Div(

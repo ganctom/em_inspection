@@ -27,3 +27,6 @@ class UIConstants:
         0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
         2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
     }
+
+class DataConstants:
+    CACHED_BASKET_ITEMS = 15

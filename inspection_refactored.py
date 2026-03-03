@@ -14,7 +14,7 @@ from tqdm import tqdm
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
 
-from Section_refactored import Section, fine_align_section, Vector
+from Section_refactored import Section, fine_align_section, Vector, cached_read_image
 from coarse_offset_processor import CoarseOffsetProcessor
 
 UniPath = Union[str, Path]

@@ -4,11 +4,16 @@ from functools import lru_cache
 from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
+import gc
+import threading
 
-from inspection_refactored import Inspection, Section, _prepare_sections, Vector, utils, store_cxyz_to_offset_files
+from inspection_refactored import (
+    Inspection, Section, _prepare_sections, Vector, utils, store_cxyz_to_offset_files, cached_read_image)
+
 from Tile_refactored import Tile
 import experiment_configs as cfg
 
+from interactive_inspector.constants import DataConstants as DC
 import logging
 
 ### Set up logging
@@ -44,6 +49,8 @@ class DataService:
         self.processor = self.inspection.co_processor
         self.tile_ids = self.processor.get_largest_tile_id_map()
         self._section_cache = {}  # {sec_path: SectionObject}
+        self._lock = threading.Lock()
+        self._worker = None
 
 
     def get_trace(self, tid: str):
@@ -162,18 +169,19 @@ class DataService:
             logging.warning(f"Section {z} path not found in configuration.")
             return None
 
-        if sec_path not in self._section_cache:
-            section = Section(sec_path)
-            # Data Injection from Processor Cache
-            z_str = str(z)
-            if z_str in self.processor.tile_id_maps_obj:
-                section.tile_id_map = self.processor.tile_id_maps_obj[z_str]
-                section._map_loaded = True
-            else:
-                section.read_tile_id_map()
+        with self._lock:
+            if sec_path not in self._section_cache:
+                section = Section(sec_path)
+                # Data Injection from Processor Cache
+                z_str = str(z)
+                if z_str in self.processor.tile_id_maps_obj:
+                    section.tile_id_map = self.processor.tile_id_maps_obj[z_str]
+                    section._map_loaded = True
+                else:
+                    section.read_tile_id_map()
 
-            self._section_cache[sec_path] = section
-        return self._section_cache[sec_path]
+                self._section_cache[sec_path] = section
+            return self._section_cache[sec_path]
 
     def compute_coarse_shift(
             self,
@@ -282,6 +290,60 @@ class DataService:
         """Pass-through to the processor logic."""
         # Assuming 'self.inspection' is where your CoarseOffsetProcessor lives
         return self.processor.find_inf_offsets_for_tile(tile_id)
+
+
+    def preload_source_images(self, selection_data: list):
+        """
+        Public method to be called by Dash.
+        Starts a background thread to fetch tile image-data.
+        """
+        if not selection_data:
+            return
+
+        with self._lock:
+            # Avoid overlapping thread execution
+            if self._worker and self._worker.is_alive():
+                return
+
+            targets = selection_data[:DC.CACHED_BASKET_ITEMS]
+            self._worker = threading.Thread(
+                target=self._preload_loop,
+                args=(targets,),
+                daemon=True
+            )
+            self._worker.start()
+
+
+    def _preload_loop(self, items):
+        """Background task for cluster I/O."""
+        for item in items:
+            try:
+                ctx = self._get_overlap_context(item['tid'], item['z'], item['overlap'])
+                if not ctx:
+                    continue
+
+                # Ensure section dictionary is populated
+                sec = ctx.section
+                if sec.tile_dicts is None:
+                    sec.tile_dicts = utils.get_tile_dicts(sec.path)
+
+                # Trigger reads into LRU cache
+                for tid in (ctx.tid_a, ctx.tid_b):
+                    path = sec.tile_dicts.get(tid)
+                    if path:
+                        cached_read_image(str(path))
+
+            except Exception as e:
+                logging.debug(f"Preload skipped {item.get('tid')}: {e}")
+
+
+    def clear_cache(self):
+        """Reset all caches and force garbage collection."""
+        with self._lock:
+            self._section_cache.clear()
+            cached_read_image.cache_clear()
+            gc.collect()
+            logging.debug("Caches cleared and memory freed.")
 
 
 # Initialize single instance

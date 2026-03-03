@@ -22,6 +22,7 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
 
     # 1. Handle Clear All
     if trigger == 'clear-selection':
+        service.clear_cache()
         return []
 
     # 2. Handle Individual Removal
