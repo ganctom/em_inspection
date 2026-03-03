@@ -3,7 +3,7 @@ from dash import Input, Output, State, callback, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from interactive_inspector.constants import UIConstants, OverlapType
+from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
 from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
 
@@ -232,24 +232,7 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     return fig
 
 
-@callback(
-    Output('master-grid', 'figure'),
-    [Input('master-grid', 'clickData'),
-     Input('selection-store', 'data')]
-)
-def update_grid_highlight(click_data, basket_data):
-    # Identify the currently clicked tile
-    active_tid = click_data['points'][0]['text'] if click_data else None
 
-    # Get the TIDs with Inf offsets
-    registry = getattr(service.processor, '_inf_registry', {})
-    dirty_tids = set(registry.keys())
-
-    return create_grid_navigator(
-        service.tile_ids,
-        active_tid=active_tid,
-        dirty_tids=dirty_tids
-    )
 
 @callback(
     Output('registration-log', 'children', allow_duplicate=True),
@@ -299,3 +282,94 @@ def handle_export_sections(n_clicks):
             html.P("❌ Export Failed", className="text-danger mb-0 fw-bold"),
             html.Small(str(e), className="text-white small")
         ])
+
+
+@callback(
+    [Output('section-filter-slider', 'value'),
+     Output('master-grid', 'figure'),
+     Output('manual-z-input', 'value')],
+    [Input('section-filter-slider', 'value'),
+     Input('master-grid', 'clickData'),
+     Input('manual-z-input', 'value')],
+    [State('selection-store', 'data')],
+    prevent_initial_call=True
+)
+def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
+    trigger = ctx.triggered_id
+
+    # 1. Setup bounds
+    tile_maps = getattr(service.processor, 'tile_id_maps_obj', {})
+    z_keys = sorted([int(z) for z in tile_maps.keys()])
+    if not z_keys:
+        return no_update, no_update, no_update
+
+    z_min, z_max = min(z_keys), max(z_keys)
+
+    # 2. Resolve Current Z logic
+    if trigger == 'manual-z-input' and manual_z is not None:
+        # User typed a number. Clamp it to valid range.
+        current_z = max(z_min, min(z_max, int(manual_z)))
+        # Map logical Z back to the slider's visual position
+        # (Assuming visual max at top = logical min)
+        slider_val = (z_max + z_min) - current_z
+
+    elif trigger == 'section-filter-slider' and slider_val is not None:
+        # Slider moved. Map visual position to logical Z.
+        current_z = (z_max + z_min) - slider_val
+
+    else:
+        # Fallback/Initial state or clickData trigger
+        # Calculate current_z from the existing slider_val
+        current_z = (z_max + z_min) - slider_val if slider_val is not None else z_min
+
+    # 3. Generate the Grid Figure
+    active_tid = click_data['points'][0]['text'] if click_data else None
+    registry = getattr(service.processor, '_inf_registry', {})
+    dirty_tids = set(registry.keys())
+
+    z_str = str(int(current_z))
+    z_map = tile_maps.get(z_str)
+    available_tids = set(z_map[z_map != -1].flatten().astype(int)) if z_map is not None else set()
+
+    fig = create_grid_navigator(
+        service.tile_ids,
+        active_tid=active_tid,
+        dirty_tids=dirty_tids,
+        available_tids=available_tids
+    )
+
+    # 4. Sync the UI
+    # We return the new slider_val and the confirmed current_z to the input box
+    return slider_val, fig, int(current_z)
+
+
+@callback(
+    Output('section-filter-slider', 'value', allow_duplicate=True),
+    Input('keyboard-listener', 'n_events'),
+    State('keyboard-listener', 'event'),
+    State('section-filter-slider', 'value'),
+    prevent_initial_call=True
+)
+def handle_keyboard_nav(n_events, event, current_slider_val):
+    if not event or current_slider_val is None:
+        return no_update
+
+    tile_maps = getattr(service.processor, 'tile_id_maps_obj', {})
+    z_keys = [int(z) for z in tile_maps.keys()]
+    if not z_keys:
+        return no_update
+
+    # Normalize key to lowercase to handle 'W' and 'w'
+    key = event.get("key", "").lower()
+
+    # Logic:
+    # 'w' -> Move slider handle UP (Increase slice number)
+    # 's' -> Move slider handle DOWN (Decrease slice number)
+    if key == KeyboardShortcuts.KEY_GRID_NAV_SLIDER_PLUS:
+        new_val = min(current_slider_val + 1, max(z_keys))
+        return new_val
+    elif key == KeyboardShortcuts.KEY_GRID_NAV_SLIDER_MINUS:
+        new_val = max(current_slider_val - 1, min(z_keys))
+        return new_val
+
+    return no_update

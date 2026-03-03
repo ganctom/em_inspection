@@ -53,6 +53,7 @@ class DataService:
         self._worker = None
 
 
+
     def get_trace(self, tid: str):
         return self.processor.get_full_trace(tid)
 
@@ -345,6 +346,28 @@ class DataService:
             gc.collect()
             logging.debug("Caches cleared and memory freed.")
 
+
+    def get_slider_metadata(self):
+        tile_maps = getattr(self.processor, 'tile_id_maps_obj', {})
+        z_values = [int(z) for z in tile_maps.keys()] if tile_maps else []
+
+        z_min = min(z_values) if z_values else 0
+        z_max = max(z_values) if z_values else 100
+
+        step_size = max(1, (z_max - z_min) // 5)
+        slider_marks = {
+            int(v): str(int((z_max + z_min) - v))
+            for v in range(z_min, z_max + 1, step_size)
+        }
+        slider_marks[z_max] = str(z_min)
+        slider_marks[z_min] = str(z_max)
+
+        return {
+            "min": z_min,
+            "max": z_max,
+            "marks": slider_marks,
+            "initial_value": z_max
+        }
 
 # Initialize single instance
 service = DataService()

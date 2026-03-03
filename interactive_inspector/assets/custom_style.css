@@ -1,0 +1,32 @@
+/* Flips the slider handle back so it doesn't look inverted */
+.custom-vertical-slider .rc-slider-handle {
+    transform: scaleY(-1) !important;
+}
+
+/* 1. Target the handle specifically */
+.rc-slider-vertical .rc-slider-handle {
+    width: 12px !important;
+    height: 12px !important;
+    /* margin-left is relative to the track.
+       If track is 4px, -4px or -5px usually centers a 12px handle */
+    margin-left: -4px !important;
+    margin-bottom: -6px !important; /* Helps with vertical centering */
+    border: 2px solid white !important;
+    background-color: #6f42c1 !important;
+    box-shadow: none !important;
+}
+
+/* 2. Target the 'active' state to prevent it growing when clicked */
+.rc-slider-vertical .rc-slider-handle:active,
+.rc-slider-vertical .rc-slider-handle:focus,
+.rc-slider-vertical .rc-slider-handle-click-focused {
+    width: 12px !important;
+    height: 12px !important;
+    box-shadow: 0 0 5px rgba(111, 66, 193, 0.5) !important;
+}
+
+/* 3. Make the rail (track) a bit thinner to look proportional */
+.rc-slider-vertical .rc-slider-rail {
+    width: 4px !important;
+    background-color: #e9ecef !important;
+}
