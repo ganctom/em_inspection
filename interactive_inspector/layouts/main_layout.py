@@ -137,6 +137,12 @@ def create_layout():
                     dbc.Row([
                         dbc.Col([
                             dbc.ButtonGroup([
+                                dbc.Button("|<", id="first-item", size="sm", color="info", outline=True),
+                                dbc.Button("«", id="prev-item", size="sm", color="info", outline=True),
+                                dbc.Button("»", id="next-item", size="sm", color="info", outline=True),
+                                dbc.Button(">|", id="last-item", size="sm", color="info", outline=True),
+                            ], className="me-2"),
+                            dbc.ButtonGroup([
                                 dbc.Button("←", id="nudge-left", size="sm", color="secondary", outline=True),
                                 dbc.Button("↑", id="nudge-up", size="sm", color="secondary", outline=True),
                                 dbc.Button("↓", id="nudge-down", size="sm", color="secondary", outline=True),

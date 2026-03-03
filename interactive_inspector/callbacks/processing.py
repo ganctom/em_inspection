@@ -3,6 +3,8 @@ from interactive_inspector.data_service import service
 
 
 # --- CALLBACK 1: MANAGE THE NUDGE STATE ---
+# processing.py - Update handle_nudging callback
+
 @callback(
     [Output('manual-nudge-store', 'data'),
      Output('active-item-index', 'data')],
@@ -10,28 +12,55 @@ from interactive_inspector.data_service import service
      Input('nudge-right', 'n_clicks'),
      Input('nudge-up', 'n_clicks'),
      Input('nudge-down', 'n_clicks'),
+     Input('prev-item', 'n_clicks'),
+     Input('next-item', 'n_clicks'),
+     Input('first-item', 'n_clicks'),  # <--- Added
+     Input('last-item', 'n_clicks'),  # <--- Added
      Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
-     Input('keyboard-listener', 'n_events')],  # Trigger on the count, not just the key name
-    [State('keyboard-listener', 'event'),  # Get the actual key from State instead
+     Input('keyboard-listener', 'n_events')],
+    [State('keyboard-listener', 'event'),
      State('nudge-step', 'value'),
      State('manual-nudge-store', 'data'),
-     State('active-item-index', 'data')],
+     State('active-item-index', 'data'),
+     State('selection-store', 'data')],
     prevent_initial_call=True
 )
-def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nudge, current_active):
+def handle_nudging(l, r, u, d, prev_n, next_n, first_n, last_n, ov_clicks, n_events,
+                   key_event, step, current_nudge, current_active, selection_store):
     trig = ctx.triggered_id
 
-    # 1. Handle Selection Reset
+    # 1. Handle External Selection
     if isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn':
         return {'dx': 0, 'dy': 0}, trig.get('index')
 
+    # 2. Handle Basket Navigation (First/Prev/Next/Last)
+    # We group all navigation buttons here
+    nav_buttons = ['first-item', 'prev-item', 'next-item', 'last-item']
+    if trig in nav_buttons:
+        if not selection_store:
+            return {'dx': 0, 'dy': 0}, None
+
+        list_len = len(selection_store)
+        idx = current_active if current_active is not None else 0
+
+        if trig == 'first-item':
+            idx = 0
+        elif trig == 'last-item':
+            idx = list_len - 1
+        elif trig == 'prev-item':
+            idx = (idx - 1) % list_len
+        elif trig == 'next-item':
+            idx = (idx + 1) % list_len
+
+        return {'dx': 0, 'dy': 0}, idx
+
+    # 3. Handle Nudging (Keyboard or Buttons)
     if current_active is None:
         return no_update, no_update
 
     dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
     step = step if step else 10
 
-    # 2. Logic for Keyboard (triggered by n_events)
     if trig == 'keyboard-listener' and key_event:
         key = key_event.get('key')
         if key == "ArrowLeft":
@@ -42,8 +71,6 @@ def handle_nudging(l, r, u, d, ov_clicks, n_events, key_event, step, current_nud
             dy -= step
         elif key == "ArrowDown":
             dy += step
-
-    # 3. Logic for Buttons
     else:
         if trig == 'nudge-left':  dx -= step
         if trig == 'nudge-right': dx += step
