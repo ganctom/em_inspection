@@ -70,7 +70,7 @@ def get_experiment_configurations() -> Dict[str, ExpConfig]:
 
     registry.add(
         name="ROLI_F1",
-        proc_dir="/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-02",
+        proc_dir="/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01",
         grid_num=0,
         secs=[1250, 9000],
         shape=(30, 25),

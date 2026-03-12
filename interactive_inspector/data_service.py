@@ -1,6 +1,5 @@
 from dataclasses import dataclass
 import logging
-from functools import lru_cache
 from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
@@ -8,18 +7,19 @@ import gc
 import threading
 
 from inspection_refactored import (
-    Inspection, Section, _prepare_sections, Vector, utils, store_cxyz_to_offset_files, cached_read_image)
+    Inspection, Section, _prepare_sections, Vector, utils,
+    store_cxyz_to_offset_files, cached_read_image
+)
 
 from Tile_refactored import Tile
 import experiment_configs as cfg
-
 from interactive_inspector.constants import DataConstants as DC
-import logging
+
 
 ### Set up logging
 # logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.WARNING)
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -51,7 +51,6 @@ class DataService:
         self._section_cache = {}  # {sec_path: SectionObject}
         self._lock = threading.Lock()
         self._worker = None
-
 
 
     def get_trace(self, tid: str):

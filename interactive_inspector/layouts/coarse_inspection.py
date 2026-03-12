@@ -1,28 +1,17 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from interactive_inspector.data_service import service
-from interactive_inspector.layouts.components import create_grid_navigator
-from dash_extensions import EventListener
+from .components import create_grid_navigator
 
 
 def create_layout():
 
-    # --- 1. DATA PREP  ---
+    # --- DATA PREP  ---
     meta = service.get_slider_metadata()
 
     return dbc.Container([
-        # --- 2. GLOBAL COMPONENTS ---
-        EventListener(
-            id="keyboard-listener",
-            events=[{"event": "keydown", "props": ["key", "n_events"]}],
-            logging=False
-        ),
 
-        dcc.Store(id='selection-store', data=[]),
-        dcc.Store(id='active-item-index', data=None),
-        dcc.Store(id='manual-nudge-store', data={'dx': 0, 'dy': 0}),
-
-        # --- 3. MAIN UI STRUCTURE ---
+        # --- MAIN UI STRUCTURE ---
         dbc.Row([
 
             # A. SIDEBAR COLUMN (Width: 3)
@@ -76,7 +65,7 @@ def create_layout():
                                 dcc.Graph(
                                     id='master-grid',
                                     figure=create_grid_navigator(service.tile_ids),
-                                    config={'displayModeBar': False}
+                                    config={'displayModeBar': False,}
                                 ),
                             ], width=6),
                         ], className="g-0 align-items-center"),
@@ -144,7 +133,7 @@ def create_layout():
                                  style={'fontSize': '10px', 'overflowY': 'auto', 'minHeight': '100px'})
                     ], className="d-flex flex-column flex-grow-1 px-2 pb-3")
 
-                ], style={'height': '100vh', 'display': 'flex', 'flexDirection': 'column'})
+                ], style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
             ], width=3, className="border-end bg-light"),
 
             # B. MAIN DISPLAY COLUMN (Width: 9)
@@ -212,6 +201,6 @@ def create_layout():
                     className="border-top mt-auto",
                     style={'backgroundColor': 'black', 'height': '40vh', 'display': 'flex', 'flexDirection': 'column'})
 
-            ], width=9, style={'height': '100vh', 'display': 'flex', 'flexDirection': 'column'})
+            ], width=9, style={'height': '100%', 'display': 'flex', 'flexDirection': 'column'})
         ], className="g-0")
-    ], fluid=True, style={'height': '100vh', 'overflow': 'hidden'})
+    ], fluid=True, style={'height': '100%', 'overflow': 'hidden'})

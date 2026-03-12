@@ -1,14 +1,17 @@
+import logging
+
 import numpy as np
-from dash import Input, Output, State, callback, ctx, no_update, ALL, html
+from dash import Input, Output, State, ctx, no_update, ALL, html
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
-from interactive_inspector.data_service import service
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
+from interactive_inspector.data_service import service
+from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
+from app import app
 
 
-@callback(
+@app.callback(
     Output('selection-store', 'data'),
     [Input('quad-plot', 'selectedData'),
      Input('clear-selection', 'n_clicks'),
@@ -19,6 +22,7 @@ from interactive_inspector.layouts.components import selection_card, create_grid
 )
 def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store, grid_click):
     trigger = ctx.triggered_id
+    logging.info(f'navigation.py: handle_selection_state triggered')
 
     # 1. Handle Clear All
     if trigger == 'clear-selection':
@@ -71,24 +75,26 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
     return no_update
 
 
-@callback(
+@app.callback(
     Output('selection-list-container', 'children'),
     Input('selection-store', 'data')
 )
 def sync_selection_ui(data):
     """Updates the 'Basket' UI whenever the store changes."""
+    logging.info(f'navigation.py: sync-selection_ui triggered')
     if not data:
         return html.Div("No vectors selected.", className="text-muted small italic p-2")
     return [selection_card(i, item) for i, item in enumerate(data)]
 
 
-@callback(
+@app.callback(
     Output('quad-plot', 'figure'),
     [Input('master-grid', 'clickData'),
      Input('selection-store', 'data'),
      Input('theme-switch', 'value')]
 )
 def render_main_visuals(grid_click, selection_store, dark_mode):
+    logging.info(f'navigation.py: render_main_visuals triggered')
     # 1. Exit early if no tile selected
     raw_tid = grid_click['points'][0]['text'] if grid_click else None
     if not raw_tid:
@@ -234,7 +240,7 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
 
 
 
-@callback(
+@app.callback(
     Output('registration-log', 'children', allow_duplicate=True),
     Input('save-cxyz-btn', 'n_clicks'),
     prevent_initial_call=True
@@ -253,7 +259,7 @@ def handle_persist_to_disk(n_clicks):
 
 
 
-@callback(
+@app.callback(
     Output("manual-input-container", "style"),
     Input("guess-mode-select", "value")
 )
@@ -261,7 +267,7 @@ def toggle_manual_input(mode):
     return {"display": "block"} if mode == "manual" else {"display": "none"}
 
 
-@callback(
+@app.callback(
     Output('registration-log', 'children', allow_duplicate=True),
     Input('export-sections-btn', 'n_clicks'),
     prevent_initial_call=True
@@ -284,7 +290,7 @@ def handle_export_sections(n_clicks):
         ])
 
 
-@callback(
+@app.callback(
     [Output('section-filter-slider', 'value'),
      Output('master-grid', 'figure'),
      Output('manual-z-input', 'value')],
@@ -292,10 +298,17 @@ def handle_export_sections(n_clicks):
      Input('master-grid', 'clickData'),
      Input('manual-z-input', 'value')],
     [State('selection-store', 'data')],
-    prevent_initial_call=True
+    prevent_initial_call=False
 )
 def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     trigger = ctx.triggered_id
+    logging.debug(f"DEBUG: Grid navigator callback triggered by {ctx.triggered_id}")  # Check your terminal for this!
+
+    # 0. Handle the "Nothing happened yet" case
+    if not trigger:
+        # Just return the defaults so the grid actually draws on page load
+        # You can use your 'meta' defaults here
+        return slider_val, no_update, no_update
 
     # 1. Setup bounds
     tile_maps = getattr(service.processor, 'tile_id_maps_obj', {})
@@ -343,7 +356,7 @@ def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     return slider_val, fig, int(current_z)
 
 
-@callback(
+@app.callback(
     Output('section-filter-slider', 'value', allow_duplicate=True),
     Input('keyboard-listener', 'n_events'),
     State('keyboard-listener', 'event'),

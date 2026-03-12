@@ -1,11 +1,12 @@
-from dash import html, Input, Output, State, callback, ctx, no_update, ALL
+from dash import html, Input, Output, State, ctx, no_update, ALL
+from app import app
 from interactive_inspector.data_service import service
 
 
 # --- CALLBACK 1: MANAGE THE NUDGE STATE ---
 # processing.py - Update handle_nudging callback
 
-@callback(
+@app.callback(
     [Output('manual-nudge-store', 'data'),
      Output('active-item-index', 'data')],
     [Input('nudge-left', 'n_clicks'),
@@ -80,7 +81,7 @@ def handle_nudging(l, r, u, d, prev_n, next_n, first_n, last_n, ov_clicks, n_eve
     return {'dx': dx, 'dy': dy}, no_update
 
 
-@callback(
+@app.callback(
     [Output('registration-log', 'children'),
      Output('integrated-overlap-graph', 'figure'),
      Output('integrated-ov-status', 'children')],
@@ -166,7 +167,7 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
     return no_update, no_update, no_update
 
 
-@callback(
+@app.callback(
     Output('selection-list-container', 'aria-busy'),
     Input('selection-store', 'data'),
     prevent_initial_call=True
@@ -178,7 +179,7 @@ def handle_background_preload(selection_data):
     return "false"
 
 # --- CALLBACK: CLEAR BASKET & CACHE ---
-@callback(
+@app.callback(
     [Output('selection-store', 'data', allow_duplicate=True),
      Output('active-item-index', 'data', allow_duplicate=True)],
     Input('clear-selection', 'n_clicks'),

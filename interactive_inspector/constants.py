@@ -2,7 +2,6 @@ from dataclasses import dataclass
 import dash_bootstrap_components as dbc
 
 
-
 @dataclass(frozen=True)
 class OverlapType:
     HORIZONTAL = "H"
