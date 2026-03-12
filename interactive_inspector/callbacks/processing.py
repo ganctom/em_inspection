@@ -1,84 +1,96 @@
 from dash import html, Input, Output, State, ctx, no_update, ALL
 from app import app
-from interactive_inspector.data_service import service
+from data_service import service
 
 
 # --- CALLBACK 1: MANAGE THE NUDGE STATE ---
 # processing.py - Update handle_nudging callback
 
+from dash import Input, Output, State, ctx, no_update, ALL
+
+
 @app.callback(
     [Output('manual-nudge-store', 'data'),
      Output('active-item-index', 'data')],
-    [Input('nudge-left', 'n_clicks'),
-     Input('nudge-right', 'n_clicks'),
-     Input('nudge-up', 'n_clicks'),
-     Input('nudge-down', 'n_clicks'),
-     Input('prev-item', 'n_clicks'),
-     Input('next-item', 'n_clicks'),
-     Input('first-item', 'n_clicks'),  # <--- Added
-     Input('last-item', 'n_clicks'),  # <--- Added
+    [Input({'type': 'nudge-btn', 'index': ALL}, 'n_clicks'),
+     Input({'type': 'nav-btn', 'index': ALL}, 'n_clicks'),
      Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
      Input('keyboard-listener', 'n_events')],
     [State('keyboard-listener', 'event'),
-     State('nudge-step', 'value'),
+     State({'type': 'nudge-config', 'index': ALL}, 'value'), # Changed to ALL
      State('manual-nudge-store', 'data'),
      State('active-item-index', 'data'),
      State('selection-store', 'data')],
     prevent_initial_call=True
 )
-def handle_nudging(l, r, u, d, prev_n, next_n, first_n, last_n, ov_clicks, n_events,
-                   key_event, step, current_nudge, current_active, selection_store):
-    trig = ctx.triggered_id
-
-    # 1. Handle External Selection
-    if isinstance(trig, dict) and trig.get('type') == 'plot-ov-btn':
-        return {'dx': 0, 'dy': 0}, trig.get('index')
-
-    # 2. Handle Basket Navigation (First/Prev/Next/Last)
-    # We group all navigation buttons here
-    nav_buttons = ['first-item', 'prev-item', 'next-item', 'last-item']
-    if trig in nav_buttons:
-        if not selection_store:
-            return {'dx': 0, 'dy': 0}, None
-
-        list_len = len(selection_store)
-        idx = current_active if current_active is not None else 0
-
-        if trig == 'first-item':
-            idx = 0
-        elif trig == 'last-item':
-            idx = list_len - 1
-        elif trig == 'prev-item':
-            idx = (idx - 1) % list_len
-        elif trig == 'next-item':
-            idx = (idx + 1) % list_len
-
-        return {'dx': 0, 'dy': 0}, idx
-
-    # 3. Handle Nudging (Keyboard or Buttons)
-    if current_active is None:
+def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
+                   key_event, step_list, current_nudge, current_active, selection_store):
+    # 1. Boilerplate Safety
+    if service.processor is None or not ctx.triggered:
         return no_update, no_update
 
-    dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
-    step = step if step else 10
+    trig = ctx.triggered_id
 
-    if trig == 'keyboard-listener' and key_event:
+    # 2. Handle Pattern Matched Buttons (Nudge & Nav)
+    # Extract the step value safely from the list
+    step = step_list[0] if step_list else 10
+
+    if isinstance(trig, dict):
+        btn_type = trig.get('type')
+        btn_index = trig.get('index')
+
+        # --- A. NUDGE LOGIC ---
+        if btn_type == 'nudge-btn':
+            if current_active is None: return no_update, no_update
+            dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
+            s = step
+
+            if btn_index == 'left':  dx -= s
+            if btn_index == 'right': dx += s
+            if btn_index == 'up':    dy -= s
+            if btn_index == 'down':  dy += s
+            return {'dx': dx, 'dy': dy}, no_update
+
+        # --- B. NAVIGATION LOGIC ---
+        if btn_type == 'nav-btn':
+            if not selection_store: return {'dx': 0, 'dy': 0}, None
+            list_len = len(selection_store)
+            idx = current_active if current_active is not None else 0
+
+            if btn_index == 'first':
+                idx = 0
+            elif btn_index == 'last':
+                idx = list_len - 1
+            elif btn_index == 'prev':
+                idx = (idx - 1) % list_len
+            elif btn_index == 'next':
+                idx = (idx + 1) % list_len
+            return {'dx': 0, 'dy': 0}, idx
+
+        # --- C. OVERLAP PLOT BUTTONS (Already pattern matched) ---
+        if btn_type == 'plot-ov-btn':
+            return {'dx': 0, 'dy': 0}, btn_index
+
+    # 3. Handle Keyboard Nudging
+    if trig == 'keyboard-listener' and key_event and current_active is not None:
+        dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
+        s = step if step else 10
         key = key_event.get('key')
-        if key == "ArrowLeft":
-            dx -= step
-        elif key == "ArrowRight":
-            dx += step
-        elif key == "ArrowUp":
-            dy -= step
-        elif key == "ArrowDown":
-            dy += step
-    else:
-        if trig == 'nudge-left':  dx -= step
-        if trig == 'nudge-right': dx += step
-        if trig == 'nudge-up':    dy -= step
-        if trig == 'nudge-down':  dy += step
 
-    return {'dx': dx, 'dy': dy}, no_update
+        if key == "ArrowLeft":
+            dx -= s
+        elif key == "ArrowRight":
+            dx += s
+        elif key == "ArrowUp":
+            dy -= s
+        elif key == "ArrowDown":
+            dy += s
+        else:
+            return no_update, no_update
+
+        return {'dx': dx, 'dy': dy}, no_update
+
+    return no_update, no_update
 
 
 @app.callback(

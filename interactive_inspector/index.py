@@ -1,14 +1,14 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, callback
 from dash_extensions import EventListener
-
+from data_service import service
 
 # 1. Import the app instance first
 from app import app
 
 # 2. Import layouts (Ensure the filenames match your actual files)
 from layouts.coarse_inspection import create_layout
-from layouts import project_setup, stitching  # Placeholders we created
+from layouts import project_setup, stitching
 
 # 3. Register all callbacks by importing the module
 import callbacks
@@ -73,6 +73,10 @@ app.layout = html.Div([
 def display_page(pathname):
     """Swaps the layout based on the URL."""
     if pathname == '/inspection':
+        if service.processor is None:
+            return dbc.Container([
+                dbc.Alert("No experiment loaded. Please go to '1. Setup' first.", color="warning", className="mt-5")
+            ])
         return create_layout()
     elif pathname == '/setup' or pathname == '/' or pathname is None:
         return project_setup.layout()

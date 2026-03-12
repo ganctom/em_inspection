@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from interactive_inspector.layouts.components import selection_card, create_grid_navigator
-from interactive_inspector.data_service import service
+from data_service import service
 from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
 from app import app
 
@@ -21,6 +21,9 @@ from app import app
     prevent_initial_call=True
 )
 def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store, grid_click):
+    if service.processor is None or not ctx.triggered:
+        return no_update
+
     trigger = ctx.triggered_id
     logging.info(f'navigation.py: handle_selection_state triggered')
 
@@ -95,6 +98,10 @@ def sync_selection_ui(data):
 )
 def render_main_visuals(grid_click, selection_store, dark_mode):
     logging.info(f'navigation.py: render_main_visuals triggered')
+    # Exit if components are missing from the current layout
+    if service.processor is None or not ctx.triggered:
+        return no_update
+
     # 1. Exit early if no tile selected
     raw_tid = grid_click['points'][0]['text'] if grid_click else None
     if not raw_tid:
@@ -364,6 +371,9 @@ def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     prevent_initial_call=True
 )
 def handle_keyboard_nav(n_events, event, current_slider_val):
+    if service.processor is None:  # Add this check!
+        return no_update
+
     if not event or current_slider_val is None:
         return no_update
 

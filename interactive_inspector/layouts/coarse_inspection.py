@@ -1,6 +1,6 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from interactive_inspector.data_service import service
+from data_service import service
 from .components import create_grid_navigator
 
 
@@ -171,21 +171,38 @@ def create_layout():
                     # Control Bar
                     dbc.Row([
                         dbc.Col([
+                            # Change the old IDs to this format in your create_layout():
                             dbc.ButtonGroup([
-                                dbc.Button("|<", id="first-item", size="sm", color="info", outline=True),
-                                dbc.Button("«", id="prev-item", size="sm", color="info", outline=True),
-                                dbc.Button("»", id="next-item", size="sm", color="info", outline=True),
-                                dbc.Button(">|", id="last-item", size="sm", color="info", outline=True),
+                                dbc.Button("|<", id={'type': 'nav-btn', 'index': 'first'}, size="sm", color="info",
+                                           outline=True),
+                                dbc.Button("«", id={'type': 'nav-btn', 'index': 'prev'}, size="sm", color="info",
+                                           outline=True),
+                                dbc.Button("»", id={'type': 'nav-btn', 'index': 'next'}, size="sm", color="info",
+                                           outline=True),
+                                dbc.Button(">|", id={'type': 'nav-btn', 'index': 'last'}, size="sm", color="info",
+                                           outline=True),
                             ], className="me-2"),
+
                             dbc.ButtonGroup([
-                                dbc.Button("←", id="nudge-left", size="sm", color="secondary", outline=True),
-                                dbc.Button("↑", id="nudge-up", size="sm", color="secondary", outline=True),
-                                dbc.Button("↓", id="nudge-down", size="sm", color="secondary", outline=True),
-                                dbc.Button("→", id="nudge-right", size="sm", color="secondary", outline=True),
+                                dbc.Button("←", id={'type': 'nudge-btn', 'index': 'left'}, size="sm", color="secondary",
+                                           outline=True),
+                                dbc.Button("↑", id={'type': 'nudge-btn', 'index': 'up'}, size="sm", color="secondary",
+                                           outline=True),
+                                dbc.Button("↓", id={'type': 'nudge-btn', 'index': 'down'}, size="sm", color="secondary",
+                                           outline=True),
+                                dbc.Button("→", id={'type': 'nudge-btn', 'index': 'right'}, size="sm",
+                                           color="secondary", outline=True),
                             ]),
                         ], width="auto"),
                         dbc.Col([
-                            dbc.Input(id="nudge-step", type="number", value=10, size="sm", style={'width': '65px'})
+                            # Change the id of the nudge-step input:
+                            dbc.Input(
+                                id={'type': 'nudge-config', 'index': 'step'},  # Changed from "nudge-step"
+                                type="number",
+                                value=10,
+                                size="sm",
+                                style={'width': '65px'}
+                            )
                         ], width="auto"),
                         dbc.Col(html.Small(id="current-nudge-display", className="text-info font-monospace"),
                                 width="auto")

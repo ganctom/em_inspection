@@ -12,8 +12,7 @@ from inspection_refactored import (
 )
 
 from Tile_refactored import Tile
-import experiment_configs as cfg
-from interactive_inspector.constants import DataConstants as DC
+from constants import DataConstants as DC
 
 
 ### Set up logging
@@ -43,14 +42,36 @@ class OverlapContext:
 
 class DataService:
     def __init__(self):
-        configs = cfg.get_experiment_configurations()
-        self.exp_config = configs.get("ROLI_F1")
-        self.inspection = Inspection(self.exp_config)
-        self.processor = self.inspection.co_processor
-        self.tile_ids = self.processor.get_largest_tile_id_map()
-        self._section_cache = {}  # {sec_path: SectionObject}
+        # Start with empty/None values
+        self.exp_config = None
+        self.inspection = None
+        self.processor = None
+        self.tile_ids = []
+
+        # Caches remain initialized
+        self._section_cache = {}
         self._lock = threading.Lock()
         self._worker = None
+
+    def initialize_experiment(self, config):
+        """
+        The 'Actual' constructor called by the Setup page.
+        """
+        # 1. Store the config
+        self.exp_config = config
+
+        # 2. Initialize the heavy objects
+        # We recreate the Inspection/Processor logic here
+        self.inspection = Inspection(self.exp_config)
+        self.processor = self.inspection.co_processor
+
+        # 3. Cache UI-essential data
+        self.tile_ids = self.processor.get_largest_tile_id_map()
+
+        # 4. Clear any old data if re-initializing
+        self.clear_cache()
+
+        logging.info(f"DataService: Loaded {config.name} successfully.")
 
 
     def get_trace(self, tid: str):
@@ -346,7 +367,12 @@ class DataService:
             logging.debug("Caches cleared and memory freed.")
 
 
+
     def get_slider_metadata(self):
+        # Check if processor exists yet
+        if self.processor is None:
+            return {"min": 0, "max": 100, "marks": {0: "0", 100: "100"}, "initial_value": 0}
+
         tile_maps = getattr(self.processor, 'tile_id_maps_obj', {})
         z_values = [int(z) for z in tile_maps.keys()] if tile_maps else []
 

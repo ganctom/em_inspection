@@ -8,5 +8,5 @@ app = dash.Dash(
     external_stylesheets=[UIConstants.THEME_LIGHT, dbc.icons.BOOTSTRAP],
     suppress_callback_exceptions=True  # CRITICAL for multi-page apps
 )
-
+app.config.suppress_callback_exceptions = True # Double-down on the config
 server = app.server

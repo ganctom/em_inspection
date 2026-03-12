@@ -1,5 +1,5 @@
 from dash import Input, Output
-from interactive_inspector.app import app
+from app import app
 
 @app.callback(
     [Output("nav-setup", "active"),

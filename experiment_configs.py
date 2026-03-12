@@ -20,7 +20,7 @@ class ExpConfig:
             self.acq_dir = utils.cross_platform_path(self.acq_dir)
 
         # UI Label for Dash components
-        self.label = f"{self.name} (Grid {self.grid_num})"
+        self.label = f"{self.name}"
 
 
 class ExperimentRegistry:
