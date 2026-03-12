@@ -1566,7 +1566,7 @@ def run_plot_ov(
         shift_vec: Optional[Vector] = None
 ) -> None:
 
-    ps = Path(config.path) / 'sections' / f's{sec_num}_g{config.grid_num}'
+    ps = Path(config.proc_dir) / 'sections' / f's{sec_num}_g{config.grid_num}'
     section = Section(ps)
     section.feed_section_data()
 
@@ -1612,7 +1612,7 @@ def main_fine_align_sections(
         sec_nums = [sec_nums]
 
     for num in sec_nums:
-        path_section = Path(config.path) / 'sections' / f's{num}_g{config.grid_num}'
+        path_section = Path(config.proc_dir) / 'sections' / f's{num}_g{config.grid_num}'
         section = Section(path_section)
         section.feed_section_data()
         fine_align_section(section, config.grid_shape, masking=True)

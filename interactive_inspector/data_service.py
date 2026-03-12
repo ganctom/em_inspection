@@ -44,7 +44,7 @@ class OverlapContext:
 class DataService:
     def __init__(self):
         configs = cfg.get_experiment_configurations()
-        self.exp_config = configs[cfg.ExperimentName.ROLI_F1]
+        self.exp_config = configs.get("ROLI_F1")
         self.inspection = Inspection(self.exp_config)
         self.processor = self.inspection.co_processor
         self.tile_ids = self.processor.get_largest_tile_id_map()

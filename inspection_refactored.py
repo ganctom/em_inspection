@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.WARNING)
 class Inspection:
     def __init__(self, config: cfg.ExpConfig):
         self.config = config
-        self.root = Path(config.path)
+        self.root = Path(config.proc_dir)
         self.grid_nr = config.grid_num
         self.first_sec = config.first_sec
         self.last_sec = config.last_sec
@@ -1144,7 +1144,7 @@ if __name__ == "__main__":
 
     ### Accessing individual alignment experiments
     configs = cfg.get_experiment_configurations()
-    exp_config = configs[cfg.ExperimentName.ROLI_F1]
+    exp_config = configs.get("ROLI_F1")
 
     ### Initialize experiment
     exp = Inspection(exp_config)
@@ -1165,7 +1165,7 @@ if __name__ == "__main__":
 
 
     ### POSTPROCESS COARSE SHIFTS
-    main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
+    # main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
 
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT

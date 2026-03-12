@@ -91,7 +91,7 @@ class CoarseOffsetProcessor:
     def load_all_offsets_and_tile_id_maps_from_npz(self):
         """Modified to index errors immediately upon loading."""
         if not self.path_cxyz.exists() or not self.path_id_maps.exists():
-            raise FileNotFoundError("Files missing.")
+            raise FileNotFoundError(f"Files missing: {self.path_cxyz}")
 
         with np.load(self.path_cxyz, allow_pickle=False) as data:
             self.cxyz_obj = {key: data[key].copy() for key in data.files}
