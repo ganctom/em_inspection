@@ -4,7 +4,6 @@ from experiment_configs import get_experiment_configurations
 from data_service import service
 
 
-
 def layout():
     configs = get_experiment_configurations()
     options = [{"label": cfg.label, "value": name} for name, cfg in configs.items()]

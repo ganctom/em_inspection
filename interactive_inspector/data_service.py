@@ -6,19 +6,23 @@ import numpy as np
 import gc
 import threading
 
+from experiment_configs import ExpConfig
+from em_inspection.parameter_config import AcquisitionConfig
+from Tile_refactored import Tile
+from constants import DataConstants as DC
+import parse_sbem_dataset as parse
+
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image
 )
 
-from Tile_refactored import Tile
-from constants import DataConstants as DC
-
 
 ### Set up logging
 # logging.basicConfig(level=logging.DEBUG)
-logging.basicConfig(level=logging.INFO)
-# logging.basicConfig(level=logging.WARNING)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -53,17 +57,60 @@ class DataService:
         self._lock = threading.Lock()
         self._worker = None
 
-    def initialize_experiment(self, config):
+    def parse_experiment(self) -> None:
+
+        outdir = str(self.inspection.dir_sections)
+        start = self.inspection.first_sec
+        end = self.inspection.last_sec
+
+        logging.info(
+            f"Parsing SBEM acquisition...\n"
+            f"Dataset source dir: {self.inspection.acq_dir}\n"
+            f"Section numbers range: [{start}-{end}]\n"
+            f"Output dir: {outdir}"
+        )
+
+        conf: AcquisitionConfig = AcquisitionConfig()
+        conf.sbem_root_dir = self.exp_config.acq_dir
+        conf.tile_grid = f"g000{self.exp_config.grid_num}"
+        conf.grid_shape = self.exp_config.grid_shape
+        conf.thickness = self.exp_config.cut_thickness
+        conf.resolution_xy = self.exp_config.pixel_size
+
+        # Parse metadata, create section directories and section.yaml files
+        parse.main(outdir, conf, start, end)
+
+        # Check parsed section folders
+        validator = parse.Validator(self.inspection.root, start, end)
+        validator.validate_parsed_sbem_acquisition()
+        validator.validate_tile_id_maps()
+
+        logging.info(f"Parsing of the experiment done...")
+        return
+
+
+    def initialize_experiment(
+            self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
+    ):
         """
         The 'Actual' constructor called by the Setup page.
         """
         # 1. Store the config
-        self.exp_config = config
+
+        self.exp_config = ExpConfig(
+            name=exp_name,
+            proc_dir=proc_dir,
+            grid_num=grid_num,
+            first_sec=first_sec,
+            last_sec=last_sec,
+            grid_shape=(int(grid_shape[0]), int(grid_shape[1])),
+            acq_dir=acq_dir
+        )
 
         # 2. Initialize the heavy objects
         self.inspection = Inspection(self.exp_config)
+        logging.info(f"DataService: Experiment {self.exp_config.name} successfully.")
 
-        logging.info(f"DataService: Experiment {config.name} successfully.")
 
     def load_experiment(self, config):
         """

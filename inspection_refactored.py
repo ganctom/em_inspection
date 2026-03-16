@@ -22,8 +22,8 @@ UniPath = Union[str, Path]
 ### Set up logging
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.WARNING)
 
 
 class Inspection:
@@ -1140,17 +1140,56 @@ def store_cxyz_to_offset_files(
         logger.critical("Failed: %s", e, exc_info=True)
 
 
+def parse_acquisition(
+        exp_cfg: cfg.ExpConfig,
+        sec_range: Optional[tuple[int, int]] = None
+) -> None:
+
+    insp = Inspection(exp_cfg)
+    output_dir: str = str(insp.dir_sections)
+    start, end = (insp.first_sec, insp.last_sec) if sec_range is None else sec_range
+
+    logging.info(
+        f"Parsing SBEM acquisition...\n"
+        f"Dataset source dir: {insp.acq_dir}\n"
+        f"Section numbers range: [{start}-{end}]\n"
+        f"Output dir: {output_dir}"
+    )
+
+    import s01_parse_data
+    from em_inspection.parameter_config import AcquisitionConfig
+
+    conf: AcquisitionConfig = AcquisitionConfig()
+    conf.sbem_root_dir = exp_cfg.acq_dir
+    conf.tile_grid = f"g000{exp_cfg.grid_num}"
+    conf.grid_shape = exp_cfg.grid_shape
+    conf.thickness = 25
+    conf.resolution_xy = 10
+
+    s01_parse_data.main(output_dir, conf, start, end)
+
+    validator = s01_parse_data.Validator(conf.sbem_root_dir, start, end)
+    validator.validate_parsed_sbem_acquisition()
+    validator.validate_tile_id_maps()
+
+
+    return
+
+
 if __name__ == "__main__":
 
     ### Accessing individual alignment experiments
     configs = cfg.get_experiment_configurations()
-    exp_config = configs.get("ROLI_F1")
+    # exp_config = configs.get("ROLI_F1")
+    exp_config = configs.get("ROLI_F1_s1200_s1249")
 
     ### Initialize experiment
     exp = Inspection(exp_config)
     # exp.init_experiment()
     # print(exp)
 
+    ### PARSE SBEM ACQUISITION  ###
+    parse_acquisition(exp_config, sec_range=(1200, 1249))
 
     ### PRE- & POST-PROCESS ROUTINES
     # main_scan_missing_section_folders(exp)

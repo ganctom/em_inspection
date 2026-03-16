@@ -48,7 +48,7 @@ def update_details(exp_name):
     prevent_initial_call=True
 )
 def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
-                                  n_proc, n_grid, n_sx, n_sy, n_f, n_l):
+                                  n_proc, n_grid_num, n_sx, n_sy, n_f, n_l):
     trigger = ctx.triggered_id
 
     try:
@@ -62,24 +62,18 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
                 return dbc.Alert(
                     "Please fill in all required fields (Name, Path, Shape).", color="warning")
 
-            cfg = ExpConfig(
-                name=n_name,
-                proc_dir=n_proc,
-                grid_num=n_grid or 0,
-                first_sec=n_f or 0,
-                last_sec=n_l or 0,
-                grid_shape=(int(n_sx), int(n_sy)),
-                acq_dir=n_acq
+            # Initialize the DataService with this config
+            grid_shape = [n_sx, n_sy]
+            service.initialize_experiment(
+                n_name, n_proc, n_grid_num, n_f, n_l, grid_shape, n_acq
             )
 
-            # Initialize the DataService with this config
-            service.initialize_experiment(cfg)
+            # Parse dataset and create section directories
+            service.parse_experiment()
 
             return dbc.Alert([
                 html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{cfg.name}' created successfully."),
-                html.Hr(),
-                html.P("You can now proceed with parsing the EM-dataset.", className="mb-0 small"),
+                html.P(f"Experiment '{n_name}' created and sections were parsed successfully."),
             ], color="success", className="mt-3")
 
         # Initialize the DataService with this config

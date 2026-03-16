@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 import inspection_utils_refactor as utils
 
 
@@ -12,7 +12,9 @@ class ExpConfig:
     first_sec: int
     last_sec: int
     grid_shape: tuple[int, int]
-    acq_dir: Optional[str] = None
+    acq_dir: Optional[str] = None,
+    pixel_size: int = 10,
+    cut_thickness: int = 25
 
     def __post_init__(self):
         self.proc_dir = utils.cross_platform_path(self.proc_dir)
@@ -32,8 +34,10 @@ class ExperimentRegistry:
             proc_dir: str,
             grid_num: int,
             secs: List[int],
-            shape: tuple[int, int],
-            acq: str = None
+            shape: Tuple[int, int],
+            acq: str = None,
+            pixel_size: int = 10,
+            cut_thickness: int = 25
             ):
         config = ExpConfig(
             name=name,
@@ -42,7 +46,9 @@ class ExperimentRegistry:
             first_sec=secs[0],
             last_sec=secs[1],
             grid_shape=shape,
-            acq_dir=acq
+            acq_dir=acq,
+            pixel_size=pixel_size,
+            cut_thickness=cut_thickness
         )
         self._configs[name] = config
 
@@ -76,6 +82,18 @@ def get_experiment_configurations() -> Dict[str, ExpConfig]:
         shape=(30, 25),
         acq="/Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1"
     )
+
+    registry.add(
+        name="ROLI_F1_s1200_s1249",
+        proc_dir="/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/s1200_s1249",
+        grid_num=0,
+        secs=[1200, 1249],
+        shape=(30, 25),
+        acq="/Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1",
+        pixel_size = 10,
+        cut_thickness = 25
+    )
+
 
     # Add more as needed...
     return registry.get_all()
