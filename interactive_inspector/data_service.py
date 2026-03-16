@@ -61,8 +61,20 @@ class DataService:
         self.exp_config = config
 
         # 2. Initialize the heavy objects
-        # We recreate the Inspection/Processor logic here
         self.inspection = Inspection(self.exp_config)
+
+        logging.info(f"DataService: Experiment {config.name} successfully.")
+
+    def load_experiment(self, config):
+        """
+        The 'Actual' constructor called by the Setup page.
+        """
+        # 1. Store the config
+        self.exp_config = config
+
+        # 2. Initialize the heavy objects
+        self.inspection = Inspection(self.exp_config)
+        self.inspection.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
         self.processor = self.inspection.co_processor
 
         # 3. Cache UI-essential data

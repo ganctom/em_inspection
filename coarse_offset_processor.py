@@ -56,7 +56,7 @@ class CoarseOffsetProcessor:
         self.cxyz_obj = None
         self.tile_id_maps_obj = None
         self.co_outliers = {}
-        self.co_traces: dict[str, Optional[CoarseOffsetTrace]]
+        self.co_traces: dict[str, Optional[CoarseOffsetTrace]] = {}
         self._coord_cache: Dict[str, SectionIndex] = {}
         self._all_unique_ids: Optional[set[int]] = None
         self._inf_registry: Dict[str, List[Dict[str, Any]]] = {}

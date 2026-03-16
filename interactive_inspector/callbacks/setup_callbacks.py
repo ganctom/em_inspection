@@ -1,6 +1,5 @@
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html, ctx
-from app import app
 from data_service import service
 from experiment_configs import get_experiment_configurations, ExpConfig
 
@@ -39,6 +38,7 @@ def update_details(exp_name):
      Input("add-new-exp-btn", "n_clicks")],
     [State("experiment-select", "value"),
      State("new-exp-name", "value"),
+     State("new-exp-acq", "value"),
      State("new-exp-proc", "value"),
      State("new-exp-grid", "value"),
      State("new-exp-shape-x", "value"),
@@ -47,7 +47,8 @@ def update_details(exp_name):
      State("new-exp-last", "value")],
     prevent_initial_call=True
 )
-def handle_project_initialization(n_load, n_add, sel_name, n_name, n_proc, n_grid, n_sx, n_sy, n_f, n_l):
+def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
+                                  n_proc, n_grid, n_sx, n_sy, n_f, n_l):
     trigger = ctx.triggered_id
 
     try:
@@ -57,8 +58,9 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_proc, n_gri
 
         elif trigger == "add-new-exp-btn":
             # Validation for new experiment
-            if not all([n_name, n_proc, n_sx, n_sy]):
-                return dbc.Alert("Please fill in all required fields (Name, Path, Shape).", color="warning")
+            if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
+                return dbc.Alert(
+                    "Please fill in all required fields (Name, Path, Shape).", color="warning")
 
             cfg = ExpConfig(
                 name=n_name,
@@ -66,12 +68,22 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_proc, n_gri
                 grid_num=n_grid or 0,
                 first_sec=n_f or 0,
                 last_sec=n_l or 0,
-                grid_shape=(int(n_sx), int(n_sy))
+                grid_shape=(int(n_sx), int(n_sy)),
+                acq_dir=n_acq
             )
 
-        # THE CRITICAL STEP: Initialize the DataService with this config
-        service.initialize_experiment(cfg)
+            # Initialize the DataService with this config
+            service.initialize_experiment(cfg)
 
+            return dbc.Alert([
+                html.H5("Success!", className="alert-heading"),
+                html.P(f"Experiment '{cfg.name}' created successfully."),
+                html.Hr(),
+                html.P("You can now proceed with parsing the EM-dataset.", className="mb-0 small"),
+            ], color="success", className="mt-3")
+
+        # Initialize the DataService with this config
+        service.load_experiment(cfg)
         return dbc.Alert([
             html.H5("Success!", className="alert-heading"),
             html.P(f"Experiment '{cfg.name}' loaded successfully."),

@@ -47,6 +47,10 @@ def layout():
                     dbc.Label("Experiment Name", className="small mb-0"),
                     dbc.Input(id="new-exp-name", persistence=True, placeholder="e.g. FISH_ID_1", size="sm", className="mb-2"),
 
+                    dbc.Label("Acquisition Directory (Absolute Path)", className="small mb-0"),
+                    dbc.Input(id="new-exp-acq", persistence=True, placeholder="/Volumes/.../sbem_acq-dir", size="sm",
+                              className="mb-2"),
+
                     dbc.Label("Processing Directory (Absolute Path)", className="small mb-0"),
                     dbc.Input(id="new-exp-proc", persistence=True, placeholder="/Volumes/.../run-01", size="sm", className="mb-2"),
 

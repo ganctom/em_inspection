@@ -44,7 +44,7 @@ class Inspection:
         self._setup_offset_processor_paths()
 
         self.co_processor = CoarseOffsetProcessor(self.config, self.offset_processor_paths)
-        self.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
+        # self.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
 
     def __str__(self):
         return (
