@@ -3,14 +3,16 @@ from typing import Tuple, Dict
 
 from inspection_utils_refactor import cross_platform_path
 
+DEF_PX_SIZE = 10.
+DEF_CT = 25.
 
 class AcquisitionConfig(BaseModel):
     sbem_root_dir: str = ""
     acquisition: str = "run_0"
     tile_grid: str = "g0000"
     grid_shape: tuple[int, int] = (30, 25)
-    thickness: float = 25
-    resolution_xy: float = 10
+    thickness: float = DEF_CT
+    resolution_xy: float = DEF_PX_SIZE
 
     @field_validator('sbem_root_dir', mode='before')
     @classmethod
@@ -26,8 +28,8 @@ class ExpConfig(BaseModel):
     grid_shape: Tuple[int, int]
     first_sec: int
     last_sec: int
-    pixel_size: int = 10
-    cut_thickness: int = 25
+    pixel_size: float = DEF_PX_SIZE
+    cut_thickness: float = DEF_CT
 
     @field_validator('acq_dir', 'proc_dir', mode='before')
     @classmethod

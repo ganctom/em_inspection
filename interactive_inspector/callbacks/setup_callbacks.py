@@ -4,13 +4,62 @@ import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html, ctx
 from data_service import service
 from experiment_configs import get_experiment_configurations
-from constants import UIConstants
+from constants import UI
 
+
+@callback(
+    Output("setup-feedback", "children"),
+    [Input(UI.BTN_INIT['id'], "n_clicks"),
+     Input(UI.BTN_ADD_EXP['id'], "n_clicks")],
+    [State(UI.ID_SEL_EXPERIMENT, "value"),
+     State(UI.ID_INP_NAME, "value"),
+     State(UI.ID_INP_ACQ, "value"),
+     State(UI.ID_INP_PROC, "value"),
+     State(UI.ID_INP_GRID_NUM, "value"),
+     State(UI.ID_INP_GS_X, "value"),
+     State(UI.ID_INP_GS_Y, "value"),
+     State(UI.ID_INP_FIRST_SEC, "value"),
+     State(UI.ID_INP_LAST_SEC, "value"),
+     State(UI.ID_INP_PX_SIZE, "value"),
+     State(UI.ID_INP_CT, "value")],
+    prevent_initial_call=True
+)
+def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
+                                  n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
+    trigger = ctx.triggered_id
+
+    try:
+        if trigger == UI.ID_BTN_INIT:
+            configs = get_experiment_configurations()
+            cfg = configs.get(sel_name)
+            service.load_experiment(cfg)
+            return dbc.Alert([
+                html.H5("Success!", className="alert-heading"),
+                html.P(f"Experiment '{cfg.name}' loaded successfully."),
+            ], color="success", className="mt-3")
+
+        elif trigger == UI.ID_BTN_ADD_EXP:
+            if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
+                return dbc.Alert("Please fill in all required fields.", color="warning")
+
+            grid_shape = tuple([n_sx, n_sy])
+            service.create_and_save_new_experiment(
+                n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
+            )
+
+            return dbc.Alert([
+                html.H5("Success!", className="alert-heading"),
+                html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
+            ], color="success", className="mt-3")
+
+    except Exception as e:
+        return dbc.Alert(
+            f"Initialization Error: {str(e)}", color="danger", className="mt-3")
 
 
 @callback(
     [Output("experiment-details-card", "children"),
-     Output(UIConstants.ID_BTN_INIT, "disabled")],
+     Output(UI.ID_BTN_INIT, "disabled")],
     Input("experiment-select", "value")
 )
 def update_details(exp_name):
@@ -34,54 +83,6 @@ def update_details(exp_name):
     return card, False
 
 
-@callback(
-    Output("setup-feedback", "children"),
-    [Input(UIConstants.ID_BTN_INIT, "n_clicks"),
-     Input(UIConstants.ID_BTN_ADD_EXP, "n_clicks")],
-    [State("experiment-select", "value"),
-     State("new-exp-name", "value"),
-     State("new-exp-acq", "value"),
-     State("new-exp-proc", "value"),
-     State("new-exp-grid", "value"),
-     State("new-exp-shape-x", "value"),
-     State("new-exp-shape-y", "value"),
-     State("new-exp-first", "value"),
-     State("new-exp-last", "value")],
-    prevent_initial_call=True
-)
-def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
-                                  n_proc, n_grid_num, n_sx, n_sy, n_f, n_l):
-    trigger = ctx.triggered_id
-
-    try:
-        if trigger == UIConstants.ID_BTN_INIT:
-            configs = get_experiment_configurations()
-            cfg = configs.get(sel_name)
-            service.load_experiment(cfg)
-            return dbc.Alert([
-                html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{cfg.name}' loaded successfully."),
-            ], color="success", className="mt-3")
-
-        elif trigger == UIConstants.ID_BTN_ADD_EXP:
-            if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
-                return dbc.Alert("Please fill in all required fields.", color="warning")
-
-            grid_shape = tuple([n_sx, n_sy])
-            service.create_and_save_new_experiment(
-                n_name, n_proc, n_grid_num, n_f, n_l, grid_shape, n_acq
-            )
-
-            return dbc.Alert([
-                html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
-            ], color="success", className="mt-3")
-
-    except Exception as e:
-        return dbc.Alert(
-            f"Initialization Error: {str(e)}", color="danger", className="mt-3")
-
-
 # --- TRIGGER CALLBACK ---
 @callback(
     [Output("progress-interval", "disabled"),
@@ -91,20 +92,53 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
      Output("parsing-progress-bar", "color", allow_duplicate=True),
      Output("parsing-progress-bar", "value", allow_duplicate=True),
      Output("setup-feedback", "children", allow_duplicate=True)],
-    Input(UIConstants.ID_BTN_PARSE, "n_clicks"),
-    State("new-exp-name", "value"),
+    Input(UI.ID_BTN_PARSE, "n_clicks"),
+    State(UI.ID_INP_NAME, "value"),
     prevent_initial_call=True
 )
 def trigger_parsing(n, exp_name):
     if not exp_name:
         return True, False, dash.no_update, dash.no_update, dash.no_update, 0, dash.no_update
 
-    thread = threading.Thread(target=service.parse_experiment, args=(exp_name,))
-    thread.daemon = True
+    thread = threading.Thread(
+        target=service.parse_experiment,
+        args=(exp_name,),
+        daemon=True
+    )
     thread.start()
 
-    # Enable interval, open collapse, and set bar to active blue at 0%
     return False, True, True, True, "primary", 0, ""
+
+
+@callback(
+    [Output(UI.ID_BTN_PARSE, "disabled"),
+     Output(UI.ID_TTP_PARSE, "children")],
+    [Input(UI.ID_INP_NAME, "value"),
+     Input("setup-feedback", "children"),
+     Input(UI.ID_BTN_INIT, "n_clicks")],
+    prevent_initial_call=False
+)
+def toggle_parse_button(exp_name, feedback, n_init):
+    # 1. Check the Backend: Does the service have an active config?
+    has_config = service.exp_config is not None
+
+    # 2. Check the Frontend: Is there a name present?
+    current_name = exp_name if exp_name else (service.exp_config.name if has_config else None)
+    has_name = bool(current_name and current_name.strip())
+
+    # 3. Validation: Did the last action result in an error?
+    is_error = False
+    if isinstance(feedback, dict) and 'props' in feedback:
+        is_error = feedback.get('props', {}).get('color') == 'danger'
+
+    # The "Green Light" condition
+    is_ready = has_config and has_name and not is_error
+
+    # Return state
+    button_disabled = not is_ready
+    tooltip_msg = UI.MSG_PARSE_READY if is_ready else UI.MSG_PARSE_DISABLED
+
+    return button_disabled, tooltip_msg
 
 
 # --- POLLER CALLBACK ---

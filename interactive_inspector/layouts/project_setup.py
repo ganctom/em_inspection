@@ -1,9 +1,10 @@
 import dash_bootstrap_components as dbc
 from dash import html, dcc
-from constants import UIConstants
+from constants import UI
 
 from experiment_configs import get_experiment_configurations
 from data_service import service
+
 
 
 def layout():
@@ -30,45 +31,57 @@ def layout():
                 html.Div([
                     html.H4("Add New Experiment", className="mb-3"),
 
-                    dbc.Label("Experiment Name", className="small mb-0"),
-                    dbc.Input(id="new-exp-name", persistence=True, placeholder="e.g. FISH_ID_1", size="sm",
-                              className="mb-2"),
-                    dbc.Label("Acquisition Directory (Absolute Path)", className="small mb-0"),
-                    dbc.Input(id="new-exp-acq", persistence=True, placeholder="/Volumes/.../sbem_acq-dir", size="sm",
-                              className="mb-2"),
+                    dbc.Label(UI.NAME_INP_NAME, **UI.LBL_CFG),
+                    dbc.Input(**UI.INP_NAME),
 
-                    dbc.Label("Processing Directory (Absolute Path)", className="small mb-0"),
-                    dbc.Input(id="new-exp-proc", persistence=True, placeholder="/Volumes/.../run-01", size="sm",
-                              className="mb-2"),
+                    dbc.Label(UI.NAME_INP_ACQ, **UI.LBL_CFG),
+                    dbc.Input(**UI.INP_ACQ),
+
+                    dbc.Label(UI.NAME_INP_PROC, **UI.LBL_CFG),
+                    dbc.Input(**UI.INP_PROC),
 
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("Grid Num", className="small mb-0"),
-                            dbc.Input(id="new-exp-grid", type="number", value=0, size="sm"),
+                            dbc.Label(UI.NAME_INP_GRID_NUM, **UI.LBL_CFG),
+                            dbc.Input(**UI.INP_GRID_NUM),
                         ], width=4),
                         dbc.Col([
-                            dbc.Label("Shape (X, Y)", className="small mb-0"),
+                            dbc.Label(UI.NAME_INP_GRID_SIZE, **UI.LBL_CFG),
                             dbc.InputGroup([
-                                dbc.Input(id="new-exp-shape-x", type="number", placeholder="X", size="sm"),
-                                dbc.Input(id="new-exp-shape-y", type="number", placeholder="Y", size="sm"),
+                                dbc.Input(**UI.INP_GS_X),
+                                dbc.Input(**UI.INP_GS_Y),
                             ], size="sm"),
                         ], width=8),
                     ], className="mb-2"),
 
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label("First Section", className="small mb-0"),
-                            dbc.Input(id="new-exp-first", type="number", size="sm"),
+                            dbc.Label(UI.NAME_INP_SEC_RANGE, **UI.LBL_CFG),
+                            dbc.InputGroup([
+                                dbc.Input(**UI.INP_FIRST_SEC),
+                                dbc.Input(**UI.INP_LAST_SEC),
+                            ], size="sm"),
+                        ], width=12),
+                    ], className="mb-3"),
+
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label(UI.NAME_INP_PX_SIZE, **UI.LBL_CFG),
+                            dbc.Input(**UI.INP_PX_SIZE),
                         ], width=6),
                         dbc.Col([
-                            dbc.Label("Last Section", className="small mb-0"),
-                            dbc.Input(id="new-exp-last", type="number", size="sm"),
+                            dbc.Label(UI.NAME_INP_CT, **UI.LBL_CFG),
+                            dbc.Input(**UI.INP_CT),
                         ], width=6),
                     ], className="mb-3"),
 
                     html.Div([
-                        dbc.Button(**UIConstants.BTN_ADD_EXP_CFG),
-                        dbc.Button(**UIConstants.BTN_PARSE_CFG),
+                        dbc.Button(**UI.BTN_ADD_EXP),
+                        html.Span(dbc.Button(**UI.BTN_PARSE),
+                                  id=UI.ID_BTN_PARSE_WRAPPER,
+                                  className="d-grid"),
+                        dbc.Tooltip(**UI.TTP_PARSE),
+
                     ], className="d-grid gap-2"),
 
                     # THE PROGRESS UI
@@ -99,16 +112,10 @@ def layout():
                     html.P("Select a pre-configured experiment to begin inspection.",
                            className="text-muted small"),
 
-                    dbc.Select(
-                        id="experiment-select",
-                        options=options,
-                        value=initial_exp,
-                        placeholder="Choose an experiment...",
-                        className="mb-3"
-                    ),
+                    dbc.Select(**UI.SEL_EXPERIMENT, options=options,value=initial_exp,),
 
                     html.Div(id="experiment-details-card"),
-                    dbc.Button(**UIConstants.BTN_INIT_CFG),
+                    dbc.Button(**UI.BTN_INIT),
                 ], className="p-4 bg-light border rounded h-100")
             ], width=5),
         ], className="mt-5 g-4"),

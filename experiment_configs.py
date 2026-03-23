@@ -10,21 +10,18 @@ class ExperimentRegistry:
         self.app_cfg = AppConfig()
         self.load_from_disk()
 
-    def add(self, name, proc_dir, grid_num, first_sec, last_sec, shape, acq, **kwargs):
-        """
-        Using **kwargs allows you to pass pixel_size or cut_thickness
-        only if they are provided by the UI.
-        """
+    def add(self, name, acq_dir, proc_dir, grid_num, grid_shape, first_sec, last_sec, px, ct):
 
         config = ExpConfig(
             name=name,
-            acq_dir=acq,
+            acq_dir=acq_dir,
             proc_dir=proc_dir,
             grid_num=grid_num,
-            grid_shape=shape,
+            grid_shape=grid_shape,
             first_sec=first_sec,
             last_sec=last_sec,
-            **kwargs  # Captures pixel_size, cut_thickness, etc.
+            pixel_size=px,
+            cut_thickness=ct,
         )
         self.app_cfg.projects[name] = config
         self.save_to_disk()

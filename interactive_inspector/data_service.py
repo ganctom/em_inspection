@@ -56,11 +56,13 @@ class DataService:
         self._log_lock = threading.Lock()
 
     def create_and_save_new_experiment(
-            self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
+            self, exp_name, proc_dir, grid_num, grid_shape, first_sec, last_sec, acq_dir, px, ct
     ):
         """Called by the Dash Callback when the user hits 'Add Experiment'"""
 
-        self.registry.add(exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir)
+        self.registry.add(
+            exp_name, acq_dir, proc_dir, grid_num, grid_shape, first_sec, last_sec, px, ct
+        )
         new_conf = self.registry.get_all().get(exp_name)
         if new_conf:
             self.exp_config = new_conf
@@ -114,8 +116,12 @@ class DataService:
             self.exp_config = config
             acq_cfg = self._prepare_acquisition_config(config)
 
-            parse.main(str(self.inspection.dir_sections), acq_cfg,
-                       self.inspection.first_sec, self.inspection.last_sec)
+            parse.main(
+                str(self.inspection.dir_sections),
+                acq_cfg,
+                self.inspection.first_sec,
+                self.inspection.last_sec
+            )
 
             # Validate parsing
             self.parsing_status["message"] = "Validating dataset..."
@@ -185,37 +191,6 @@ class DataService:
         self.clear_cache()
         logging.info(f"DataService: Loaded {config.name} successfully.")
 
-    def parse_experiment(self) -> None:
-
-        outdir = str(self.inspection.dir_sections)
-        start = self.inspection.first_sec
-        end = self.inspection.last_sec
-
-        logging.info(
-            f"Parsing SBEM acquisition...\n"
-            f"Dataset source dir: {self.inspection.acq_dir}\n"
-            f"Section numbers range: [{start}-{end}]\n"
-            f"Output dir: {outdir}"
-        )
-
-        conf: AcquisitionConfig = AcquisitionConfig()
-        conf.sbem_root_dir = self.exp_config.acq_dir
-        conf.tile_grid = f"g000{self.exp_config.grid_num}"
-        conf.grid_shape = self.exp_config.grid_shape
-        conf.thickness = self.exp_config.cut_thickness
-        conf.resolution_xy = self.exp_config.pixel_size
-
-        # Parse metadata, create section directories and section.yaml files
-        parse.main(outdir, conf, start, end)
-
-        # Check parsed section folders
-        validator = parse.Validator(self.inspection.root, start, end)
-        validator.validate_parsed_sbem_acquisition()
-        validator.validate_tile_id_maps()
-
-        logging.info(f"Parsing of the experiment done...")
-        return
-
 
     def initialize_experiment(
             self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
@@ -238,27 +213,6 @@ class DataService:
         # 2. Initialize the heavy objects
         self.inspection = Inspection(self.exp_config)
         logging.info(f"DataService: Experiment {self.exp_config.name} successfully.")
-
-
-    def load_experiment(self, config):
-        """
-        The 'Actual' constructor called by the Setup page.
-        """
-        # 1. Store the config
-        self.exp_config = config
-
-        # 2. Initialize the heavy objects
-        self.inspection = Inspection(self.exp_config)
-        self.inspection.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
-        self.processor = self.inspection.co_processor
-
-        # 3. Cache UI-essential data
-        self.tile_ids = self.processor.get_largest_tile_id_map()
-
-        # 4. Clear any old data if re-initializing
-        self.clear_cache()
-
-        logging.info(f"DataService: Loaded {config.name} successfully.")
 
 
     def get_trace(self, tid: str):
