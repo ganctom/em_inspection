@@ -1,7 +1,14 @@
+import logging
 import dash_bootstrap_components as dbc
 from dash import html, dcc, Input, Output, callback
 from dash_extensions import EventListener
 from data_service import service
+
+### Set up logging
+# logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
+
 
 # 1. Import the app instance first
 from app import app
@@ -40,9 +47,9 @@ app.layout = html.Div([
                 # Links also aligned to the left
                 dbc.Nav([
                     dbc.NavItem(dbc.NavLink("1. SETUP", href="/setup", id="step-1", className="small")),
-                    dbc.NavItem(dbc.NavLink("2. PROCESSING", href="/processing", id="step-2", className="small")),
+                    dbc.NavItem(dbc.NavLink("2. STITCHING", href="/stitching", id="step-2", className="small")),
                     dbc.NavItem(dbc.NavLink("3. INSPECTION", href="/inspection", id="step-3", className="small")),
-                    dbc.NavItem(dbc.NavLink("4. STITCHING", href="/stitching", id="step-4", className="small")),
+                    dbc.NavItem(dbc.NavLink("4. PROCESSING", href="/post-processing", id="step-4", className="small")),
                 ], navbar=True, className="ms-4 justify-content-start"),
 
             ], fluid=True),
@@ -72,19 +79,23 @@ app.layout = html.Div([
 )
 def display_page(pathname):
     """Swaps the layout based on the URL."""
-    if pathname == '/inspection':
+
+    if pathname == '/setup' or pathname == '/' or pathname is None:
+        return project_setup.layout()
+
+    elif pathname == '/stitching':
+        return stitching.layout()
+
+    elif pathname == '/inspection':
         if service.processor is None:
             return dbc.Container([
                 dbc.Alert("No experiment loaded. Please go to '1. Setup' first.", color="warning", className="mt-5")
             ])
         return create_layout()
-    elif pathname == '/setup' or pathname == '/' or pathname is None:
-        return project_setup.layout()
-    elif pathname == '/stitching':
-        return stitching.layout()
-    elif pathname == '/processing':
+
+    elif pathname == '/post-processing':
         return html.Div([
-            html.H3("Step 2: Coarse Processing"),
+            html.H3("Step 4: Post-processing"),
             dbc.Alert("Background processing engine placeholder.", color="secondary")
         ], className="p-5")
     else:
@@ -104,9 +115,9 @@ def update_stepper_style(pathname):
     """Visually highlights the current step in the top nav."""
     return [
         (pathname == "/setup" or pathname == "/"),
-        (pathname == "/processing"),
+        (pathname == "/stitching"),
         (pathname == "/inspection"),
-        (pathname == "/stitching")
+        (pathname == "/post-processing")
     ]
 
 if __name__ == '__main__':

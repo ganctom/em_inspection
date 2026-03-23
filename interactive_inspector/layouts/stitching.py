@@ -4,8 +4,8 @@ import dash_bootstrap_components as dbc
 def layout():
     return dbc.Row([
         dbc.Col([
-            html.H3("Step 4: Section Stitching"),
-            html.P("This module will utilize the refined offsets from Step 3 to generate mosaics."),
+            html.H3("Step 2: Section Stitching"),
+            html.P("This module will utilize ..."),
             dbc.Alert("Status: Pending Inspection Sign-off", color="warning")
         ], width=12)
     ])

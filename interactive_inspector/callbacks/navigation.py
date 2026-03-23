@@ -1,5 +1,4 @@
 import logging
-
 import numpy as np
 from dash import Input, Output, State, ctx, no_update, ALL, html
 import plotly.graph_objects as go
@@ -243,8 +242,6 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     )
 
     return fig
-
-
 
 
 @app.callback(

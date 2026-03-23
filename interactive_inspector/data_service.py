@@ -1,3 +1,6 @@
+import io
+import re
+import sys
 from dataclasses import dataclass
 import logging
 from typing import Optional, Tuple, Any
@@ -6,8 +9,8 @@ import numpy as np
 import gc
 import threading
 
-from experiment_configs import ExpConfig
-from em_inspection.parameter_config import AcquisitionConfig
+from experiment_configs import ExperimentRegistry, ExpConfig
+from parameter_config import AcquisitionConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC
 import parse_sbem_dataset as parse
@@ -16,12 +19,6 @@ from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image
 )
-
-
-### Set up logging
-# logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.WARNING)
 
 
 @dataclass(frozen=True)
@@ -46,16 +43,147 @@ class OverlapContext:
 
 class DataService:
     def __init__(self):
-        # Start with empty/None values
+        self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
         self.exp_config = None
         self.inspection = None
         self.processor = None
         self.tile_ids = []
-
-        # Caches remain initialized
         self._section_cache = {}
         self._lock = threading.Lock()
         self._worker = None
+        self.parsing_status = {"active": False, "progress": 0, "message": "", "logs": ""}
+        self._log_buffer = io.StringIO()
+        self._log_lock = threading.Lock()
+
+    def create_and_save_new_experiment(
+            self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
+    ):
+        """Called by the Dash Callback when the user hits 'Add Experiment'"""
+
+        self.registry.add(exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir)
+        new_conf = self.registry.get_all().get(exp_name)
+        if new_conf:
+            self.exp_config = new_conf
+            self.initialize_experiment_from_config(new_conf)
+        else:
+            logging.warning("Issue with getting exp. configs")
+
+
+    def initialize_experiment_from_config(self, config: ExpConfig):
+        self.exp_config = config
+        self.inspection = Inspection(self.exp_config)
+        logging.info(f"DataService: Active experiment set to {config.name}")
+
+
+    def get_latest_logs(self):
+        """Safely read the current buffer."""
+        with self._log_lock:
+            return self._log_buffer.getvalue()
+
+    def update_status_from_logs(self, log_text):
+        """Extracts the latest percentage from tqdm strings."""
+        if not log_text:
+            return
+
+        # Capture the raw text for the UI window
+        self.parsing_status["logs"] = log_text
+
+        # Regex to find percentages (e.g., '10%')
+        # We look for the last one in the string as it's the most recent
+        matches = re.findall(r'(\d+)%', log_text)
+        if matches:
+            last_percent = int(matches[-1])
+            if last_percent > self.parsing_status["progress"]:
+                self.parsing_status["progress"] = last_percent
+
+
+    def parse_experiment(self, exp_name: str) -> None:
+        with self._log_lock:
+            self._log_buffer.seek(0)
+            self._log_buffer.truncate(0)
+            self.parsing_status = {"active": True, "progress": 0, "message": "Parsing..."}
+
+        save_stdout, save_stderr = sys.stdout, sys.stderr
+        sys.stdout = sys.stderr = self._log_buffer
+
+        try:
+            config = self.registry.get_all().get(exp_name)
+            if not config:
+                return
+
+            self.exp_config = config
+            acq_cfg = self._prepare_acquisition_config(config)
+
+            parse.main(str(self.inspection.dir_sections), acq_cfg,
+                       self.inspection.first_sec, self.inspection.last_sec)
+
+            # Validate parsing
+            self.parsing_status["message"] = "Validating dataset..."
+            results = self.validate_parsed()
+
+            self.parsing_status.update(results)
+            self.parsing_status["progress"] = 100
+            self.parsing_status["message"] = "Processing Finished"
+
+        except Exception as e:
+            self.parsing_status["message"] = f"Error: {str(e)}"
+        finally:
+            sys.stdout, sys.stderr = save_stdout, save_stderr
+            self.parsing_status["active"] = False
+
+    def update_percentage_only(self):
+        """Reads the buffer and updates the internal progress integer."""
+        with self._log_lock:
+            log_text = self._log_buffer.getvalue()
+
+        # Sniper regex for the tqdm percentage
+        matches = re.findall(r'(\d+)%', log_text)
+        if matches:
+            last_val = int(matches[-1])
+            if last_val > self.parsing_status["progress"]:
+                self.parsing_status["progress"] = last_val
+
+
+    def validate_parsed(self) -> dict:
+        # Check parsed section folders
+        validator = parse.Validator(
+            self.inspection.root,
+            self.inspection.first_sec,
+            self.inspection.last_sec
+        )
+
+        missing_sections = validator.validate_parsed_sbem_acquisition()
+        invalid_maps = validator.validate_tile_id_maps()
+
+        return {
+            "missing_count": len(missing_sections),
+            "invalid_maps_count": len(invalid_maps)
+        }
+
+
+    @staticmethod
+    def _prepare_acquisition_config(config) -> AcquisitionConfig:
+        """Encapsulates the mapping logic."""
+        acq_cfg = AcquisitionConfig()
+        acq_cfg.sbem_root_dir = config.acq_dir
+        acq_cfg.tile_grid = f"g{config.grid_num:04d}"
+        acq_cfg.grid_shape = config.grid_shape
+        acq_cfg.thickness = config.cut_thickness
+        acq_cfg.resolution_xy = config.pixel_size
+        return acq_cfg
+
+
+    def load_experiment(self, config):
+        """
+        Loads inspector, coarse offsets tensor & UI data using specified config file
+        """
+        self.exp_config = config
+        self.inspection = Inspection(self.exp_config)
+        self.inspection.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
+        self.processor = self.inspection.co_processor
+        self.tile_ids = self.processor.get_largest_tile_id_map()
+        self.clear_cache()
+        logging.info(f"DataService: Loaded {config.name} successfully.")
 
     def parse_experiment(self) -> None:
 
@@ -134,10 +262,15 @@ class DataService:
 
 
     def get_trace(self, tid: str):
+        if not self.processor:
+            logging.error("Trace requested but no experiment is loaded.")
+            return None
         return self.processor.get_full_trace(tid)
 
 
-    def _get_overlap_context(self, tid_a: str, z: int, overlap_type: str) -> Optional[OverlapContext]:
+    def _get_overlap_context(
+            self, tid_a: str, z: int, overlap_type: str
+    ) -> Optional[OverlapContext]:
         z_str = str(z)
         tid_a_int = int(tid_a)
         ov_type = overlap_type.upper()

@@ -1747,7 +1747,8 @@ if __name__ == "__main__":
 
     # Accessing individual experiments
     configs = cfg.get_experiment_configurations()
-    exp = configs[cfg.ExperimentName.ROLI_F1]
+    exp_name = 'ROLI_F1'
+    exp = configs[exp_name]
 
     # # # FINE ALIGN
     sec_nums = list(range(3000, 3005))

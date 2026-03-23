@@ -1,99 +1,67 @@
-from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional, Dict, Tuple
-import inspection_utils_refactor as utils
+from typing import Dict
+import yaml
 
-
-@dataclass
-class ExpConfig:
-    name: str
-    proc_dir: str
-    grid_num: int
-    first_sec: int
-    last_sec: int
-    grid_shape: tuple[int, int]
-    acq_dir: Optional[str] = None,
-    pixel_size: int = 10,
-    cut_thickness: int = 25
-
-    def __post_init__(self):
-        self.proc_dir = utils.cross_platform_path(self.proc_dir)
-        if self.acq_dir:
-            self.acq_dir = utils.cross_platform_path(self.acq_dir)
-
-        # UI Label for Dash components
-        self.label = f"{self.name}"
+from parameter_config import ExpConfig, AppConfig
 
 
 class ExperimentRegistry:
     def __init__(self):
-        self._configs: Dict[str, ExpConfig] = {}
+        self.app_cfg = AppConfig()
+        self.load_from_disk()
 
-    def add(self,
-            name: str,
-            proc_dir: str,
-            grid_num: int,
-            secs: List[int],
-            shape: Tuple[int, int],
-            acq: str = None,
-            pixel_size: int = 10,
-            cut_thickness: int = 25
-            ):
+    def add(self, name, proc_dir, grid_num, first_sec, last_sec, shape, acq, **kwargs):
+        """
+        Using **kwargs allows you to pass pixel_size or cut_thickness
+        only if they are provided by the UI.
+        """
+
         config = ExpConfig(
             name=name,
+            acq_dir=acq,
             proc_dir=proc_dir,
             grid_num=grid_num,
-            first_sec=secs[0],
-            last_sec=secs[1],
             grid_shape=shape,
-            acq_dir=acq,
-            pixel_size=pixel_size,
-            cut_thickness=cut_thickness
+            first_sec=first_sec,
+            last_sec=last_sec,
+            **kwargs  # Captures pixel_size, cut_thickness, etc.
         )
-        self._configs[name] = config
+        self.app_cfg.projects[name] = config
+        self.save_to_disk()
+
+    def save_to_disk(self):
+        """Saves a clean, human-readable YAML without python-specific tags."""
+        raw_data = {
+            name: cfg.model_dump()
+            for name, cfg in self.app_cfg.projects.items()
+        }
+        clean_data = self._prepare_for_yaml(raw_data)
+        with open(self.app_cfg.exp_yaml_path, 'w') as f:
+            yaml.safe_dump(clean_data, f, default_flow_style=False, sort_keys=False)
+
+    def _prepare_for_yaml(self, obj):
+        """Recursively converts tuples to lists and Paths to strings."""
+        if isinstance(obj, dict):
+            return {k: self._prepare_for_yaml(v) for k, v in obj.items()}
+        elif isinstance(obj, (list, tuple)):
+            return [self._prepare_for_yaml(item) for item in obj]
+        elif hasattr(obj, '__fspath__'):  # Catches Path objects
+            return str(obj)
+        return obj
+
+    def load_from_disk(self):
+        """Loads previously saved experiments."""
+        p = Path(self.app_cfg.exp_yaml_path)
+        if Path(p).exists():
+            with open(p, 'r') as f:
+                data = yaml.safe_load(f) or {}
+                for name, fields in data.items():
+                    self.app_cfg.projects[name] = ExpConfig.model_validate(fields)
 
     def get_all(self) -> Dict[str, ExpConfig]:
-        return self._configs
-
-    def get(self, name: str) -> ExpConfig:
-        return self._configs.get(name)
-
+        return self.app_cfg.projects
 
 
 def get_experiment_configurations() -> Dict[str, ExpConfig]:
     registry = ExperimentRegistry()
-    root = Path(utils.cross_platform_path(r"/Volumes/storage/scratch/team/project/tgan/Stack_alignments"))
-
-    # Add experiments one by one
-    registry.add(
-        name="ROLI_1",
-        proc_dir=str(root / "roli-1/2024_05_17"),
-        grid_num=1,
-        secs=[282, 8651],
-        shape=(40, 40),
-        acq=r"/Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20250701_RoLi_Fish_1_ID_20250528_132139"
-    )
-
-    registry.add(
-        name="ROLI_F1",
-        proc_dir="/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01",
-        grid_num=0,
-        secs=[1250, 9000],
-        shape=(30, 25),
-        acq="/Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1"
-    )
-
-    registry.add(
-        name="ROLI_F1_s1200_s1249",
-        proc_dir="/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/s1200_s1249",
-        grid_num=0,
-        secs=[1200, 1249],
-        shape=(30, 25),
-        acq="/Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1",
-        pixel_size = 10,
-        cut_thickness = 25
-    )
-
-
-    # Add more as needed...
     return registry.get_all()

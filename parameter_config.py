@@ -1,14 +1,7 @@
-from pydantic import BaseModel
-from typing import List
+from pydantic import BaseModel, field_validator, model_validator
+from typing import Tuple, Dict
 
-
-class ExperimentConfig(BaseModel):
-    path: str = ""
-    grid_num: int = 0
-    first_sec: int = 0
-    last_sec: int = 0
-    grid_shape: List[int] = []
-    acq_dir: str = ""
+from inspection_utils_refactor import cross_platform_path
 
 
 class AcquisitionConfig(BaseModel):
@@ -19,12 +12,38 @@ class AcquisitionConfig(BaseModel):
     thickness: float = 25
     resolution_xy: float = 10
 
-class ProjectConfig(BaseModel):
-    path: str = ""
+    @field_validator('sbem_root_dir', mode='before')
+    @classmethod
+    def normalize_paths(cls, v):
+        return cross_platform_path(v) if v else v
 
-class SystemConfig(BaseModel):
-    root: str = ""
-    projects: List[ProjectConfig]
+
+class ExpConfig(BaseModel):
+    name: str
+    acq_dir: str
+    proc_dir: str
+    grid_num: int
+    grid_shape: Tuple[int, int]
+    first_sec: int
+    last_sec: int
+    pixel_size: int = 10
+    cut_thickness: int = 25
+
+    @field_validator('acq_dir', 'proc_dir', mode='before')
+    @classmethod
+    def normalize_paths(cls, v):
+        return cross_platform_path(v) if v else v
+
+    @model_validator(mode='after')
+    def validate_range(self) -> 'ExpConfig':
+        if self.first_sec > self.last_sec:
+            raise ValueError(f"first_sec ({self.first_sec}) > last_sec ({self.last_sec})")
+        return self
+
+
+class AppConfig(BaseModel):
+    exp_yaml_path: str = "app_data/user_experiments.yaml"
+    projects: Dict[str, ExpConfig] = {}
 
 
 class FlowFieldEstimationConfig(BaseModel):

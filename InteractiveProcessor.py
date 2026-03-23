@@ -1,5 +1,4 @@
-from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
+from typing import Dict, Any
 import numpy as np
 
 from dash import Dash, dcc, html, Input, Output, State, callback, ctx, no_update, ALL
@@ -7,53 +6,9 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-import experiment_configs as cfg
-from coarse_offset_processor import CoarseOffsetProcessor
+from data_service import service as data_service
+from constants import UIConstants, OverlapType
 
-
-# --- 1. DOMAIN MODELS & CONSTANTS ---
-
-@dataclass(frozen=True)
-class OverlapType:
-    HORIZONTAL = "H"
-    VERTICAL = "V"
-
-
-class UIConstants:
-    """Centralized UI configuration and styling."""
-    THEME = dbc.themes.BOOTSTRAP
-    PRIMARY_COLOR = "#007bff"
-    TRACE_COLOR = "#2c3e50"
-    HIGHLIGHT_COLOR = "red"
-
-    # Mapping CurveNumber -> OverlapType
-    # This is the 'Source of Truth' for event handling
-    SELECTION_MAP = {
-        0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
-        2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
-    }
-
-
-# --- 2. DATA PROVIDER (Singleton Pattern) ---
-
-class DataService:
-    """Handles data fetching and business logic processing."""
-
-    def __init__(self):
-        configs = cfg.get_experiment_configurations()
-        self.exp_config = configs[cfg.ExperimentName.ROLI_F1]
-        self.processor = CoarseOffsetProcessor(self.exp_config)
-        self.processor.load_all_offsets_and_tile_id_maps_from_npz()
-        self.tile_ids = self.processor.get_largest_tile_id_map()
-
-    def get_trace(self, tid: str):
-        return self.processor.get_full_trace(tid)
-
-
-data_service = DataService()
-
-
-# --- 3. UI FACTORIES ---
 
 class LayoutFactory:
     """Static methods to generate complex UI components."""
@@ -107,7 +62,7 @@ class LayoutFactory:
         ], className="p-2 mb-1 border rounded bg-white d-flex align-items-center shadow-sm")
 
 
-# --- 4. APPLICATION SETUP ---
+# --- APPLICATION SETUP ---
 
 app = Dash(__name__, external_stylesheets=[UIConstants.THEME])
 
@@ -161,7 +116,7 @@ app.layout = dbc.Container([
 ], fluid=True)
 
 
-# --- 5. CALLBACK LOGIC ---
+# --- CALLBACK LOGIC ---
 
 @callback(
     Output('selection-store', 'data'),
@@ -281,7 +236,6 @@ def render_main_visuals(grid_click, selection_store):
             col, idx_x, idx_y = (1, 0, 1) if is_h else (2, 2, 3)
 
             marker_style = dict(size=12, color=UIConstants.HIGHLIGHT_COLOR, symbol='circle-open', line=dict(width=2))
-
             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_x, data_idx]], mode='markers', marker=marker_style,
                                      hoverinfo='skip'), row=1, col=col)
             fig.add_trace(go.Scatter(x=[z_val], y=[shifts[idx_y, data_idx]], mode='markers', marker=marker_style,

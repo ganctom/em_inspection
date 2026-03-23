@@ -17,6 +17,38 @@ class UIConstants:
     THEME_LIGHT = dbc.themes.BOOTSTRAP
     THEME_DARK = dbc.themes.SLATE
 
+    # SETUP Page
+    NAME_BTN_ADD_EXP = "Add Experiment"
+    NAME_BTN_PARSE = "Parse Experiment"
+    NAME_BTN_INIT = "Initialize Project"
+
+    ID_BTN_ADD_EXP = "add-new-exp-btn"
+    ID_BTN_PARSE = "parse-exp-btn"
+    ID_BTN_INIT = "load-config-btn"
+
+    BTN_PARSE_CFG = {
+        "children": NAME_BTN_PARSE,
+        "id": ID_BTN_PARSE,
+        "color": "primary",
+        "outline": True
+    }
+
+    BTN_ADD_EXP_CFG = {
+        "children": NAME_BTN_ADD_EXP,
+        "id": ID_BTN_ADD_EXP,
+        "color": "primary",
+        "outline": True
+    }
+
+    BTN_INIT_CFG = {
+        "children": NAME_BTN_INIT,
+        "id": ID_BTN_INIT,
+        "color": "success",
+        "className": "w-100 mt-3",
+        "disabled": True
+    }
+
+    # INSPECTOR PAGE
     # Graph Colors
     BG_DARK = "#1e1e1e"
     GRID_DARK = "#333333"
@@ -35,6 +67,8 @@ class UIConstants:
         0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
         2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
     }
+
+
 
 class DataConstants:
     CACHED_BASKET_ITEMS = 15

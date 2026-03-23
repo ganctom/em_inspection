@@ -4,11 +4,6 @@ from data_service import service
 
 
 # --- CALLBACK 1: MANAGE THE NUDGE STATE ---
-# processing.py - Update handle_nudging callback
-
-from dash import Input, Output, State, ctx, no_update, ALL
-
-
 @app.callback(
     [Output('manual-nudge-store', 'data'),
      Output('active-item-index', 'data')],

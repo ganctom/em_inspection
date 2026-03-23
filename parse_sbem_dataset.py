@@ -34,7 +34,8 @@ class Validator:
             Path(p) for p in filter_and_sort_sections(self.dir_sections)
         ]
 
-    def validate_parsed_sbem_acquisition(self) -> None:
+
+    def validate_parsed_sbem_acquisition(self) -> List[int]:
         section_nums = [
             int(Path(d).name.split("_")[0].strip("s")) for d in self.section_dirs
         ]
@@ -45,6 +46,7 @@ class Validator:
         write_dict_to_yaml(
             str(self.root / "missing_sections.yaml"), missing_sections
         )
+        return missing_sections
 
 
     def get_missing_sections(self, section_nums: List[int]) -> List[int]:
@@ -57,14 +59,14 @@ class Validator:
             fp = str(Path(self.dir_sections) / "missing_section_folders.yaml")
             write_dict_to_yaml(fp, missing_nums)
             is_are = "is" if len(missing_nums) == 1 else "are"
-            logging.warning(
+
+            logging.info(
                 f"There {is_are} {len(missing_nums)} missing sections in 'sections' folder!"
             )
-
         return missing_nums
 
 
-    def validate_tile_id_maps(self) -> None:
+    def validate_tile_id_maps(self) -> List[str]:
         invalid_tile_id_maps = []
         for section in tqdm(self.section_dirs):
             if not valid_tile_id_map(section):
@@ -74,10 +76,12 @@ class Validator:
         with open(output_path, "w") as f:
             yaml.safe_dump(invalid_tile_id_maps, f)
 
-        logging.warning(
+        logging.info(
             f"There are {len(invalid_tile_id_maps)} invalid tile-id maps!\n"
             f"Check {output_path}."
         )
+        return invalid_tile_id_maps
+
 
 def filter_and_sort_sections(sections_dir: Path) -> Optional[List[str]]:
     """
@@ -275,7 +279,7 @@ def parse_data(
         if section_in_range(section.get_name(), start_section, end_section):
             sections[section.get_name()] = section
 
-    for tile_spec in tile_specs:
+    for tile_spec in tqdm(tile_specs, desc="Processing Tiles"):
         section_name = f"s{tile_spec['z']}_g{tile_grid_num}"
         if section_in_range(section_name, start_section, end_section):
             if section_name in sections.keys():
@@ -313,7 +317,7 @@ def parse_data(
             )
 
     section_paths = []
-    for section in sections.values():
+    for section in tqdm(sections.values(), desc="Saving to Disk"):
         section.save(path=output_dir, overwrite=True)
         tile_id_map_path = join(output_dir, section.get_name(), "tile_id_map.json")
         if not exists(tile_id_map_path):
