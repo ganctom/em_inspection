@@ -108,14 +108,35 @@ def layout():
             # --- RIGHT COLUMN: LOAD EXISTING ---
             dbc.Col([
                 html.Div([
+                    # --- HEADER ---
                     html.H4("Existing Experiments", className="mb-3"),
                     html.P("Select a pre-configured experiment to begin inspection.",
                            className="text-muted small"),
 
-                    dbc.Select(**UI.SEL_EXPERIMENT, options=options,value=initial_exp,),
+                    # Selection dropdown
+                    dbc.Select(**UI.SEL_EXPERIMENT, options=options, value=initial_exp),
 
+                    # Placeholder for dynamic experiment info
                     html.Div(id="experiment-details-card"),
-                    dbc.Button(**UI.BTN_INIT),
+
+                    # --- BUTTON GROUP ---
+                    html.Div([
+                        # 1. Initialize Project Button
+                        dbc.Button(**UI.BTN_INIT),
+
+                        # 2. Store Offsets & Maps Button with Tooltip Wrapper
+                        html.Span([
+                            dbc.Button(**UI.BTN_BCKP_CO)
+                        ], id=UI.ID_BTN_BCKP_WRAPPER, className="d-grid"),
+
+                        dbc.Tooltip(
+                            id=UI.ID_TTP_BCKP,
+                            target=UI.ID_BTN_BCKP_WRAPPER,
+                            placement="bottom",
+                            trigger="hover",
+                        )
+                    ], className="d-grid gap-2 mt-3")  # mt-3 separates buttons from the details card
+
                 ], className="p-4 bg-light border rounded h-100")
             ], width=5),
         ], className="mt-5 g-4"),

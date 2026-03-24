@@ -21,11 +21,31 @@ class UIConstants:
     THEME_LIGHT = dbc.themes.BOOTSTRAP
     THEME_DARK = dbc.themes.SLATE
 
+    # Graph Colors
+    BG_DARK = "#1e1e1e"
+    GRID_DARK = "#333333"
+    TEXT_DARK = "#f8f9fa"
+
+    # Grid Navigator
+    CLR_GRID_TILES_ACTIVE = "#0dcaf0"
+    CLR_GRID_TILES_ACTIVE_ID = "#212529"
+    CLR_GRID_BASE_HTMP = '#e9ecef'
+    CLR_BASE = 'rgba(0,0,0,0)'
+    CLR_DIM = "rgba(0, 0, 0, 0.1)"
+    SIZE_TEXT_GRID_TILE_ID = 10
+    SIZE_MARKER_GRID_TILE_ACTIVE = 28
+
+    SELECTION_MAP = {
+        0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
+        2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
+    }
+
 
     # --- NAMES ---
     NAME_BTN_ADD_EXP = "Add Experiment"
     NAME_BTN_PARSE = "Parse Experiment"
     NAME_BTN_INIT = "Initialize Project"
+    NAME_BTN_BCKP_CO = "Store coarse offsets for Inspection"
 
     NAME_INP_NAME = "Experiment Name"
     NAME_INP_ACQ = "Acquisition Directory (Absolute Path)"
@@ -53,10 +73,15 @@ class UIConstants:
     ID_INP_FIRST_SEC = "new-exp-first-sec"
     ID_INP_LAST_SEC = "new-exp-last-sec"
     ID_SEL_EXPERIMENT = "experiment-select"
+    ID_BTN_BCKP_CO = "init-exp-backup-co"
+    ID_TTP_BCKP = "bckp-btn-tooltip"
+    ID_BTN_BCKP_WRAPPER = "bckp-btn-wrapper"
 
     # --- Messages ---
-    MSG_PARSE_DISABLED = "Please add a new experiment or initialize an existing one before parsing."
-    MSG_PARSE_READY = "Click to start parsing and validation."
+    MSG_PARSE_DISABLED = "Add a new experiment or initialize an existing one before parsing acquired data."
+    MSG_PARSE_READY = "Click to start parsing the acquired dataset and validation."
+    MSG_BCKP_CO_DISABLED = "Initialize the project to enable coarse offsets backup or downstream workflow steps."
+    MSG_BCKP_CO_READY = "Click to aggregate and store offsets and tile-id maps to enable inspection."
 
     # Standard Label Style
     LBL_CFG = {"className": "small mb-0"}
@@ -182,6 +207,10 @@ class UIConstants:
     @property
     def BTN_INIT(self):
         return self.button_factory(self.ID_BTN_INIT, self.NAME_BTN_INIT, className="w-100 mt-3", disabled=True)
+
+    @property
+    def BTN_BCKP_CO(self):
+        return self.button_factory(self.ID_BTN_BCKP_CO, self.NAME_BTN_BCKP_CO, className="w-100 mt-3", disabled=True)
 
     @property
     def SEL_EXPERIMENT(self):

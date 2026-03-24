@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter_ns
 import subprocess
 from collections import OrderedDict
@@ -10,7 +11,7 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any
+from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable
 from platform import system
 from re import compile
 from glob import glob
@@ -46,8 +47,8 @@ GridXY = tuple[Any, Any, Any]
 # 1. Standardized Data Model (Interface Segregation)
 @dataclass(frozen=True)
 class CoarseData:
-    cx: np.ndarray[float]
-    cy: np.ndarray[float]
+    cx: np.ndarray[np.float32]
+    cy: np.ndarray[np.float32]
     coarse_mesh: Optional[np.ndarray] = None
 
 
@@ -67,21 +68,22 @@ class NpzReader(CoarseDataReader):
                 coarse_mesh=data['coarse_mesh']
             )
 
-
 class JsonReader(CoarseDataReader):
     def read(self, path: Path) -> CoarseData:
-        with open(str(path), 'r') as f:
+        with open(path, 'r') as f:
             content = f.read().replace('NaN', 'null')
             data = json.loads(content)
-            cx = np.array(data.get('cx', []), dtype=float)
-            cy = np.array(data.get('cy', []), dtype=float)
+
+            cx = np.array(data.get('cx', []), dtype=np.float32)
+            cy = np.array(data.get('cy', []), dtype=np.float32)
             if cx.ndim == 4:
                 cx = cx[:, 0, ...]
                 cy = cy[:, 0, ...]
             if cx.ndim == 5:
                 cx = cx[:, 0, 0, ...]
                 cy = cy[:, 0, 0, ...]
-            return CoarseData(cx=cx, cy=cy, coarse_mesh=None)
+
+            return CoarseData(cx=cx, cy=cy)
 
 # 4. The Factory (Open/Closed Principle)
 class CoarseDataFactory:
@@ -266,8 +268,6 @@ def filter_and_sort_sections(sections_dir: str) -> Optional[list[str]]:
     return sorted_dirs if sorted_dirs else None
 
 
-
-
 def process_dirs_unix(directory_path: str) -> Optional[tuple[list[Path], list[str], list[int], dict[int, str]]]:
     """Process directories using Unix commands and return lists and dictionaries based on section number."""
 
@@ -346,61 +346,85 @@ def get_tile_id_map(path_tid_map: UniPath) -> np.ndarray:
         raise ValueError(f"Error loading tile ID map from {path_tid_map}: {str(e)}")
 
 
-def aggregate_coarse_offsets(
-        section_dirs: list[UniPath],
-        fn_coarse_offsets: str = 'cx_cy.json'
-) -> tuple[Dict[str, np.ndarray], list[str]]:
-
-    offsets = {}
-    failed_paths = []
-
-    for p in section_dirs:
-        path_to_check = Path(p) / fn_coarse_offsets
-        sec_num_str = str(get_section_num(p))
-
-        if path_to_check.exists():
-            coarse_data: CoarseData = read_coarse_mat(path_to_check)
-            cx = coarse_data.cx
-            cy = coarse_data.cy
-            if cx.ndim == 4:
-                cx = cx[:, 0, ...]
-                cy = cy[:, 0, ...]
-            if cx.ndim == 5:
-                cx = cx[:, 0, 0, ...]
-                cy = cy[:, 0, 0, ...]
-            cxy = np.asarray((cx, cy), dtype=float)
-            offsets[sec_num_str] = cxy
-        else:
-            logging.debug(f's{sec_num_str} coarse-offsets file does not exist')
-            failed_paths.append(f's{sec_num_str}\n')
-
-    return offsets, failed_paths
-
-
-def aggregate_tile_id_maps(
-        section_dirs: list[UniPath]
-) -> tuple[Dict[str, np.ndarray], list[str]]:
+def aggregate_parallel(
+        section_dirs: List[Path],
+        target_filename: str,
+        processing_func: Callable[[Path], Any],
+        progress_cb: Optional[Callable[[int, int], None]] = None,
+        max_workers: int = 8
+) -> Tuple[Dict[str, Any], List[str]]:
     """
-    Load tile_id_maps arrays from input folder and return them
-    as a dictionary with section numbers as keys
+    Aggregates data from multiple directories in parallel using a provided processing function.
 
-    :param section_dirs:
-    :return: dictionary mapping tile_id array to section number
+    This engine walks through a list of directory paths, looks for a specific target file,
+    and applies an injected 'processing_func' to each file found. It handles I/O
+    concurrency via multi-threading and provides progress updates via an optional callback.
+
+    Args:
+        section_dirs (List[Path]): A list of Path objects pointing to the directories
+            to be processed (e.g., individual section folders).
+        target_filename (str): The name of the file to look for within each directory
+            (e.g., 'cx_cy.json').
+        processing_func (Callable[[Path], Any]): A function that takes a Path to the
+            target file and returns the processed data object (e.g., a NumPy array).
+        progress_cb (Optional[Callable[[int, int], None]]): A callback function
+            used for UI progress updates. Receives (current_count, total_count).
+        max_workers (int): The maximum number of threads to use for parallel I/O.
+            Defaults to 8.
+
+    Returns:
+        Tuple[Dict[str, Any], List[str]]: A tuple containing:
+            - A dictionary mapping section identifiers (strings) to their processed data.
+            - A list of error strings or paths for files that were missing or failed
+              to process.
     """
-    maps: dict = {}
-    failed_paths = []
-    fn_map = 'tile_id_map.json'
-    for section_path in tqdm(section_dirs):
-        fp_map = Path(section_path) / fn_map
-        if not fp_map.exists():
-            logging.debug(f's{get_section_num(section_path)} tile_id_map.json file does not exist')
-            failed_paths.append(f's{get_section_num(section_path)}\n')
-            continue
+    results: Dict[str, Any] = {}
+    failed_paths: List[str] = []
+    total: int = len(section_dirs)
 
-        key = str(get_section_num(section_path))
-        maps[key] = get_tile_id_map(fp_map)
+    def _worker(p: Path) -> Tuple[Optional[str], Optional[Any], Optional[str]]:
+        try:
+            sec_num_str: str = str(get_section_num(p))
+            fp: Path = p / target_filename
 
-    return maps, failed_paths
+            if not fp.exists():
+                return sec_num_str, None, f"s{sec_num_str} (missing {target_filename})"
+
+            data: Any = processing_func(fp)
+            return sec_num_str, data, None
+
+        except Exception as e:
+            return None, None, f"Error at {p.name}: {str(e)}"
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        mapper = executor.map(_worker, section_dirs)
+
+        for i, (sec_num, data, error) in enumerate(mapper, 1):
+            if data is not None and sec_num is not None:
+                results[sec_num] = data
+
+            if error:
+                failed_paths.append(error)
+
+            if progress_cb and (i % 10 == 0 or i == total):
+                progress_cb(i, total)
+
+    return results, failed_paths
+
+
+def process_offsets(path: Path) -> np.ndarray:
+    """
+    Now simplified because the JsonReader handles
+    dimensionality reduction internally.
+    """
+    data: CoarseData = read_coarse_mat(path)
+    return np.stack([data.cx, data.cy]).astype(np.float32)
+
+
+def process_tile_maps(path: Path) -> np.ndarray:
+    """Logic specific to tile_id_map.json."""
+    with open(path, 'r') as f:
+        return np.array(json.load(f), dtype=np.int32)
 
 
 def locate_inf_vals(
@@ -1790,6 +1814,31 @@ def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
         raise ValueError(f"No valid outlier entries found in file: {path}")
 
     return outliers_data
+
+
+def process_single_section(path_to_check: Path, sec_num_str: str):
+    """Worker function to read and process a single JSON file."""
+    try:
+        if not path_to_check.exists():
+            return sec_num_str, None, f"s{sec_num_str}\n"
+
+        # Assume read_coarse_mat is your custom JSON reader
+        coarse_data = read_coarse_mat(path_to_check)
+        cx, cy = coarse_data.cx, coarse_data.cy
+
+        # Efficiently handle dimensionality reduction
+        # Using slice(0, 1) or indexing to avoid multiple ndim checks if consistent
+        while cx.ndim > 2:
+            cx = cx[:, 0, ...]
+            cy = cy[:, 0, ...]
+
+        cxy = np.asarray((cx, cy), dtype=np.float32)  # float32 saves 50% space vs float64
+        return sec_num_str, cxy, None
+    except Exception as e:
+        logging.error(f"Error processing section {sec_num_str}: {e}")
+        return sec_num_str, None, f"s{sec_num_str} (error)\n"
+
+
 
 def test_tle_id_map():
     root = "/Volumes/storage/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01/sections/s1240_g0/"

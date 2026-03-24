@@ -1,3 +1,4 @@
+import logging
 import threading
 import dash
 import dash_bootstrap_components as dbc
@@ -7,8 +8,10 @@ from experiment_configs import get_experiment_configurations
 from constants import UI
 
 
+# --- 1. INITIALIZATION CALLBACK ---
 @callback(
-    Output("setup-feedback", "children"),
+    # ADDED allow_duplicate=True HERE
+    Output("setup-feedback", "children", allow_duplicate=True),
     [Input(UI.BTN_INIT['id'], "n_clicks"),
      Input(UI.BTN_ADD_EXP['id'], "n_clicks")],
     [State(UI.ID_SEL_EXPERIMENT, "value"),
@@ -27,7 +30,6 @@ from constants import UI
 def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
                                   n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
     trigger = ctx.triggered_id
-
     try:
         if trigger == UI.ID_BTN_INIT:
             configs = get_experiment_configurations()
@@ -46,15 +48,12 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
             service.create_and_save_new_experiment(
                 n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
             )
-
             return dbc.Alert([
                 html.H5("Success!", className="alert-heading"),
                 html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
             ], color="success", className="mt-3")
-
     except Exception as e:
-        return dbc.Alert(
-            f"Initialization Error: {str(e)}", color="danger", className="mt-3")
+        return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3")
 
 
 @callback(
@@ -141,7 +140,72 @@ def toggle_parse_button(exp_name, feedback, n_init):
     return button_disabled, tooltip_msg
 
 
-# --- POLLER CALLBACK ---
+# Callback for storing all cx_cy.json files into a .npz container
+@callback(
+    [Output("setup-feedback", "children", allow_duplicate=True),
+     Output("progress-interval", "disabled", allow_duplicate=True)],
+    Input(UI.ID_BTN_BCKP_CO, "n_clicks"),
+    State(UI.ID_SEL_EXPERIMENT, "value"),
+    prevent_initial_call=True
+)
+def handle_coarse_offset_backup(n_clicks, sel_name):
+    if not n_clicks or not sel_name:
+        return dash.no_update, dash.no_update
+
+    try:
+        # Start the thread
+        thread = threading.Thread(target=service.run_offsets_backup_thread, daemon=True)
+        thread.start()
+
+        # UI initialization
+        initial_ui = dbc.Alert([
+            html.Div("Initializing backup...", className="small fw-bold mb-1"),
+            dbc.Progress(value=0, striped=True, animated=True, style={"height": "25px"}),
+        ], color="info", className="mt-3")
+
+        return initial_ui, False # Enable interval
+
+    except Exception as e:
+        return dbc.Alert(f"Error: {str(e)}", color="danger", className="mt-3"), True
+
+
+@callback(
+    [Output(UI.ID_BTN_BCKP_CO, "disabled"),
+     Output(UI.ID_TTP_BCKP, "children")],
+    [Input(UI.ID_SEL_EXPERIMENT, "value"),
+     Input("setup-feedback", "children"),
+     Input(UI.ID_BTN_INIT, "n_clicks")],
+    State(UI.ID_TTP_BCKP, "children"),
+    prevent_initial_call=False
+)
+def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
+    # 1. Backend Match Check:
+    has_matching_config = (
+        service.exp_config is not None and
+        service.exp_config.name == sel_name
+    )
+
+    # 2. Frontend Check: Is an experiment actually selected?
+    has_selection = bool(sel_name and sel_name.strip())
+
+    # 3. Validation Check: Did the last initialization fail?
+    is_error = False
+    if isinstance(feedback, dict) and 'props' in feedback:
+        is_error = feedback.get('props', {}).get('color') == 'danger'
+
+    # The "Green Light" condition
+    is_ready = has_matching_config and has_selection and not is_error
+
+    # Final States
+    button_disabled = not is_ready
+    new_msg = UI.MSG_BCKP_CO_READY if is_ready else UI.MSG_BCKP_CO_DISABLED
+
+    # Only update tooltip text if it changed (prevents tab-switch flickering)
+    tooltip_output = new_msg if new_msg != current_ttp_text else dash.no_update
+
+    return button_disabled, tooltip_output
+
+
 @callback(
     [Output("parsing-progress-bar", "value"),
      Output("parsing-progress-bar", "label"),
@@ -154,42 +218,52 @@ def toggle_parse_button(exp_name, feedback, n_init):
     Input("progress-interval", "n_intervals"),
     prevent_initial_call=True
 )
-def update_ui_from_service(n):
-    service.update_percentage_only()
-    status = service.parsing_status
-    finished = not status["active"] and status["progress"] >= 100
+def master_ui_poller(n):
+    """A single source of truth for all background process UI updates."""
 
-    final_alert = dash.no_update
-    if finished:
-        missing = status.get("missing_count", 0)
-        invalid = status.get("invalid_maps_count", 0)
+    # --- CASE A: BACKUP IS ACTIVE ---
+    if service.backup_status["active"] or (
+            service.backup_status["progress"] == 100 and not service.backup_status["error"] is None):
+        status = service.backup_status
+        active = status["active"]
+        progress = status["progress"]
+        finished = not active and progress >= 100
 
-        # Determine alert color based on findings
-        alert_color = "success" if (missing == 0 and invalid == 0) else "warning"
+        # Reset state on finish so we don't loop
+        if finished: service.backup_status["progress"] = 0
 
-        final_alert = dbc.Alert([
-            html.H5("Processing Complete", className="alert-heading"),
-            html.P("Parsing and Validation finished."),
-            html.Ul([
-                html.Li(f"Missing Section Folders: {missing}"),
-                html.Li(f"Invalid Tile-ID Maps: {invalid}"),
-            ], className="mb-0")
-        ], color=alert_color, className="mt-3")
+        content = dbc.Alert([
+            html.Div([
+                html.Div(status["message"], className="small fw-bold mb-1"),
+                dbc.Progress(value=progress, label=f"{progress}%", striped=True,
+                             animated=active, color="success" if finished else "primary", style={"height": "25px"}),
+            ])
+        ], color="success" if finished else "info", className="mt-3")
 
-    # Visual state
-    is_animated = not finished
-    is_striped = not finished
-    bar_color = "success" if finished else "primary"
-    if finished and (status.get("missing_count", 0) > 0 or status.get("invalid_maps_count", 0) > 0):
-        bar_color = "warning"  # Visually flag that it's done but with issues
+        # Return Backup UI (Fill parsing outputs with no_update)
+        return (dash.no_update, dash.no_update, dash.no_update, finished, content,
+                dash.no_update, dash.no_update, dash.no_update)
 
-    return (
-        status["progress"],
-        f"{status['progress']}%",
-        status["message"],
-        finished,
-        final_alert,
-        is_animated,
-        is_striped,
-        bar_color
-    )
+    # --- CASE B: PARSING IS ACTIVE ---
+    elif service.parsing_status["active"] or service.parsing_status["progress"] > 0:
+        service.update_percentage_only()
+        status = service.parsing_status
+        finished = not status["active"] and status["progress"] >= 100
+
+        final_alert = dash.no_update
+        if finished:
+            service.parsing_status["progress"] = 0  # Reset
+            alert_color = "success" if (status.get("missing_count", 0) == 0) else "warning"
+            final_alert = dbc.Alert([
+                html.H5("Processing Complete", className="alert-heading"),
+                html.Ul([
+                    html.Li(f"Missing Folders: {status.get('missing_count', 0)}"),
+                    html.Li(f"Invalid Maps: {status.get('invalid_maps_count', 0)}"),
+                ], className="mb-0")
+            ], color=alert_color, className="mt-3")
+
+        return (status["progress"], f"{status['progress']}%", status["message"], finished,
+                final_alert, not finished, not finished, "success" if finished else "primary")
+
+    # --- CASE C: NOTHING ACTIVE ---
+    return dash.no_update, dash.no_update, dash.no_update, True, dash.no_update, dash.no_update, dash.no_update, dash.no_update

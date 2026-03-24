@@ -90,8 +90,11 @@ class CoarseOffsetProcessor:
 
     def load_all_offsets_and_tile_id_maps_from_npz(self):
         """Modified to index errors immediately upon loading."""
-        if not self.path_cxyz.exists() or not self.path_id_maps.exists():
+        if not self.path_cxyz.exists():
             raise FileNotFoundError(f"Files missing: {self.path_cxyz}")
+
+        if not self.path_id_maps.exists():
+            raise FileNotFoundError(f"Files missing: {self.path_id_maps}")
 
         with np.load(self.path_cxyz, allow_pickle=False) as data:
             self.cxyz_obj = {key: data[key].copy() for key in data.files}
@@ -352,56 +355,8 @@ class CoarseOffsetProcessor:
         return self._coord_cache[sec_key].get(tile_id)
 
 
-def tst_init_co_processor():
-    root = "/Volumes/storage/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01"
-    root = Path(root)
-
-    paths = {
-        'inspect': root / "_inspect",
-        'cxyz': root / "_inspect" / "all_offsets.npz",
-        'tid_maps': root / "_inspect" / "all_tile_id_maps.npz",
-        'co_outliers': root / "_inspect" / "outliers.txt"
-    }
-
-    # Get actual config
-    configs = cfg.get_experiment_configurations()
-    exp_config = configs[cfg.ExperimentName.ROLI_F1]
-
-    # Initialize CoarseOffsetProcessor and read coarse offsets
-    return CoarseOffsetProcessor(exp_config, paths)
-
-def tst_get_full_trace():
-    # Get one trace from 'all_offsets.npz' and plot it
-    co_processor = tst_init_co_processor()
-    co_processor.load_all_offsets_and_tile_id_maps_from_npz()
-
-    tile_id = 413
-    trace = co_processor.get_full_trace(str(tile_id))
-
-    x = trace.section_numbers
-    y = trace.shift_vectors[0][:]
-
-    plt.plot(x, y, '-')
-    plt.show()
-    return
-
-def tst_store_offsetes():
-    co_processor = tst_init_co_processor()
-    co_processor.load_all_offsets_and_tile_id_maps_from_npz()
-
-    # Get type of matrices within cxyz container
-    mat_type = type(co_processor.cxyz_obj['3000'])
-    print(mat_type)
-
-    # Get type of items in matrices
-    item_type = type(co_processor.cxyz_obj['3000'][0][0][0][0])
-    print(item_type)
-
-    # Modify some items in cxyz container
-    return
-
 
 if __name__ == "__main__":
     # test_get_largest_tile_id_map()
     # tst_get_full_trace()
-    tst_store_offsetes()
+    pass

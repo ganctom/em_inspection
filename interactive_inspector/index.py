@@ -71,8 +71,8 @@ app.layout = html.Div([
     ], style={"height": "100vh", "display": "flex", "flexDirection": "column"})
 ])
 
-# --- ROUTING CALLBACKS ---
 
+# --- ROUTING CALLBACKS ---
 @callback(
     Output('page-content', 'children'),
     Input('url', 'pathname')
@@ -103,6 +103,7 @@ def display_page(pathname):
             html.H1("404"),
             html.P(f"Path '{pathname}' not found.")
         ], className="p-5 text-center")
+
 
 @callback(
     [Output("step-1", "active"),

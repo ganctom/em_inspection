@@ -1,6 +1,7 @@
 import io
 import re
 import sys
+import time
 from dataclasses import dataclass
 import logging
 from typing import Optional, Tuple, Any
@@ -9,6 +10,7 @@ import numpy as np
 import gc
 import threading
 
+import inspection_refactored
 from experiment_configs import ExperimentRegistry, ExpConfig
 from parameter_config import AcquisitionConfig
 from Tile_refactored import Tile
@@ -54,6 +56,8 @@ class DataService:
         self.parsing_status = {"active": False, "progress": 0, "message": "", "logs": ""}
         self._log_buffer = io.StringIO()
         self._log_lock = threading.Lock()
+        self.backup_status = {"active": False, "progress": 0, "message": "", "error": None}
+
 
     def create_and_save_new_experiment(
             self, exp_name, proc_dir, grid_num, grid_shape, first_sec, last_sec, acq_dir, px, ct
@@ -170,13 +174,13 @@ class DataService:
     @staticmethod
     def _prepare_acquisition_config(config) -> AcquisitionConfig:
         """Encapsulates the mapping logic."""
-        acq_cfg = AcquisitionConfig()
-        acq_cfg.sbem_root_dir = config.acq_dir
-        acq_cfg.tile_grid = f"g{config.grid_num:04d}"
-        acq_cfg.grid_shape = config.grid_shape
-        acq_cfg.thickness = config.cut_thickness
-        acq_cfg.resolution_xy = config.pixel_size
-        return acq_cfg
+        cfg = AcquisitionConfig()
+        cfg.sbem_root_dir = config.acq_dir
+        cfg.tile_grid = f"g{config.grid_num:04d}"
+        cfg.grid_shape = config.grid_shape
+        cfg.thickness = config.cut_thickness
+        cfg.resolution_xy = config.pixel_size
+        return cfg
 
 
     def load_experiment(self, config):
@@ -184,10 +188,15 @@ class DataService:
         Loads inspector, coarse offsets tensor & UI data using specified config file
         """
         self.exp_config = config
-        self.inspection = Inspection(self.exp_config)
-        self.inspection.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
+        self.inspection = Inspection(config)
         self.processor = self.inspection.co_processor
-        self.tile_ids = self.processor.get_largest_tile_id_map()
+        try:
+            self.processor.load_all_offsets_and_tile_id_maps_from_npz()
+            self.tile_ids = self.processor.get_largest_tile_id_map()
+        except FileNotFoundError as _:
+            print(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
+            logging.info(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
+
         self.clear_cache()
         logging.info(f"DataService: Loaded {config.name} successfully.")
 
@@ -198,8 +207,6 @@ class DataService:
         """
         The 'Actual' constructor called by the Setup page.
         """
-        # 1. Store the config
-
         self.exp_config = ExpConfig(
             name=exp_name,
             proc_dir=proc_dir,
@@ -210,9 +217,68 @@ class DataService:
             acq_dir=acq_dir
         )
 
-        # 2. Initialize the heavy objects
         self.inspection = Inspection(self.exp_config)
         logging.info(f"DataService: Experiment {self.exp_config.name} successfully.")
+
+
+    def _update_offsets_backup_stats(self, current, total, task_index, total_tasks=2):
+        """
+        Calculates global progress across multiple sequential tasks.
+        task_index: 0 for the first task, 1 for the second, etc.
+        """
+        # Calculate how much of the total bar this task represents (e.g., 50% each)
+        portion_size = 100 / total_tasks
+        base_progress = task_index * portion_size
+
+        # Calculate current task progress within its portion
+        task_progress = (current / total) * portion_size
+        global_progress = int(base_progress + task_progress)
+
+        self.backup_status["progress"] = global_progress
+        self.backup_status["message"] = f"Task {task_index + 1}/{total_tasks}: {current}/{total} sections..."
+
+
+    def run_offsets_backup_thread(self):
+        self.backup_status = {"active": True, "progress": 1, "message": "Initializing...", "error": None}
+        try:
+            if not self.inspection:
+                raise ValueError("No inspection object. Please load an experiment first.")
+
+            # Ensure directories are initialized
+            if not self.inspection.section_dirs:
+                fs, ls = self.inspection.first_sec, self.inspection.last_sec
+                inspection_refactored.init_specific_section_dirs(
+                    self.inspection, list(range(fs, ls + 1)))
+
+            if not self.inspection.section_dirs:
+                raise ValueError("No section directories found.")
+
+            # --- TASK 1: OFFSETS ---
+            self.inspection.backup_coarse_offsets(
+                progress_cb=lambda c, t: self._update_offsets_backup_stats(c, t, 0)
+            )
+
+            # --- TASK 2: TILE-ID MAPS ---
+            self.inspection.backup_tile_id_maps(
+                progress_cb=lambda c, t: self._update_offsets_backup_stats(c, t, 1)
+            )
+
+            self.backup_status["progress"] = 100
+            self.backup_status["message"] = "Full Backup Complete: Offsets & Tile Maps saved."
+            time.sleep(1.0)
+
+        except Exception as e:
+            logging.error(f"Backup thread failed: {e}")
+            self.backup_status["error"] = str(e)
+        finally:
+            self.backup_status["active"] = False
+
+
+    def backup_coarse_offsets_app(self):
+        if self.inspection:
+            self.inspection.backup_coarse_offsets()
+        else:
+            raise ValueError("No experiment instance available to backup.")
 
 
     def get_trace(self, tid: str):
@@ -513,7 +579,6 @@ class DataService:
             logging.debug("Caches cleared and memory freed.")
 
 
-
     def get_slider_metadata(self):
         # Check if processor exists yet
         if self.processor is None:
@@ -539,6 +604,7 @@ class DataService:
             "marks": slider_marks,
             "initial_value": z_max
         }
+
 
 # Initialize single instance
 service = DataService()

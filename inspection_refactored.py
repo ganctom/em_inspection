@@ -73,6 +73,8 @@ class Inspection:
         self.fp_missing_sections = self.root / 'missing_sections.yaml'
         self.fp_co_outliers = self.dir_inspect / 'coarse_offset_outliers.txt'
         self.fp_inf_vals = self.dir_inspect / 'inf_vals.txt'
+        self.fn_coarse_offsets = 'cx_cy.json'
+        self.fn_tile_id_map = 'tile_id_map.json'
         # self.fp_eval_ov = self._get_overlaps_path('overlap_quality_smr.npz')
         # self.fp_est_ff_cfg = self.root / 'fine_alignment_config.yaml'
 
@@ -116,8 +118,6 @@ class Inspection:
         # self.read_exp_notes()
         self.list_all_section_dirs()
         self.get_missing_sections()
-
-
         return
 
     def list_all_section_dirs(self) -> None:
@@ -211,41 +211,50 @@ class Inspection:
         failed_sec_nums = [num for num in results if num is not None]
         return failed_sec_nums
 
-    def backup_coarse_offsets(self):
-        """Stores all coarse offset arrays into a .npz file within inspect directory"""
 
-        # Collect all offsets
-        fn_coarse_offsets = "cx_cy.json"
-        offsets, missing_files = utils.aggregate_coarse_offsets(self.section_dirs, fn_coarse_offsets)
-        logging.debug(f'len missing files {len(missing_files)}')
-        for p in missing_files:
-            logging.debug(p)
+    def backup_coarse_offsets(self, progress_cb=None):
+        """Stores all coarse offset arrays into a compressed .npz file."""
+
+        offsets, missing_files = utils.aggregate_parallel(
+            section_dirs=self.section_dirs,
+            target_filename=self.fn_coarse_offsets,
+            processing_func=utils.process_offsets,
+            progress_cb=progress_cb,
+            max_workers=20
+        )
+
+        if not offsets:
+            logging.warning("No coarse offsets were found to back up.")
+            return
 
         fp_out = self.dir_inspect / "all_offsets.npz"
-        np.savez(fp_out, **offsets)
-        logging.info(f'Coarse offsets saved to: {fp_out}')
+        np.savez_compressed(fp_out, **offsets)
+        logging.info(f'Coarse offsets compressed and saved to: {fp_out}')
 
+        # Save the missing file log
         fp_out2 = fp_out.with_name("all_offsets_missing_files.txt")
         with open(fp_out2, "w") as f:
             f.writelines("\n".join(missing_files))
-        logging.info(f'Missing offsets saved to: {fp_out2}')
-        return
 
-    def backup_tile_id_maps(self):
-        # Collect all tile ID maps
-        tile_id_maps, missing_files = utils.aggregate_tile_id_maps(self.section_dirs)
-        logging.debug(f'len missing files {len(missing_files)}')
-        for p in missing_files:
-            logging.debug(p)
 
-        fp_out = self.dir_inspect / "all_tile_id_maps.npz"
-        np.savez(fp_out, **tile_id_maps)
-        logging.info(f'Tile ID maps saved to: {fp_out}')
+    def backup_tile_id_maps(self, progress_cb=None):
+        """Aggregates and stores all Tile ID maps into a .npz file."""
 
-        fp_out2 = fp_out.with_name("all_missing_tile_id_maps.txt")
-        with open(fp_out2, "w") as f:
-            f.writelines("\n".join(missing_files))
-        logging.info(f'Missing tile ID maps saved to: {fp_out2}')
+        tile_id_maps, missing_files = utils.aggregate_parallel(
+            section_dirs=self.section_dirs,
+            target_filename=self.fn_tile_id_map,
+            processing_func=utils.process_tile_maps,
+            progress_cb=progress_cb,
+            max_workers=20
+        )
+
+        if not tile_id_maps:
+            logging.warning("No tile ID maps were found to back up.")
+            return
+
+        fp_out = self.path_id_maps
+        np.savez_compressed(fp_out, **tile_id_maps)
+        logging.info(f'Tile-ID maps saved to: {fp_out}')
         return
 
 
@@ -289,7 +298,6 @@ class Inspection:
             raise ValueError("No data found in the input file.")
 
         return outliers_data
-
 
 
     def fix_false_offsets_trace(
@@ -501,7 +509,6 @@ class Inspection:
                                 blur=1.0)
                     sec.plot_ov(**args)
         return
-
 
 ###  EOF PRIVATE FUNCTIONS  ####
 
@@ -1204,7 +1211,7 @@ if __name__ == "__main__":
 
 
     ### POSTPROCESS COARSE SHIFTS
-    # main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
+    main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
 
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT
