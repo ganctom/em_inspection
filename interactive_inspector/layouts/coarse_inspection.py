@@ -71,21 +71,47 @@ def create_layout():
                         ], className="g-0 align-items-center"),
                     ], className="flex-shrink-0 px-2"),
 
-                    # Selection Basket
+                    # # Selection Basket
+                    # html.Div([
+                    #     html.Div([
+                    #         html.H6("Basket", className="mb-0 small text-uppercase text-muted"),
+                    #         html.Div([
+                    #             dbc.Button("Store (JSON)", id='export-sections-btn', color="info", size="sm",
+                    #                        className="me-1"),
+                    #             dbc.Button("Store (NPZ)", id='save-cxyz-btn', color="warning", size="sm", className="me-1"),
+                    #             dbc.Button("Clear", id='clear-selection', color="link", size="sm", className="p-0"),
+                    #         ])
+                    #     ], className="d-flex justify-content-between align-items-center mb-2 mt-4"),
+                    #     html.Div(
+                    #         id='selection-list-container',
+                    #         style={'maxHeight': '20vh', 'overflowY': 'auto', 'border': '1px solid #dee2e6',
+                    #                'borderRadius': '4px'}
+                    #     )
+                    # ], className="flex-shrink-0 px-2"),
+
+                    # Selection Basket Section in Sidebar
                     html.Div([
                         html.Div([
                             html.H6("Basket", className="mb-0 small text-uppercase text-muted"),
                             html.Div([
-                                dbc.Button("Store (JSON)", id='export-sections-btn', color="info", size="sm",
-                                           className="me-1"),
-                                dbc.Button("Store (NPZ)", id='save-cxyz-btn', color="warning", size="sm", className="me-1"),
-                                dbc.Button("Clear", id='clear-selection', color="link", size="sm", className="p-0"),
+                                dbc.Button("JSON", id='export-sections-btn', color="info", size="sm",
+                                           className="me-1 py-0"),
+                                dbc.Button("NPZ", id='save-cxyz-btn', color="warning", size="sm",
+                                           className="me-1 py-0"),
+                                dbc.Button("Clear", id='clear-selection', color="link", size="sm",
+                                           className="p-0 small"),
                             ])
                         ], className="d-flex justify-content-between align-items-center mb-2 mt-4"),
+
                         html.Div(
                             id='selection-list-container',
-                            style={'maxHeight': '20vh', 'overflowY': 'auto', 'border': '1px solid #dee2e6',
-                                   'borderRadius': '4px'}
+                            style={
+                                'maxHeight': '25vh',
+                                'overflowY': 'auto',
+                                'border': '1px solid #dee2e6',
+                                'borderRadius': '4px',
+                                'backgroundColor': '#f8f9fa'  # Light grey background to distinguish the list
+                            }
                         )
                     ], className="flex-shrink-0 px-2"),
 

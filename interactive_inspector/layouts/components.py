@@ -1,3 +1,5 @@
+from typing import Dict, Any
+
 from dash import html
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -108,33 +110,122 @@ def create_grid_navigator(
 
     return fig
 
-
 def selection_card(index: int, item: dict) -> html.Div:
-    """A condensed, row-style card to maximize sidebar space."""
+    """Compact selection card – metadata + badge, then buttons on the right with gaps.
+       Scrollbar-safe with extra right padding."""
+
     return html.Div([
-        # Metadata Group
+        # Metadata + Overlap Badge
         html.Div([
-            html.Span(f"T{item['tid']}", className="fw-bold me-2", style={'fontSize': '12px'}),
-            html.Span(f"Z{item['z']}", className="text-muted me-2", style={'fontSize': '11px'}),
+            html.Span(f"T{item['tid']}",
+                      className="fw-bold me-2",
+                      style={'fontSize': '12px'}),
+            html.Span(f"Z{item['z']}",
+                      className="text-muted me-2",
+                      style={'fontSize': '11px'}),
             dbc.Badge(
                 item['overlap'],
                 color="secondary",
                 style={'fontSize': '8px', 'padding': '2px 4px'}
-            )
-        ], className="d-flex align-items-center flex-grow-1"),
+            ),
+        ], className="d-flex align-items-center flex-grow-1 flex-shrink-1"),
 
-        # Action Group
+        # Action Buttons Group with gaps
         dbc.ButtonGroup([
-            dbc.Button("OV", id={'type': 'plot-ov-btn', 'index': index},
-                       size="sm", color="secondary", outline=True,
-                       style={'padding': '1px 5px', 'fontSize': '10px'}),
-            dbc.Button("Calc", id={'type': 'compute-single-btn', 'index': index},
-                       size="sm", color="primary", outline=True,
-                       style={'padding': '1px 5px', 'fontSize': '10px'}),
-            dbc.Button("×", id={'type': 'remove-btn', 'index': index},
-                       size="sm", color="danger", outline=True,
-                       style={'padding': '1px 5px', 'fontSize': '10px'})
-        ], className="ms-1")
-    ], className="d-flex align-items-center p-1 px-2 border-bottom bg-white hover-shadow-sm",
-       style={'minHeight': '32px'})
+            dbc.Button("OV",
+                       id={'type': 'plot-ov-btn', 'index': index},
+                       size="sm",
+                       color="secondary",
+                       outline=True,
+                       style={'padding': '1px 6px', 'fontSize': '10px'}),
 
+            dbc.Button("Calc",
+                       id={'type': 'compute-single-btn', 'index': index},
+                       size="sm",
+                       color="primary",
+                       outline=True,
+                       style={'padding': '1px 6px', 'fontSize': '10px'}),
+
+            dbc.Button("×",
+                       id={'type': 'remove-btn', 'index': index},
+                       size="sm",
+                       color="danger",
+                       outline=True,
+                       style={'padding': '2px 7px', 'fontSize': '10px'}),
+        ],
+        className="flex-shrink-0 gap-1")   # ← This adds nice gap between buttons
+    ],
+        className="d-flex align-items-center gap-3 p-1 px-3 border-bottom bg-white hover-shadow-sm",
+        style={
+            'minHeight': '32px',
+            'paddingRight': '20px'   # increased a bit for extra safety with gap
+        }
+    )
+
+# def selection_card_orig(index: int, item: dict) -> html.Div:
+#     """A condensed, row-style card to maximize sidebar space."""
+#     return html.Div([
+#         # Metadata Group
+#         html.Div([
+#             html.Span(f"T{item['tid']}", className="fw-bold me-2", style={'fontSize': '12px'}),
+#             html.Span(f"Z{item['z']}", className="text-muted me-2", style={'fontSize': '11px'}),
+#             dbc.Badge(
+#                 item['overlap'],
+#                 color="secondary",
+#                 style={'fontSize': '8px', 'padding': '2px 4px'}
+#             )
+#         ], className="d-flex align-items-center flex-grow-1"),
+#
+#         # Action Group
+#         dbc.ButtonGroup([
+#             dbc.Button("OV", id={'type': 'plot-ov-btn', 'index': index},
+#                        size="sm", color="secondary", outline=True,
+#                        style={'padding': '1px 5px', 'fontSize': '10px'}),
+#             dbc.Button("Calc", id={'type': 'compute-single-btn', 'index': index},
+#                        size="sm", color="primary", outline=True,
+#                        style={'padding': '1px 5px', 'fontSize': '10px'}),
+#             dbc.Button("×", id={'type': 'remove-btn', 'index': index},
+#                        size="sm", color="danger", outline=True,
+#                        style={'padding': '1px 5px', 'fontSize': '10px'})
+#         ], className="ms-1")
+#     ], className="d-flex align-items-center p-1 px-2 border-bottom bg-white hover-shadow-sm",
+#        style={'minHeight': '32px'})
+
+# def selection_card(i, item):
+#     """
+#     Aligns buttons immediately to the right of the label.
+#     This prevents scrollbar overlap by keeping everything on the left.
+#     """
+#     tid = item.get('tid', '??')
+#     z = item.get('z', '??')
+#     entry_type = item.get('type', 'MANUAL')
+#
+#     label = f"T{tid} | Z{z}"
+#     is_inf = (entry_type == 'INF_ERROR')
+#     label_class = "text-danger fw-bold" if is_inf else "text-dark"
+#
+#     return html.Div([
+#         # 1. The Label (Left-aligned)
+#         html.Span(label, className=f"small font-monospace {label_class} me-3",
+#                   style={"minWidth": "90px"}),
+#
+#         # 2. The Buttons (Immediately following the label)
+#         html.Div([
+#             dbc.Button(
+#                 "OV", id={'type': 'plot-ov-btn', 'index': i},
+#                 size="sm", color="info", outline=True,
+#                 className="py-0 px-1", style={"fontSize": "10px"}
+#             ),
+#             dbc.Button(
+#                 "Calc", id={'type': 'compute-single-btn', 'index': i},
+#                 size="sm", color="warning", outline=True,
+#                 className="py-0 px-1", style={"fontSize": "10px"}
+#             ),
+#             dbc.Button(
+#                 "X", id={'type': 'remove-btn', 'index': i},
+#                 size="sm", color="danger",
+#                 className="py-0 px-1", style={"fontSize": "10px"}
+#             ),
+#         ], className="d-flex gap-2")  # Use 'gap-2' for consistent spacing between buttons
+#
+#     ], className="d-flex align-items-center p-1 border-bottom bg-white")
