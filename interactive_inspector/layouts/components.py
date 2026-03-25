@@ -4,7 +4,7 @@ from dash import html
 import dash_bootstrap_components as dbc
 import numpy as np
 import plotly.graph_objects as go
-from interactive_inspector.constants import UIConstants
+from interactive_inspector.constants import UIConstants as UI
 
 
 def create_grid_navigator(
@@ -20,11 +20,12 @@ def create_grid_navigator(
     dirty_tids = dirty_tids or set()
 
     # 1. BASE HEATMAP
+    z = np.where(tile_ids != -1, 1, np.nan)
     fig = go.Figure(data=go.Heatmap(
-        z=np.where(tile_ids != -1, 1, np.nan),
+        z=z,
         hoverinfo='skip',
-        colorscale=[[0, UIConstants.CLR_GRID_BASE_HTMP],
-                    [1, UIConstants.CLR_GRID_BASE_HTMP]],
+        colorscale=[[0, UI.CLR_GRID_BASE_HTMP],
+                    [1, UI.CLR_GRID_BASE_HTMP]],
         showscale=False, xgap=2, ygap=2
     ))
 
@@ -39,19 +40,19 @@ def create_grid_navigator(
 
         is_active = not section_filter_active or tid_int in available_tids
         if is_active:
-            text_colors.append(UIConstants.GRID_DARK)
+            text_colors.append(UI.GRID_DARK)
             if section_filter_active:
-                marker_colors.append(UIConstants.CLR_DIM)
-                line_colors.append(UIConstants.CLR_BASE)
+                marker_colors.append(UI.CLR_DIM)
+                line_colors.append(UI.CLR_BASE)
                 line_widths.append(2)
             else:
-                marker_colors.append(UIConstants.CLR_BASE)
-                line_colors.append(UIConstants.CLR_BASE)
+                marker_colors.append(UI.CLR_BASE)
+                line_colors.append(UI.CLR_BASE)
                 line_widths.append(0)
         else:
-            text_colors.append(UIConstants.GRID_DARK)
-            marker_colors.append(UIConstants.CLR_BASE)
-            line_colors.append(UIConstants.CLR_BASE)
+            text_colors.append(UI.GRID_DARK)
+            marker_colors.append(UI.CLR_BASE)
+            line_colors.append(UI.CLR_BASE)
             line_widths.append(0)
 
     fig.add_trace(go.Scatter(
@@ -59,9 +60,10 @@ def create_grid_navigator(
         mode='markers+text',
         text=text_list,
         textposition="middle center",
-        textfont=dict(family="Arial", size=UIConstants.SIZE_TEXT_GRID_TILE_ID, color=text_colors),
+        textfont=dict(family="Arial", size=UI.SIZE_TEXT_GRID_TILE_ID, color=text_colors),
         marker=dict(
-            symbol='square', size=UIConstants.SIZE_MARKER_GRID_TILE_ACTIVE,
+            symbol='square',
+            size=UI.SIZE_NAVIGATOR/UI.SIZE_MARKER_GRID_FCT/np.shape(z)[0],
             color=marker_colors,
             line=dict(color=line_colors, width=line_widths)
         ),
@@ -100,11 +102,11 @@ def create_grid_navigator(
             pass
 
     fig.update_layout(
-        height=280, margin=dict(l=0, r=0, t=0, b=0),
+        height=UI.SIZE_NAVIGATOR, margin=dict(l=0, r=0, t=0, b=0),
         xaxis=dict(visible=False, fixedrange=True),
         yaxis=dict(autorange='reversed', scaleanchor="x", visible=False, fixedrange=True),
-        plot_bgcolor=UIConstants.CLR_BASE,
-        paper_bgcolor=UIConstants.CLR_BASE,
+        plot_bgcolor=UI.CLR_BASE,
+        paper_bgcolor=UI.CLR_BASE,
         showlegend=False
     )
 
@@ -161,71 +163,3 @@ def selection_card(index: int, item: dict) -> html.Div:
             'paddingRight': '20px'   # increased a bit for extra safety with gap
         }
     )
-
-# def selection_card_orig(index: int, item: dict) -> html.Div:
-#     """A condensed, row-style card to maximize sidebar space."""
-#     return html.Div([
-#         # Metadata Group
-#         html.Div([
-#             html.Span(f"T{item['tid']}", className="fw-bold me-2", style={'fontSize': '12px'}),
-#             html.Span(f"Z{item['z']}", className="text-muted me-2", style={'fontSize': '11px'}),
-#             dbc.Badge(
-#                 item['overlap'],
-#                 color="secondary",
-#                 style={'fontSize': '8px', 'padding': '2px 4px'}
-#             )
-#         ], className="d-flex align-items-center flex-grow-1"),
-#
-#         # Action Group
-#         dbc.ButtonGroup([
-#             dbc.Button("OV", id={'type': 'plot-ov-btn', 'index': index},
-#                        size="sm", color="secondary", outline=True,
-#                        style={'padding': '1px 5px', 'fontSize': '10px'}),
-#             dbc.Button("Calc", id={'type': 'compute-single-btn', 'index': index},
-#                        size="sm", color="primary", outline=True,
-#                        style={'padding': '1px 5px', 'fontSize': '10px'}),
-#             dbc.Button("×", id={'type': 'remove-btn', 'index': index},
-#                        size="sm", color="danger", outline=True,
-#                        style={'padding': '1px 5px', 'fontSize': '10px'})
-#         ], className="ms-1")
-#     ], className="d-flex align-items-center p-1 px-2 border-bottom bg-white hover-shadow-sm",
-#        style={'minHeight': '32px'})
-
-# def selection_card(i, item):
-#     """
-#     Aligns buttons immediately to the right of the label.
-#     This prevents scrollbar overlap by keeping everything on the left.
-#     """
-#     tid = item.get('tid', '??')
-#     z = item.get('z', '??')
-#     entry_type = item.get('type', 'MANUAL')
-#
-#     label = f"T{tid} | Z{z}"
-#     is_inf = (entry_type == 'INF_ERROR')
-#     label_class = "text-danger fw-bold" if is_inf else "text-dark"
-#
-#     return html.Div([
-#         # 1. The Label (Left-aligned)
-#         html.Span(label, className=f"small font-monospace {label_class} me-3",
-#                   style={"minWidth": "90px"}),
-#
-#         # 2. The Buttons (Immediately following the label)
-#         html.Div([
-#             dbc.Button(
-#                 "OV", id={'type': 'plot-ov-btn', 'index': i},
-#                 size="sm", color="info", outline=True,
-#                 className="py-0 px-1", style={"fontSize": "10px"}
-#             ),
-#             dbc.Button(
-#                 "Calc", id={'type': 'compute-single-btn', 'index': i},
-#                 size="sm", color="warning", outline=True,
-#                 className="py-0 px-1", style={"fontSize": "10px"}
-#             ),
-#             dbc.Button(
-#                 "X", id={'type': 'remove-btn', 'index': i},
-#                 size="sm", color="danger",
-#                 className="py-0 px-1", style={"fontSize": "10px"}
-#             ),
-#         ], className="d-flex gap-2")  # Use 'gap-2' for consistent spacing between buttons
-#
-#     ], className="d-flex align-items-center p-1 border-bottom bg-white")

@@ -306,7 +306,7 @@ def handle_export_sections(n_clicks):
 )
 def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     trigger = ctx.triggered_id
-    logging.debug(f"DEBUG: Grid navigator callback triggered by {ctx.triggered_id}")  # Check your terminal for this!
+    logging.debug(f"DEBUG: Grid navigator callback triggered by {ctx.triggered_id}")
 
     # 0. Handle the "Nothing happened yet" case
     if not trigger:

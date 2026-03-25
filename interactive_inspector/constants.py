@@ -32,8 +32,10 @@ class UIConstants:
     CLR_GRID_BASE_HTMP = '#e9ecef'
     CLR_BASE = 'rgba(0,0,0,0)'
     CLR_DIM = "rgba(0, 0, 0, 0.1)"
-    SIZE_TEXT_GRID_TILE_ID = 10
-    SIZE_MARKER_GRID_TILE_ACTIVE = 28
+    SIZE_TEXT_GRID_TILE_ID = 11
+    SIZE_MARKER_GRID_FCT = 1.3
+    SIZE_NAVIGATOR = 320
+
 
     SELECTION_MAP = {
         0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
