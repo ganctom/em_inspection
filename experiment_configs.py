@@ -24,16 +24,16 @@ class ExperimentRegistry:
             cut_thickness=ct,
         )
         self.app_cfg.projects[name] = config
-        self.save_to_disk()
+        self.save_to_disk(self.app_cfg.exp_yaml_path)
 
-    def save_to_disk(self):
+    def save_to_disk(self, path_out: str = None):
         """Saves a clean, human-readable YAML without python-specific tags."""
         raw_data = {
             name: cfg.model_dump()
             for name, cfg in self.app_cfg.projects.items()
         }
         clean_data = self._prepare_for_yaml(raw_data)
-        with open(self.app_cfg.exp_yaml_path, 'w') as f:
+        with open(path_out, 'w') as f:
             yaml.safe_dump(clean_data, f, default_flow_style=False, sort_keys=False)
 
     def _prepare_for_yaml(self, obj):

@@ -16,6 +16,7 @@ from app import app
 # 2. Import layouts (Ensure the filenames match your actual files)
 from layouts.coarse_inspection import create_layout
 from layouts import project_setup, stitching
+from data_service import service
 
 # 3. Register all callbacks by importing the module
 import callbacks
@@ -80,11 +81,18 @@ app.layout = html.Div([
 def display_page(pathname):
     """Swaps the layout based on the URL."""
 
+    # Default/Setup path
     if pathname == '/setup' or pathname == '/' or pathname is None:
         return project_setup.layout()
 
     elif pathname == '/stitching':
-        return stitching.layout()
+        # 1. Check if an experiment is initialized in the service
+        if service.exp_config is not None and service.acq_config is not None:
+            return stitching.layout(active_service=service)
+        else:
+            if service.acq_config is None:
+                logging.debug(f'AcqConfig not initialized.')
+            return stitching.layout()
 
     elif pathname == '/inspection':
         if service.processor is None:

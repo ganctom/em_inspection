@@ -46,6 +46,7 @@ class OverlapContext:
 class DataService:
     def __init__(self):
         self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
+        self.acq_config = None
         self.exp_config = None
         self.inspection = None
         self.processor = None
@@ -64,20 +65,19 @@ class DataService:
     ):
         """Called by the Dash Callback when the user hits 'Add Experiment'"""
 
-        self.registry.add(
-            exp_name, acq_dir, proc_dir, grid_num, grid_shape, first_sec, last_sec, px, ct
-        )
+        self.registry.add(exp_name, acq_dir, proc_dir, grid_num, grid_shape, first_sec, last_sec, px, ct)
         new_conf = self.registry.get_all().get(exp_name)
         if new_conf:
-            self.exp_config = new_conf
             self.initialize_experiment_from_config(new_conf)
         else:
-            logging.warning("Issue with getting exp. configs")
+            logging.warning("Issue with getting exp. configs.")
 
 
     def initialize_experiment_from_config(self, config: ExpConfig):
         self.exp_config = config
-        self.inspection = Inspection(self.exp_config)
+        self.acq_config = self._prepare_acquisition_config(config)
+        self.inspection = Inspection(config)
+        self.processor = self.inspection.co_processor
         logging.info(f"DataService: Active experiment set to {config.name}")
 
 
@@ -118,11 +118,11 @@ class DataService:
                 return
 
             self.exp_config = config
-            acq_cfg = self._prepare_acquisition_config(config)
+            self.acq_config = self._prepare_acquisition_config(config)
 
             parse.main(
                 str(self.inspection.dir_sections),
-                acq_cfg,
+                self.acq_config,
                 self.inspection.first_sec,
                 self.inspection.last_sec
             )
@@ -180,6 +180,7 @@ class DataService:
         cfg.grid_shape = config.grid_shape
         cfg.thickness = config.cut_thickness
         cfg.resolution_xy = config.pixel_size
+        logging.debug(f'AcquisitionConfig:\n{cfg}')
         return cfg
 
 
@@ -187,14 +188,12 @@ class DataService:
         """
         Loads inspector, coarse offsets tensor & UI data using specified config file
         """
-        self.exp_config = config
-        self.inspection = Inspection(config)
-        self.processor = self.inspection.co_processor
+        self.initialize_experiment_from_config(config)
         try:
             self.processor.load_all_offsets_and_tile_id_maps_from_npz()
             self.tile_ids = self.processor.get_largest_tile_id_map()
         except FileNotFoundError as _:
-            print(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
+            # print(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
             logging.info(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
 
         self.clear_cache()
