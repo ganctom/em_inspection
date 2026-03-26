@@ -1,3 +1,4 @@
+import re
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter_ns
 import subprocess
@@ -1278,20 +1279,20 @@ def get_ov_sec_nums(directory: UniPath) -> list[int]:
 
 def save_coarse_mat(
         cxy_mat: np.ndarray,
-        path: UniPath,
-        file_format: str
+        dir_path: UniPath,
+        file_format: str = 'json',
 ) -> None:
     """
     Save coarse offsets array to a file in the specified format ('json' or 'npz').
     :param cxy_mat: cxy array to save
-    :param path: directory path where to store the coarse-shift array
+    :param dir_path: directory path where to store the coarse-shift array
     :param file_format: format for saving ('json' or 'npz')
     :return: None
     """
-    path = Path(path)
+    dir_path = Path(dir_path)
 
-    if not path.is_dir():
-        print(f'save_coarse_mat: directory {path} does not exist.')
+    if not dir_path.is_dir():
+        logging.error(f'save_coarse_mat: directory {dir_path} does not exist.')
         return
 
     try:
@@ -1304,16 +1305,17 @@ def save_coarse_mat(
                 "cx": list(cx),
                 "cy": list(cy)
             }
-            with open(path / 'cx_cy.json', 'w') as json_file:
+            with open(dir_path / 'cx_cy.json', 'w') as json_file:
                 json.dump(data, json_file, indent=4)
+                logging.info(f'storing coarse mat: {dir_path}')
         elif file_format == 'npz':
-            fn_fix = path / 'coarse_fixed.npz'
+            fn_fix = dir_path / 'coarse_fixed.npz'
             np.savez(fn_fix, cxy_mat)
         else:
-            print(f'Error: Unsupported file format "{file_format}". Supported formats are "json" and "npz".')
+            logging.error(f'Error: Unsupported file format "{file_format}". Supported formats are "json" and "npz".')
 
     except Exception as e:
-        print(f'Error during save_coarse_mat: {e}')
+        logging.error(f'Error during save_coarse_mat: {e}')
 
 
 def get_pyramid(
@@ -1496,40 +1498,6 @@ def list_stitched(dir_stitched: str) -> list[str]:
     """Returns sorted list of full paths to all *.zarr files in the input folder."""
     pattern = os.path.join(dir_stitched, "*.zarr")
     return sorted(glob(pattern))
-
-
-def bench(func, *args, repeats=7, loops_per_repeat=3, warmup=True, name=None):
-    if warmup:
-        func(*args)  # one call to warm up
-
-    times = []
-    for _ in range(repeats):
-        gc.collect()
-        t0 = perf_counter_ns()
-        for _ in range(loops_per_repeat):
-            _ = func(*args)
-        t_ns = (perf_counter_ns() - t0) / loops_per_repeat
-        times.append(t_ns)
-
-    mean_ns = mean(times)
-    sd_ns = stdev(times) if repeats > 1 else 0
-
-    print(f"{name or func.__name__:24}  {mean_ns / 1e6:8.3f} ± {sd_ns / 1e6:7.3f} ms")
-    return mean_ns
-
-
-def bench_stitched_folder_scanner():
-    # ──────────────────────────────────────────────
-    ROOT = "/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01/stitched-sections"
-    print(f"\nBenchmark – folder contains ~{len(os.listdir(ROOT)):,} entries\n")
-
-    versions = [
-    ]
-
-    for name, fn in versions:
-        bench(fn, name=name, repeats=9, loops_per_repeat=5)
-
-    return
 
 
 def find_outliers(
@@ -1725,49 +1693,6 @@ def rolling_mean_std_refactored(
     return mean_out, std_out
 
 
-def rolling_mean_std(data: np.ndarray,
-                     window_size: int,
-                     min_win_length: int,
-                     max_win_length: int
-                     ) -> tuple[np.ndarray, np.ndarray]:
-
-    n = len(data)
-    mean = np.zeros(n)
-    std = np.zeros(n)
-    half_window = window_size // 2
-
-    for i in range(n):
-
-        # Check if the current data point is np.inf
-        if np.isinf(data[i]):
-            mean[i] = np.nan
-            std[i] = np.nan
-            continue
-
-        # Initialize masked_window
-        start = max(0, i - half_window)
-        end = min(n, i + half_window + 1)
-
-        # Create masked window excluding the current value
-        masked_window = np.ma.masked_invalid(data[start:end])
-        masked_window[i - start] = np.ma.masked  # Exclude current value
-
-        # Adjust window size if necessary
-        while masked_window.count() < min_win_length and half_window < max_win_length // 2:
-            half_window += 1  # Increase the half window size
-            start = max(0, i - half_window)
-            end = min(n, i + half_window + 1)
-            masked_window = np.ma.masked_invalid(data[start:end])
-            if start == 0 and end == n:
-                break
-
-        # Calculate mean and std
-        mean[i] = np.ma.mean(masked_window) if masked_window.count() > 0 else np.nan
-        std[i] = np.ma.std(masked_window) if masked_window.count() > 0 else np.nan
-
-    return mean, std
-
-
 def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
     """
     Load outliers data from a text file.
@@ -1839,21 +1764,41 @@ def process_single_section(path_to_check: Path, sec_num_str: str):
         return sec_num_str, None, f"s{sec_num_str} (error)\n"
 
 
+def parse_section_range(input_str: str) -> list[int]:
+    """
+    Parses strings like '1000:1005, 1010, 1020-1022' into [1000, 1001, 1002, 1003, 1004, 1005, 1010, 1020, 1021, 1022].
+    """
+    if not input_str or not str(input_str).strip():
+        return []
 
-def test_tle_id_map():
-    root = "/Volumes/storage/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01/sections/s1240_g0/"
-    fn = "tile_id_map.json"
-    p = root + fn
-    print(f'reading: {p}')
-    tile_id_map = get_tile_id_map(p)
-    print(tile_id_map)
-    print(type(tile_id_map))
-    print(np.shape(tile_id_map))
-    print(tile_id_map[0][0])
-    print(type(tile_id_map[0][0]))
-    return
+    sections = set()
+    parts = re.split(r'[,\s]+', str(input_str).strip())
+
+    for part in parts:
+        if not part: continue
+
+        # Handle ranges indicated by : or -
+        if ':' in part or '-' in part:
+            try:
+                start_str, end_str = re.split(r'[:-]', part)
+                start, end = int(start_str), int(end_str)
+                sections.update(range(start, end + 1))
+            except ValueError:
+                logging.warning(f"Could not parse range part: {part}")
+        else:
+            try:
+                sections.add(int(part))
+            except ValueError:
+                logging.warning(f"Could not parse single section part: {part}")
+
+    return sorted(list(sections))
+
+
+# Convert dict → hashable tuple before calling
+def make_hashable_params(params: dict | None) -> tuple[tuple[str, any], ...] | None:
+    return tuple(sorted(params.items())) if params else None
+
+
 
 if __name__ == "__main__":
-    # tst_compute_tileid_map()
-    # bench_stitched_folder_scanner()
-    test_tle_id_map()
+    pass

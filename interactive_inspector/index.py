@@ -6,8 +6,8 @@ from data_service import service
 
 ### Set up logging
 # logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
-logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.INFO)
+# logging.basicConfig(level=logging.WARNING)
 
 
 # 1. Import the app instance first
@@ -15,7 +15,7 @@ from app import app
 
 # 2. Import layouts (Ensure the filenames match your actual files)
 from layouts.coarse_inspection import create_layout
-from layouts import project_setup, stitching
+from layouts import project_setup, stitching_setup
 from data_service import service
 
 # 3. Register all callbacks by importing the module
@@ -88,11 +88,11 @@ def display_page(pathname):
     elif pathname == '/stitching':
         # 1. Check if an experiment is initialized in the service
         if service.exp_config is not None and service.acq_config is not None:
-            return stitching.layout(active_service=service)
+            return stitching_setup.layout(active_service=service)
         else:
             if service.acq_config is None:
                 logging.debug(f'AcqConfig not initialized.')
-            return stitching.layout()
+            return stitching_setup.layout()
 
     elif pathname == '/inspection':
         if service.processor is None:

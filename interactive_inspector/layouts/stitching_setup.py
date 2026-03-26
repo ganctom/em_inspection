@@ -1,6 +1,3 @@
-# layouts/stitching.py
-import logging
-
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from constants import UI
@@ -19,8 +16,6 @@ def layout(active_service=None):
     inp_stitch_cfg = UI.INP_STITCH_CFG
     if stitch_yaml_path:
         inp_stitch_cfg["value"] = stitch_yaml_path
-
-
     return dbc.Container([
         dbc.Row([
             dbc.Col([
@@ -76,15 +71,16 @@ def layout(active_service=None):
                                         dbc.Row([
                                             dbc.Col([UI.label_factory("Overlaps X (csv)"), dbc.Input(id=UI.ID_CONF_OVERLAPS_X, placeholder="200, 300, 400", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Overlaps Y (csv)"), dbc.Input(id=UI.ID_CONF_OVERLAPS_Y, placeholder="200, 300, 400", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Overlap"), dbc.Input(id=UI.ID_CONF_MIN_OVERLAP, placeholder="20", type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Min Range (csv)"), dbc.Input(id=UI.ID_CONF_MIN_RANGE, placeholder="10, 100, 0", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Min Overlap"), dbc.Input(id=UI.ID_CONF_MIN_OVERLAP, placeholder="20",  type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Filter Size"), dbc.Input(id=UI.ID_CONF_FILTER_SIZE, placeholder="10",  type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Patch Size (csv)"), dbc.Input(id=UI.ID_CONF_PATCH, placeholder="120, 120", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Batch Size"), dbc.Input(id=UI.ID_CONF_BATCH, placeholder="8000", type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Min Peak Ratio"), dbc.Input(id=UI.ID_CONF_MIN_PKR, placeholder="1.0", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Min Peak Sharpness"), dbc.Input(id=UI.ID_CONF_MIN_PKS, placeholder="1.0", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Max Deviation"), dbc.Input(id=UI.ID_CONF_MAX_DEV, placeholder="6", type="number", size="sm")], width=6),
                                         ]),
                                         dbc.Row([
-                                            dbc.Col([UI.label_factory("Max Deviation"), dbc.Input(id=UI.ID_CONF_MAX_DEV, placeholder="6", type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Max Magnitude"), dbc.Input(id=UI.ID_CONF_MAX_MAG, placeholder="0", type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Min Patch Size"), dbc.Input(id=UI.ID_CONF_MIN_PATCH, placeholder="10", type="number", size="sm")], width=6),
                                             dbc.Col([UI.label_factory("Max Gradient"), dbc.Input(id=UI.ID_CONF_MAX_GRAD, placeholder="12", type="number", size="sm")], width=6),
@@ -244,7 +240,7 @@ def layout(active_service=None):
                             dbc.Row([
                                 dbc.Col([
                                     UI.label_factory("Section Selection for Estimation", is_bold=True),
-                                    dbc.Input(id=UI.ID_STITCH_SECTION_INP, placeholder="e.g. 9001, 9005-9010", size="sm"),
+                                    dbc.Input(id=UI.ID_STITCH_SECTION_INP, placeholder="e.g. 0-100, 105, 106 or 'all'", size="sm"),
                                     html.P("Iterates through all overlaps within the specified layers.", className="text-muted mb-0", style={"fontSize": "11px"}),
                                 ], width=8),
                                 dbc.Col([
@@ -255,12 +251,31 @@ def layout(active_service=None):
                             html.Hr(),
                             html.Div(
                                 id=UI.ID_STITCH_CONSOLE,
-                                className="bg-dark text-white p-2 small rounded",
-                                style={"height": "300px", "overflowY": "scroll", "fontFamily": "monospace", "whiteSpace": "pre-wrap", "border": "1px solid #444"}
-                            )
+                                children=[],
+                                className="bg-dark text-white p-3 rounded",  # p-3 for a bit of internal padding
+                                style={
+                                    "height": "350px",  # Fixed height creates the "window"
+                                    "overflowY": "auto",  # Shows scrollbar only when needed
+                                    "fontFamily": "monospace",  # Essential for that CLI look
+                                    "fontSize": "12px",
+                                    "whiteSpace": "pre-wrap",  # Preserves line breaks and wrapping
+                                    "border": "1px solid #444",
+                                    "display": "flex",
+                                    "flexDirection": "column",  # Standard top-to-bottom flow
+                                }
+                            ),
+                            dcc.Store(id="scroll-trigger-dummy"),
+                            html.Div(id="stitch-progress-container", children=[
+                                dcc.Interval(id="stitch-progress-interval", interval=1000, disabled=True),
+                                dbc.Progress(id="stitch-progress-bar", value=0, striped=True, animated=True,
+                                             className="mb-2", style={"display": "none"}),
+                                html.Small(id="stitch-progress-text", className="text-muted")
+                            ])
                         ]
                     )
                 ], active_item="execution-control", className="shadow-sm border-danger")
             ], width=12)
         ])
     ], fluid=True)
+
+

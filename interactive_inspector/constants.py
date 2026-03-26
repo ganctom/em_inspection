@@ -1,3 +1,4 @@
+import time
 from dataclasses import dataclass
 from dash import html
 import dash_bootstrap_components as dbc
@@ -255,8 +256,6 @@ class UIConstants:
         )
 
     # ---- STITCHING PAGE ----  #
-
-
     # --- Stitching IDs ---
     ID_STITCH_CONFIG_PATH = "config-path"
     ID_STITCH_LOAD_YAML = "btn-load-yaml"
@@ -267,6 +266,7 @@ class UIConstants:
     ID_CONF_OVERLAPS_Y = "conf-overlaps-y"
     ID_CONF_MIN_OVERLAP = "conf-min-overlap"
     ID_CONF_MIN_RANGE = "conf-min-range"
+    ID_CONF_FILTER_SIZE = "conf-filter-size"
     ID_CONF_PATCH = "conf-patch"
     ID_CONF_BATCH = "conf-batch"
     ID_CONF_MIN_PKR = "conf-min-pkr"
@@ -306,6 +306,14 @@ class UIConstants:
     ID_STITCH_CONSOLE = "stitching-results-console"
     ID_STITCH_SECTION_INP = "section-selection-input"
 
+    STITCH_STATUS = {
+        "active": True,
+        "progress": 0,
+        "message": "Initializing SOFIMA...",
+        "error": None,
+        "current_sections": ""
+    }
+
     @classmethod
     def label_factory(cls, text, is_bold=False):
         className = "small mb-1" + (" fw-bold" if is_bold else "")
@@ -329,6 +337,20 @@ class UIConstants:
     def get_proj_dir(cls, service) -> str:
         return cls._get_active_proc_dir(service) or ""
 
+    @staticmethod
+    def log_row(msg, type="info"):
+        """Creates a styled row for the log window."""
+        colors = {
+            "info": "text-white",
+            "success": "text-success",
+            "warning": "text-warning",
+            "error": "text-danger"
+        }
+        timestamp = time.strftime("%H:%M:%S")
+        return html.Div([
+            html.Span(f"[{timestamp}] ", className="text-muted me-2", style={"fontSize": "10px"}),
+            html.Span(msg, className=colors.get(type, "text-white"))
+        ], className="border-bottom border-secondary pb-1 mb-1", style={"fontSize": "12px"})
 
 # Create a single instance to use properties easily
 UI = UIConstants()
@@ -341,3 +363,4 @@ class DataConstants:
 class KeyboardShortcuts:
     KEY_GRID_NAV_SLIDER_PLUS: str = "w"
     KEY_GRID_NAV_SLIDER_MINUS: str = "s"
+

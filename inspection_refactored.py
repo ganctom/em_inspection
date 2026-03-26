@@ -23,7 +23,7 @@ UniPath = Union[str, Path]
 logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 # logging.basicConfig(level=logging.INFO)
-# logging.basicConfig(level=logging.WARNING)
+logging.basicConfig(level=logging.WARNING)
 
 
 class Inspection:
@@ -980,7 +980,6 @@ def init_specific_section_dirs(exp: Inspection, sec_nums: Sequence[int]) -> None
     exp.section_dirs   = dirs_
     exp.section_dicts  = {n: str(p) for n, p in zip(valid_nums, dirs_)}
     return None
-
 
 
 def _prepare_sections(

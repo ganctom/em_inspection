@@ -5,13 +5,14 @@ import pickle
 import platform
 from functools import lru_cache
 from pathlib import Path
-from typing import Union, Optional, Any
+from typing import Union, Optional, Any, Dict
 import logging
 import numpy as np
 import skimage
 from matplotlib import pyplot as plt
 from sofima import mesh, stitch_rigid
 from skimage.metrics import structural_similarity as ssim
+from concurrent.futures import ThreadPoolExecutor
 
 import inspection_utils_refactor as utils
 import experiment_configs as cfg
@@ -40,6 +41,7 @@ def cached_read_image(path: str):
 class Section:
     def __init__(self, path: Union[Path, str]):
 
+
         path = Path(utils.cross_platform_path(str(path)))
         if not path.is_dir():
             m = f"Section init failed: input path is not a directory or does not exist {path}."
@@ -64,9 +66,19 @@ class Section:
         self.cxy: Optional[np.ndarray[float]] = None
         self.coarse_mesh: Optional[np.ndarray[float]] = None
 
-        self.mask_map: MaskMap = {}  # TODO: make None as default (?)
+        self.mask_map: MaskMap | None = None
         self.roi_mask_map: MaskMap = {}
         self.smr_mask_map: MaskMap = {}
+        self.tile_map: MaskMap = {}
+
+
+    @property
+    def section_shape(self) -> tuple[int, int]:
+        """The shape of the section as (height, width)."""
+        if self.tile_id_map is None:
+            self.read_tile_id_map()
+        return self.tile_id_map.shape
+
 
     def resolve_dir_stitched(self) -> Path:
         return self.path.parent.parent / 'stitched-sections' / (str(self.path.name) + ".zarr")
@@ -1553,6 +1565,123 @@ class Section:
         return shift_vec
 
 
+    def load_tile_map_(self, clahe: bool = False) -> None:
+        """
+           Get a tile-data-map mapping tile (x, y) coordinates to the loaded image data.
+
+           :return: tile-data-map
+           """
+
+        h, w = self.tile_id_map.shape
+
+        for y in range(h):
+            for x in range(w):
+                tile_id = int(self.tile_id_map[y, x])
+                if tile_id != -1:
+                    try:
+                        tile_path = self.tile_dicts[tile_id]
+                    except KeyError as _:
+                        logging.error(f's{self.section_num} tile_id {tile_id} not found in tile_dicts!')
+                        return None
+
+                    if tile_path is not None and Path(tile_path).exists():
+                        logging.debug(f'Loading tile: {Path(tile_path).name}')
+                        img = skimage.io.imread(tile_path)
+                        img = utils.apply_clahe(img) if clahe else img
+                        self.tile_map[(x, y)] = img
+                    else:
+                        logging.warning(f'Missing tile in raw section data (!): {tile_path}')
+        return
+
+    def load_tile_map(
+            self,
+            clahe: bool = False,
+            parallel: bool = False,
+            max_workers: int | None = None
+    ) -> None:
+        """Load valid tiles into self.tile_map. Set parallel=True for faster loading."""
+
+        def _load_tile(pos: tuple[int, int]) -> tuple[tuple[int, int], np.ndarray | None]:
+            y, x = pos
+            tile_id = int(self.tile_id_map[y, x])
+            if tile_id == -1:
+                return (x, y), None
+
+            try:
+                path = Path(self.tile_dicts[tile_id])
+                if not path.exists():
+                    logging.warning(f"Missing tile: {path.name} (tile_id={tile_id})")
+                    return (x, y), None
+
+                img = skimage.io.imread(str(path))
+                if clahe:
+                    img = utils.apply_clahe(img)
+                return (x, y), img
+            except KeyError:
+                logging.error(f"Section {self.section_num}: tile_id {tile_id} not found in tile_dicts!")
+            except Exception as e:
+                logging.error(f"Failed to load tile {tile_id} at ({x},{y}): {e}")
+            return (x, y), None
+
+        positions = list(np.ndindex(self.tile_id_map.shape))
+
+        if parallel:
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                for (x, y), img in executor.map(_load_tile, positions):
+                    if img is not None:
+                        self.tile_map[(x, y)] = img
+        else:
+            for pos in positions:
+                (x, y), img = _load_tile(pos)
+                if img is not None:
+                    self.tile_map[(x, y)] = img
+
+
+    def compute_coarse_offset_section(
+        self,
+        overlaps_xy: tuple[tuple[int, ...], tuple[int, ...]] = ((200, 300), (200, 300)),
+        min_range: tuple[int, int, int] = (10, 100, 0),
+        min_overlap: int = 20,
+        filter_size: int = 10,
+        clahe: bool = True,
+        overwrite_cxcy: bool = False,
+    ) -> Optional[np.ndarray]:
+        """
+        Compute coarse offsets (cx, cy) for the entire section using rigid stitching.
+
+        If cx_cy.json already exists and overwrite_cxcy=False, the computation is skipped.
+        """
+        # Early return if result already exists
+        if Path(self.path_cxy).exists() and not overwrite_cxcy:
+            logging.info(f"Section {self.section_num}: cx_cy.json already exists. Skipping coarse offset computation.")
+            return None
+
+        if self.tile_map is None or len(self.tile_map) == 0:
+            try:
+                self.load_tile_map(clahe=clahe, parallel=True)
+            except Exception as e:
+                logging.warning(f"Failed to load tile map for section {self.section_num}: {e}")
+                return None
+
+        # Compute coarse offsets
+        try:
+            cx, cy = stitch_rigid.compute_coarse_offsets(
+                yx_shape=self.section_shape,
+                tile_map=self.tile_map,
+                overlaps_xy=overlaps_xy,
+                min_range=min_range,
+                min_overlap=min_overlap,
+                filter_size=filter_size,
+                mask_map=self.mask_map,
+            )
+        except Exception as e:
+            logging.info(f"Coarse offset computation failed for section {self.section_num}: {e}")
+            return None
+
+        # Store result and return
+        self.cxy = np.array([np.squeeze(cx), np.squeeze(cy)])
+        return self.cxy
+
 
 #### ---------   FUNCTIONS    ---------
 
@@ -1594,8 +1723,6 @@ def run_plot_ov(
     section.plot_ov(tid_a=tid_a, tid_b=tid_b, shift_vec=shift_vec, dir_out=str(section.path),
                     show_plot=True, clahe=True, blur=1.1, store_to_root=False)
     return
-
-
 
 
 def main_fine_align_sections(

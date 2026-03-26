@@ -1,14 +1,19 @@
+import functools
 import io
+import os
 import re
 import sys
 import time
 from dataclasses import dataclass
 import logging
+from pathlib import Path
 from typing import Optional, Tuple, Any
 import plotly.express as px
 import numpy as np
 import gc
 import threading
+
+import yaml
 
 import inspection_refactored
 from experiment_configs import ExperimentRegistry, ExpConfig
@@ -22,6 +27,7 @@ from inspection_refactored import (
     store_cxyz_to_offset_files, cached_read_image
 )
 
+from constants import UIConstants as UI
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -48,6 +54,7 @@ class DataService:
         self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
         self.acq_config = None
         self.exp_config = None
+        self.stitch_config = None
         self.inspection = None
         self.processor = None
         self.tile_ids = []
@@ -58,6 +65,7 @@ class DataService:
         self._log_buffer = io.StringIO()
         self._log_lock = threading.Lock()
         self.backup_status = {"active": False, "progress": 0, "message": "", "error": None}
+        self.stitch_status = UI.STITCH_STATUS
 
 
     def create_and_save_new_experiment(
@@ -387,6 +395,22 @@ class DataService:
             logging.warning(f"Boundary hit: Tile {tid_a} has no {ov_type} neighbor.")
             return None
 
+    def _init_section(self, sec_num: int) -> Optional[Section]:
+        ret_val = _prepare_sections(self.inspection, start=sec_num, end=sec_num)
+
+        if ret_val is None:
+            logging.warning(f'Section number {sec_num} not in experiment section range!')
+            return None
+
+        sec_path = self.inspection.section_dicts.get(sec_num)
+        if not sec_path:
+            logging.warning(f"Section {sec_num} path not found in configuration.")
+            return None
+
+        section = Section(sec_path)
+        section.tile_dicts = utils.get_tile_dicts(section.path)
+        section.read_tile_id_map()
+        return section
 
     def _get_initialized_section(self, z: int) -> Optional[Section]:
         """Manages Section lifecycle and data injection."""
@@ -414,6 +438,7 @@ class DataService:
 
                 self._section_cache[sec_path] = section
             return self._section_cache[sec_path]
+
 
     def compute_coarse_shift(
             self,
@@ -603,6 +628,86 @@ class DataService:
             "marks": slider_marks,
             "initial_value": z_max
         }
+
+
+    @staticmethod
+    @functools.lru_cache(maxsize=32)
+    def prepare_stitching_params(
+            config_path: str | os.PathLike | None = None,
+            ui_params: tuple[tuple[str, any], ...] | None = None,  # hashable version
+    ) -> dict:
+        """
+        Merge YAML defaults with UI overrides into stitching parameters.
+        Uses lru_cache for performance.
+        """
+        # Convert tuple-of-items back to dict (or empty dict)
+        ui_params = dict(ui_params) if ui_params else {}
+
+        # Load base config from YAML
+        base_config: dict = {}
+        if config_path:
+            config_path = Path(config_path)
+            if config_path.exists():
+                try:
+                    with open(config_path, encoding="utf-8") as f:
+                        base_config = yaml.safe_load(f) or {}
+                except Exception as e:
+                    logging.error(f"Failed to load config {config_path}: {e}")
+
+        # Robust tuple parser
+        def parse_tuple(key: str, default: tuple[int, ...]) -> tuple[int, ...]:
+            value = ui_params.get(key) or base_config.get(key)
+            if not value:
+                return default
+            try:
+                return tuple(int(x.strip()) for x in str(value).split(",") if x.strip())
+            except (ValueError, TypeError):
+                logging.warning(f"Invalid value for {key}: {value}. Using default {default}.")
+                return default
+
+        return {
+            "overlaps_xy": (
+                parse_tuple("overlaps_x", (200, 300, 400)),
+                parse_tuple("overlaps_y", (200, 300, 400)),
+            ),
+            "min_range": tuple(base_config.get("min_range", (10, 100, 0))),
+            "min_overlap": int(ui_params.get("min_overlap") or base_config.get("min_overlap", 20)),
+            "filter_size": base_config.get("filter_size", 10),
+            "clahe": bool(base_config.get("clahe", True)),
+            "overwrite_cxcy": True,
+        }
+
+    def run_stitching_thread(self, section_numbers, final_params):
+        # 1. Initialize with all required keys
+        self.stitch_status = {
+            "active": True,
+            "progress": 0,
+            "message": "Initializing...",
+            "pending_messages": [],  # Crucial: Ensure this is here
+            "error": None
+        }
+        try:
+            total = len(section_numbers)
+            self.stitch_status["pending_messages"].append(f"Using Params: {final_params}")
+
+            for i, sec_num in enumerate(section_numbers):
+                msg = f"Processing section {sec_num} ({i + 1}/{total})"
+                self.stitch_status["message"] = msg
+                self.stitch_status["pending_messages"].append(msg)
+                self.stitch_status["progress"] = int(((i + 1) / total) * 100)
+
+                # Core Logic
+                section = self._init_section(sec_num)
+                coarse_offsets = section.compute_coarse_offset_section(**final_params)
+                utils.save_coarse_mat(coarse_offsets, section.path)
+
+            self.stitch_status["message"] = f"Finished {total} sections."
+            self.stitch_status["progress"] = 100
+
+        except Exception as e:
+            self.stitch_status["error"] = str(e)
+        finally:
+            self.stitch_status["active"] = False
 
 
 # Initialize single instance

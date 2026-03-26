@@ -1,11 +1,12 @@
-# callbacks/stitching_callbacks.py
+import logging
+import threading
 import yaml
-from dash import Input, Output, State, callback, no_update
-from os.path import join
+from dash import Input, Output, State, callback, no_update, clientside_callback
 
 from constants import UI
 from data_service import service
 import parameter_config as pcfg
+from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
 
 
 @callback(
@@ -204,18 +205,159 @@ def handle_config_save(n_clicks, path, *args):
         return f"Save failed: {str(e)}"
 
 
+@callback(
+    [Output(UI.ID_STITCH_CONSOLE, "children", allow_duplicate=True),
+     Output("stitch-progress-interval", "disabled", allow_duplicate=True),
+     Output("stitch-progress-bar", "style", allow_duplicate=True)],
+    Input(UI.ID_STITCH_RUN_BTN, "n_clicks"),
+    [State(UI.ID_STITCH_SECTION_INP, "value"),
+     State(UI.ID_STITCH_CONFIG_PATH, "value"),
+     State(UI.ID_CONF_OVERLAPS_X, "value"),
+     State(UI.ID_CONF_OVERLAPS_Y, "value"),
+     State(UI.ID_CONF_MIN_RANGE, "value"),
+     State(UI.ID_CONF_MIN_OVERLAP, "value"),
+     State(UI.ID_CONF_FILTER_SIZE, "value")],
+    prevent_initial_call=True
+)
+def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, m_overlap, fs):
+    # 1. Initial experiment check
+    if not service.exp_config:
+        msg = UI.log_row("Error: No active experiment found. Please initialize in Step 1.", type="error")
+        return [msg], True, {"display": "none"}
 
-#
-# @callback(
-#     Output("stitching-results-console", "children"),
-#     Input("run-stitching-btn", "n_clicks"),
-#     State("section-selection-input", "value"),
-#     prevent_initial_call=True
-# )
-# def run_coarse_estimation(n_clicks, sections_str):
-#     if not sections_str:
-#         return "Error: No sections specified."
-#
-#     # Logic to parse 9001, 9005-9010 into a list of ints
-#     # Then call a new method in service: service.perform_coarse_stitching(sections)
-#     return f"Starting estimation for sections: {sections_str}..."
+    if not range_str:
+        msg = UI.log_row("Error: Please specify sections for estimation.", type="error")
+        return [msg], True, {"display": "none"}
+
+    # 2. Section Validation Logic
+    fs = service.exp_config.first_sec
+    ls = service.exp_config.last_sec
+    valid_sec_nums = list(range(fs, ls + 1))
+
+    if str(range_str).lower() != 'all':
+        try:
+            all_requested = parse_section_range(range_str)
+            valid_sec_nums = validate_section_numbers(fs, ls, all_requested)
+        except ValueError as e:
+            logging.warning(f"Validation failed: {e}")
+            return [UI.log_row(f"Error: {e}", type="error")], True, {"display": "none"}
+
+    if not valid_sec_nums:
+        return [UI.log_row("Error: No valid sections selected.", type="error")], True, {"display": "none"}
+
+    # 3. Parameter Preparation (Consolidated before thread starts)
+    ui_params_dict = {
+        "overlaps_x": ox,
+        "overlaps_y": oy,
+        "min_range": m_range,
+        "min_overlap": m_overlap,
+        "filter_size": fs,
+    }
+
+    try:
+        final_stitch_params = service.prepare_stitching_params(
+            config_path=config_path,
+            ui_params=make_hashable_params(ui_params_dict)
+        )
+    except Exception as e:
+        return [UI.log_row(f"Config Error: {e}", type="error")], True, {"display": "none"}
+
+    # 4. Construct Initial Console UI (List of Components)
+    start_log = [
+        UI.log_row("▶ Starting Coarse Offset Estimation...", type="info"),
+        UI.log_row(f"Experiment location: {service.exp_config.proc_dir}"),
+        UI.log_row(f"Sections: {len(valid_sec_nums)} requested ({valid_sec_nums[0]}-{valid_sec_nums[-1]})"),
+        UI.log_row(f"Using Overlaps: {final_stitch_params['overlaps_xy']}"),
+        UI.log_row("-" * 50),
+        UI.log_row("▶ Thread started. Monitoring progress...", type="success")
+    ]
+
+    # 5. Launch the Thread
+    thread = threading.Thread(
+        target=service.run_stitching_thread,
+        args=(valid_sec_nums, final_stitch_params),
+        daemon=True
+    )
+    thread.start()
+
+    # 6. Returns: [Console Children], Interval Disabled=False, Progress Style=Visible
+    return start_log, False, {"display": "block"}
+
+
+@callback(
+    [Output("stitch-progress-bar", "value"),
+     Output("stitch-progress-text", "children"),
+     Output("stitch-progress-interval", "disabled", allow_duplicate=True),
+     Output(UI.ID_STITCH_CONSOLE, "children", allow_duplicate=True)],
+    Input("stitch-progress-interval", "n_intervals"),
+    State(UI.ID_STITCH_CONSOLE, "children"),
+    prevent_initial_call=True
+)
+def update_stitch_progress(n, current_log):
+    status = service.stitch_status
+
+    # 1. Ensure log_history is ALWAYS a list of components
+    if not isinstance(current_log, list):
+        log_history = []
+    else:
+        log_history = current_log
+
+    # 2. Handle Errors (Append a row and stop)
+    if status.get("error"):
+        new_row = UI.log_row(f"ERROR: {status['error']}", type="error")
+        return 0, "Failed", True, log_history + [new_row]
+
+    prog = status.get("progress", 0)
+    msg = status.get("message", "")
+
+    # 3. Defensive check: Peek at the last message to avoid duplicates
+    last_msg = ""
+    try:
+        if log_history:
+            # Safely navigate the Dash component dictionary structure
+            # Row -> Children List -> Second Span (index 1) -> Its Children (the text)
+            last_row = log_history[-1]
+            if isinstance(last_row, dict) and 'props' in last_row:
+                last_msg = last_row['props']['children'][1]['props']['children']
+    except (KeyError, IndexError, TypeError):
+        # If the structure is weird, just assume it's a new message
+        last_msg = ""
+
+    # 4. Add New Row only if it's fresh information
+    if msg and msg != last_msg:
+        log_history.append(UI.log_row(msg, type="info"))
+
+    # 5. Handle Completion
+    if not status.get("active") and prog >= 100:
+        log_history.append(UI.log_row("Alignment Task Completed.", type="success"))
+        return 100, "Done", True, log_history
+
+    return prog, msg, False, log_history
+
+
+clientside_callback(
+    """
+    function(children) {
+        // Find the console element
+        const consoleLog = document.getElementById('stitching-results-console');
+
+        // Defensive check: if it doesn't exist yet, just exit silently
+        if (!consoleLog) {
+            return window.dash_clientside.no_update;
+        }
+
+        // Use a slight delay to ensure Dash has finished injecting the new <div> rows
+        setTimeout(() => {
+            consoleLog.scrollTo({
+                top: consoleLog.scrollHeight,
+                behavior: 'smooth'
+            });
+        }, 100);
+
+        return window.dash_clientside.no_update;
+    }
+    """,
+    Output("scroll-trigger-dummy", "data"),  # Target the dummy store instead of the Console ID
+    Input(UI.ID_STITCH_CONSOLE, "children"),
+    prevent_initial_call=True
+)
