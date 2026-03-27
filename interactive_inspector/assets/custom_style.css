@@ -30,3 +30,22 @@
     width: 4px !important;
     background-color: #e9ecef !important;
 }
+
+
+/* Target the active NavLink specifically within your workflow nav */
+.nav-link.active {
+    color: #ffffff !important;           /* Pure white text for focus */
+    font-weight: 700 !important;        /* Bold the text */
+    border-bottom: 3px solid #0dcaf0;   /* Bright Cyan underline (Matches your grid active color) */
+    background-color: rgba(255, 255, 255, 0.1); /* Very subtle background lift */
+    transition: all 0.3s ease-in-out;
+}
+
+/* Optional: add a small 'dot' before the text of the active page */
+.nav-link.active::before {
+    content: "●";
+    margin-right: 6px;
+    font-size: 8px;
+    vertical-align: middle;
+    color: #0dcaf0;
+}

@@ -39,7 +39,6 @@ class UIConstants:
     SIZE_MARKER_GRID_FCT = 1.3
     SIZE_NAVIGATOR = 320
 
-
     SELECTION_MAP = {
         0: OverlapType.HORIZONTAL, 1: OverlapType.HORIZONTAL,
         2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
@@ -49,6 +48,7 @@ class UIConstants:
     FN_CFG_TILE_STITCHING = "tile_stitching_config.yaml"
 
     # --- LABELS ---
+    NAME_WORKFLOW = "SBFI WORKFLOW"
     NAME_BTN_ADD_EXP = "Add Experiment"
     NAME_BTN_PARSE = "Parse Experiment"
     NAME_BTN_INIT = "Initialize Project"
@@ -352,8 +352,80 @@ class UIConstants:
             html.Span(msg, className=colors.get(type, "text-white"))
         ], className="border-bottom border-secondary pb-1 mb-1", style={"fontSize": "12px"})
 
+
+    # --- PAGE NAVIGATION FACTORY ---
+    TAB_1_NAME = "1. SETUP"
+    TAB_2_NAME = "2. COARSE ALIGNMENT"
+    TAB_3_NAME = "3. INSPECTION"
+    TAB_4_NAME = "4. STITCHING"
+    TAB_5_NAME = "5. FINE ALIGNMENT"
+
+    TAB_1_DSCR = "1. SETUP"
+    TAB_2_DSCR = "2. COARSE ALIGNMENT"
+    TAB_3_DSCR = "3. INSPECTION"
+    TAB_4_DSCR = "Step 4: Section Stitching"
+    TAB_5_DSCR = "Step 5: Section Fine-Alignment"
+    TAB_X_DSCR = "Background processing engine placeholder."
+
+    TAB_3_ALERT = f"No experiment loaded. Please go to {TAB_1_NAME} first."
+
+    TAB_1_URL = "/setup"
+    TAB_2_URL = "/stitching"
+    TAB_3_URL = "/inspection"
+    TAB_4_URL = "/post-processing"
+    TAB_5_URL = "/fine-alignment"
+
+    TAB_1_NAV_ID = "step-1"
+    TAB_2_NAV_ID = "step-2"
+    TAB_3_NAV_ID = "step-3"
+    TAB_4_NAV_ID = "step-4"
+    TAB_5_NAV_ID = "step-5"
+
+
+class WorkflowNav:
+    """Logic and factory for the navigation system."""
+
+    @classmethod
+    def get_schema(cls):
+        """The source of truth for the app structure."""
+        return [
+            {"label": UI.TAB_1_NAME, "href": UI.TAB_1_URL, "nav_id": UI.TAB_1_NAV_ID},
+            {"label": UI.TAB_2_NAME, "href": UI.TAB_2_URL, "nav_id": UI.TAB_2_NAV_ID},
+            {"label": UI.TAB_3_NAME, "href": UI.TAB_3_URL, "nav_id": UI.TAB_3_NAV_ID},
+            {"label": UI.TAB_4_NAME, "href": UI.TAB_4_URL, "nav_id": UI.TAB_4_NAV_ID},
+            {"label": UI.TAB_5_NAME, "href": UI.TAB_5_URL, "nav_id": UI.TAB_5_NAV_ID},
+        ]
+
+    @classmethod
+    def item_factory(cls, label, href, nav_id):
+        """Standardized NavLink generator."""
+        return dbc.NavItem(
+            dbc.NavLink(
+                label,
+                href=href,
+                id=nav_id,
+                active="exact",
+                className="small px-3 text-white-50",
+                style={
+                    "fontSize": "15px",
+                    "height": "35px",
+                    "display": "flex",
+                    "alignItems": "center",
+                    "textTransform": "uppercase",
+                    "letterSpacing": "0.5px"
+                }
+            )
+        )
+
+    @classmethod
+    def get_nav(cls):
+        """The final assembly used in the layout."""
+        return [cls.item_factory(**item) for item in cls.get_schema()]
+
+
 # Create a single instance to use properties easily
 UI = UIConstants()
+Nav = WorkflowNav()
 
 
 class DataConstants:

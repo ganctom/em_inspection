@@ -6,8 +6,8 @@ from data_service import service
 
 ### Set up logging
 # logging.basicConfig(level=logging.DEBUG)
-logging.basicConfig(level=logging.INFO)
-# logging.basicConfig(level=logging.WARNING)
+# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 
 # 1. Import the app instance first
@@ -17,6 +17,7 @@ from app import app
 from layouts.coarse_inspection import create_layout
 from layouts import project_setup, stitching_setup
 from data_service import service
+from constants import Nav, UIConstants
 
 # 3. Register all callbacks by importing the module
 import callbacks
@@ -39,34 +40,29 @@ app.layout = html.Div([
 
     # Main wrapper
     html.Div([
-        # REDESIGNED TOP BAR (Left Aligned)
+        # REDESIGNED TOP BAR
         dbc.Navbar(
             dbc.Container([
-                # Brand/Title on the left
-                dbc.NavbarBrand("SBFI WORKFLOW", className="ms-2 fw-bold", style={"fontSize": "14px"}),
-
-                # Links also aligned to the left
-                dbc.Nav([
-                    dbc.NavItem(dbc.NavLink("1. SETUP", href="/setup", id="step-1", className="small")),
-                    dbc.NavItem(dbc.NavLink("2. STITCHING", href="/stitching", id="step-2", className="small")),
-                    dbc.NavItem(dbc.NavLink("3. INSPECTION", href="/inspection", id="step-3", className="small")),
-                    dbc.NavItem(dbc.NavLink("4. PROCESSING", href="/post-processing", id="step-4", className="small")),
-                ], navbar=True, className="ms-4 justify-content-start"),
-
-            ], fluid=True),
-            color="primary",
+                dbc.NavbarBrand(
+                    UIConstants.NAME_WORKFLOW,
+                    className="me-4 fw-bold",
+                    style={"fontSize": "15px"}
+                ),
+                dbc.Nav(Nav.get_nav(), navbar=True, className="flex-row"),
+            ], fluid=True, className="justify-content-start"),
+            color="dark",
             dark=True,
-            className="flex-shrink-0 shadow-sm",
-            style={"height": "35px"}  # Adjusted height for a slim profile
+            className="flex-shrink-0 shadow-sm py-0",
+            style={"height": "35px"}
         ),
 
-        # 2. THE DYNAMIC CONTENT
+        # 3. THE DYNAMIC CONTENT
         html.Div(
             id='page-content',
             className="flex-grow-1",
             style={
-                "height": "calc(100vh - 35px)",  # Match the navbar height
-                "overflow": "hidden"
+                "height": "calc(100vh - 35px)",
+                "overflow": "auto"  # Changed to auto so pages can scroll if content is long
             }
         )
     ], style={"height": "100vh", "display": "flex", "flexDirection": "column"})
@@ -82,11 +78,10 @@ def display_page(pathname):
     """Swaps the layout based on the URL."""
 
     # Default/Setup path
-    if pathname == '/setup' or pathname == '/' or pathname is None:
+    if pathname == UIConstants.TAB_1_URL or pathname == '/' or pathname is None:
         return project_setup.layout()
 
-    elif pathname == '/stitching':
-        # 1. Check if an experiment is initialized in the service
+    elif pathname == UIConstants.TAB_2_URL:
         if service.exp_config is not None and service.acq_config is not None:
             return stitching_setup.layout(active_service=service)
         else:
@@ -94,18 +89,25 @@ def display_page(pathname):
                 logging.debug(f'AcqConfig not initialized.')
             return stitching_setup.layout()
 
-    elif pathname == '/inspection':
+    elif pathname == UIConstants.TAB_3_URL:
         if service.processor is None:
             return dbc.Container([
-                dbc.Alert("No experiment loaded. Please go to '1. Setup' first.", color="warning", className="mt-5")
+                dbc.Alert(UIConstants.TAB_3_ALERT, color="warning", className="mt-5")
             ])
         return create_layout()
 
-    elif pathname == '/post-processing':
+    elif pathname == UIConstants.TAB_4_URL:
         return html.Div([
-            html.H3("Step 4: Post-processing"),
-            dbc.Alert("Background processing engine placeholder.", color="secondary")
+            html.H3(UIConstants.TAB_4_DSCR),
+            dbc.Alert(UIConstants.TAB_X_DSCR, color="secondary")
         ], className="p-5")
+
+    elif pathname == UIConstants.TAB_5_URL:
+        return html.Div([
+            html.H3(UIConstants.TAB_5_DSCR),
+            dbc.Alert(UIConstants.TAB_X_DSCR, color="secondary")
+        ], className="p-5")
+
     else:
         return html.Div([
             html.H1("404"),
@@ -114,19 +116,21 @@ def display_page(pathname):
 
 
 @callback(
-    [Output("step-1", "active"),
-     Output("step-2", "active"),
-     Output("step-3", "active"),
-     Output("step-4", "active")],
+    [Output(UIConstants.TAB_1_NAV_ID, "active"),
+     Output(UIConstants.TAB_2_NAV_ID, "active"),
+     Output(UIConstants.TAB_3_NAV_ID, "active"),
+     Output(UIConstants.TAB_4_NAV_ID, "active"),
+     Output(UIConstants.TAB_5_NAV_ID, "active")],
     [Input("url", "pathname")]
 )
 def update_stepper_style(pathname):
     """Visually highlights the current step in the top nav."""
     return [
-        (pathname == "/setup" or pathname == "/"),
-        (pathname == "/stitching"),
-        (pathname == "/inspection"),
-        (pathname == "/post-processing")
+        (pathname == UIConstants.TAB_1_URL or pathname == "/"),
+        (pathname == UIConstants.TAB_2_URL),
+        (pathname == UIConstants.TAB_3_URL),
+        (pathname == UIConstants.TAB_4_URL),
+        (pathname == UIConstants.TAB_5_URL),
     ]
 
 if __name__ == '__main__':
