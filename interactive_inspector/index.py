@@ -11,8 +11,8 @@ from app import app
 from constants import Nav, UIConstants
 
 # 3. Import layouts
-from layouts import project_setup, stitching_setup
-from layouts.coarse_inspection import create_layout
+from layouts import setup_layout, coarse_align_layout
+from layouts.inspection_layout import create_layout
 from data_service import service
 
 # 4. Register all callbacks
@@ -80,21 +80,21 @@ def display_page(pathname):
     # 1. Handle Cold Start / Root Redirect
     # If the user hits '/' or None, push them to the setup URL formally
     if pathname == "/" or pathname is None:
-        return project_setup.layout(), UIConstants.TAB_1_URL
+        return setup_layout.layout(), UIConstants.TAB_1_URL
 
     # 2. Setup Page
     if pathname == UIConstants.TAB_1_URL:
-        return project_setup.layout(), no_update
+        return setup_layout.layout(), no_update
 
     # 3. Stitching Page
     elif pathname == UIConstants.TAB_2_URL:
         # Check if project is initialized
         if service.exp_config and service.acq_config:
-            return stitching_setup.layout(active_service=service), no_update
+            return coarse_align_layout.layout(active_service=service), no_update
 
         # Fallback if Step 1 is incomplete
         logging.debug('AcqConfig or ExpConfig not initialized.')
-        return stitching_setup.layout(), no_update
+        return coarse_align_layout.layout(), no_update
 
     # 4. Inspection Page
     elif pathname == UIConstants.TAB_3_URL:

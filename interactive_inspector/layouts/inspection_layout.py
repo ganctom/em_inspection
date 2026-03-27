@@ -1,7 +1,7 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from data_service import service
-from .components import create_grid_navigator
+from .components_layouts import create_grid_navigator
 
 
 def create_layout():

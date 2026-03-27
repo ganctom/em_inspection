@@ -91,7 +91,7 @@ class UIConstants:
     MSG_PARSE_DISABLED = "Add a new experiment or initialize an existing one before parsing acquired data."
     MSG_PARSE_READY = "Click to start parsing the acquired dataset and validation."
     MSG_BCKP_CO_DISABLED = "Initialize the project to enable coarse offsets backup or downstream workflow steps."
-    MSG_BCKP_CO_READY = "Click to aggregate and store offsets and tile-id maps to enable inspection."
+    MSG_BCKP_CO_READY = "Aggregates and stores coarse offsets and tile-id maps from all sections to enable Inspection."
 
     # Standard Label Style
     LBL_CFG = {"className": "small mb-0"}
