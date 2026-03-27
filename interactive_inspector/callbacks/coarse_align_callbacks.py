@@ -92,7 +92,7 @@ def handle_config_load(n_clicks, file_path):
 
 
 @callback(
-    Output(UI.ID_STITCH_CONSOLE, "children", allow_duplicate=True),
+    Output(UI.ID_RUN_ESTIM_CONSOLE, "children", allow_duplicate=True),
     Input(UI.ID_STITCH_SAVE_YAML, "n_clicks"),
     [
         State(UI.ID_STITCH_CONFIG_PATH, "value"),
@@ -210,11 +210,11 @@ def handle_config_save(n_clicks, path, *args):
 
 
 @callback(
-    [Output(UI.ID_STITCH_CONSOLE, "children", allow_duplicate=True),
+    [Output(UI.ID_RUN_ESTIM_CONSOLE, "children", allow_duplicate=True),
      Output("stitch-progress-interval", "disabled", allow_duplicate=True),
      Output("stitch-progress-bar", "style", allow_duplicate=True)],
-    Input(UI.ID_STITCH_RUN_BTN, "n_clicks"),
-    [State(UI.ID_STITCH_SECTION_INP, "value"),
+    Input(UI.ID_RUN_ESTIM_BTN, "n_clicks"),
+    [State(UI.ID_RUN_ESTIM_INP, "value"),
      State(UI.ID_STITCH_CONFIG_PATH, "value"),
      State(UI.ID_CONF_OVERLAPS_X, "value"),
      State(UI.ID_CONF_OVERLAPS_Y, "value"),
@@ -223,7 +223,7 @@ def handle_config_save(n_clicks, path, *args):
      State(UI.ID_CONF_FILTER_SIZE, "value")],
     prevent_initial_call=True
 )
-def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, m_overlap, fs):
+def run_coarse_alignment(n_clicks, range_str, config_path, ox, oy, m_range, m_overlap, fs):
     # 1. Initial experiment check
     if not service.exp_config:
         msg = UI.log_row("Error: No active experiment found. Please initialize in Step 1.", type="error")
@@ -233,20 +233,20 @@ def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, 
         msg = UI.log_row("Error: Please specify sections for estimation.", type="error")
         return [msg], True, {"display": "none"}
 
-    # 2. Section Validation Logic
+    # 2. Section Validation Logic  # TODO move to some utility module (it is also in stitching_callback)
     first_sec = service.exp_config.first_sec
     last_sec = service.exp_config.last_sec
-    valid_sec_nums = list(range(first_sec, last_sec + 1))
+    sec_nums_valid = list(range(first_sec, last_sec+1))
 
     if str(range_str).lower() != 'all':
         try:
-            all_requested = parse_section_range(range_str)
-            valid_sec_nums = validate_section_numbers(first_sec, last_sec, all_requested)
+            sec_nums_req = parse_section_range(range_str)
+            sec_nums_valid = validate_section_numbers(first_sec, last_sec, sec_nums_req)
         except ValueError as e:
             logging.warning(f"Validation failed: {e}")
             return [UI.log_row(f"Error: {e}", type="error")], True, {"display": "none"}
 
-    if not valid_sec_nums:
+    if not sec_nums_valid:
         return [UI.log_row("Error: No valid sections selected.", type="error")], True, {"display": "none"}
 
     # 3. Parameter Preparation (Consolidated before thread starts)
@@ -270,7 +270,7 @@ def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, 
     start_log = [
         UI.log_row("▶ Starting Coarse Offset Estimation...", type="info"),
         UI.log_row(f"Experiment location: {service.exp_config.proc_dir}"),
-        UI.log_row(f"Sections: {len(valid_sec_nums)} requested ({valid_sec_nums[0]}-{valid_sec_nums[-1]})"),
+        UI.log_row(f"Sections: {len(sec_nums_valid)} requested ({sec_nums_valid[0]}-{sec_nums_valid[-1]})"),
         UI.log_row(f"Using Overlaps: {final_stitch_params['overlaps_xy']}"),
         UI.log_row("-" * 50),
         UI.log_row("▶ Thread started. Monitoring progress...", type="success")
@@ -278,8 +278,8 @@ def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, 
 
     # 5. Launch the Thread
     thread = threading.Thread(
-        target=service.run_stitching_thread,
-        args=(valid_sec_nums, final_stitch_params),
+        target=service.run_coarse_align_thread,
+        args=(sec_nums_valid, final_stitch_params),
         daemon=True
     )
     thread.start()
@@ -292,13 +292,13 @@ def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, 
     [Output("stitch-progress-bar", "value"),
      Output("stitch-progress-text", "children"),
      Output("stitch-progress-interval", "disabled", allow_duplicate=True),
-     Output(UI.ID_STITCH_CONSOLE, "children", allow_duplicate=True)],
+     Output(UI.ID_RUN_ESTIM_CONSOLE, "children", allow_duplicate=True)],
     Input("stitch-progress-interval", "n_intervals"),
-    State(UI.ID_STITCH_CONSOLE, "children"),
+    State(UI.ID_RUN_ESTIM_CONSOLE, "children"),
     prevent_initial_call=True
 )
 def update_stitch_progress(n, current_log):
-    status = service.stitch_status
+    status = service.coarse_align_status
 
     # 1. Ensure log_history is ALWAYS a list of components
     if not isinstance(current_log, list):
@@ -362,6 +362,6 @@ clientside_callback(
     }
     """,
     Output("scroll-trigger-dummy", "data"),  # Target the dummy store instead of the Console ID
-    Input(UI.ID_STITCH_CONSOLE, "children"),
+    Input(UI.ID_RUN_ESTIM_CONSOLE, "children"),
     prevent_initial_call=True
 )

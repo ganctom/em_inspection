@@ -65,7 +65,9 @@ class DataService:
         self._log_buffer = io.StringIO()
         self._log_lock = threading.Lock()
         self.backup_status = {"active": False, "progress": 0, "message": "", "error": None}
-        self.stitch_status = UI.STITCH_STATUS
+        self.coarse_align_status = UI.STITCH_STATUS
+        self.abort_requested = False
+        self.stitch_status = {"active": False, "pending_messages": []}
 
 
     def create_and_save_new_experiment(
@@ -677,9 +679,9 @@ class DataService:
             "overwrite_cxcy": True,
         }
 
-    def run_stitching_thread(self, section_numbers, final_params):
+    def run_coarse_align_thread(self, section_numbers, final_params):
         # 1. Initialize with all required keys
-        self.stitch_status = {
+        self.coarse_align_status = {
             "active": True,
             "progress": 0,
             "message": "Initializing...",
@@ -688,26 +690,98 @@ class DataService:
         }
         try:
             total = len(section_numbers)
-            self.stitch_status["pending_messages"].append(f"Using Params: {final_params}")
+            self.coarse_align_status["pending_messages"].append(f"Using Params: {final_params}")
 
             for i, sec_num in enumerate(section_numbers):
                 msg = f"Processing section {sec_num} ({i + 1}/{total})"
-                self.stitch_status["message"] = msg
-                self.stitch_status["pending_messages"].append(msg)
-                self.stitch_status["progress"] = int(((i + 1) / total) * 100)
+                self.coarse_align_status["message"] = msg
+                self.coarse_align_status["pending_messages"].append(msg)
+                self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
 
                 # Core Logic
                 section = self._init_section(sec_num)
                 coarse_offsets = section.compute_coarse_offset_section(**final_params)
                 utils.save_coarse_mat(coarse_offsets, section.path)
 
-            self.stitch_status["message"] = f"Finished {total} sections."
-            self.stitch_status["progress"] = 100
+            self.coarse_align_status["message"] = f"Finished {total} sections."
+            self.coarse_align_status["progress"] = 100
+
+        except Exception as e:
+            self.coarse_align_status["error"] = str(e)
+        finally:
+            self.coarse_align_status["active"] = False
+
+
+    def run_pipeline_thread(self, section_numbers, tasks, config_path):
+        self.abort_requested = False  # Reset flag at start
+        self.stitch_status = {
+            "active": True, "progress": 0, "message": "Starting...",
+            "pending_messages": [UI.log_row("🚀 Pipeline Started", type="info")],
+            "error": None
+        }
+
+        try:
+            total_tasks = len(tasks)
+            total_sections = len(section_numbers)
+            # cfg = self.load_stitching_config(config_path)
+            logging.info(f'cfg loading ...')
+            cfg=None
+
+            for t_idx, task in enumerate(tasks):
+                # CHECK 1: Before starting a new major task
+                if self.abort_requested: break
+
+                task_label = task.replace("_", " ").upper()
+                self.stitch_status["pending_messages"].append(
+                    UI.log_row(f"▶️ STEP {t_idx + 1}: {task_label}", type="info"))
+
+                for s_idx, sec_num in enumerate(section_numbers):
+                    # CHECK 2: Before processing each section
+                    if self.abort_requested:
+                        self.stitch_status["pending_messages"].append(
+                            UI.log_row("🛑 Abort signal received. Stopping...", type="warning"))
+                        break
+
+                    # Execute the actual logic
+                    _execute_task_by_name(task, sec_num, cfg)
+
+                    # Update Progress
+                    prog = int(((t_idx + (s_idx + 1) / total_sections) / total_tasks) * 100)
+                    self.stitch_status["progress"] = prog
+                    self.stitch_status["message"] = f"[{task_label}] Sec {sec_num}"
+
+                if self.abort_requested: break  # Exit outer loop if inner loop aborted
+
+            if self.abort_requested:
+                self.stitch_status["message"] = "Pipeline Aborted by User."
+            else:
+                self.stitch_status["progress"] = 100
+                self.stitch_status["message"] = "Pipeline Complete!"
+                self.stitch_status["pending_messages"].append(UI.log_row("🏁 ALL TASKS COMPLETE", type="success"))
 
         except Exception as e:
             self.stitch_status["error"] = str(e)
+            self.stitch_status["pending_messages"].append(UI.log_row(f"❌ ERROR: {e}", type="error"))
         finally:
             self.stitch_status["active"] = False
+
+
+def _execute_task_by_name(self, task_name, sec_num, cfg=None):
+    """Routes a section to the specific backend logic."""
+    section = self._init_section(sec_num)  # Your existing section init logic
+
+    if task_name == "coarse_mesh":
+        # # Example logic
+        # mesh = section.compute_coarse_mesh(cfg.mesh_integration_config)
+        # mesh.save()
+        logging.info("task name: coarse_mesh")
+    elif task_name == "masks":
+        # section.build_margin_masks(cfg.warp_config.margin)
+        logging.info("task name: masks")
+    elif task_name == "fine_flow":
+        logging.info("task name: fine_flow")
+        # section.compute_fine_flows(cfg.registration_config)
+    # ... add remaining steps here ...
 
 
 # Initialize single instance

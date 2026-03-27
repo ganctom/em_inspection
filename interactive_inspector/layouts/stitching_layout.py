@@ -1,15 +1,14 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 from constants import UI
-from parameter_config import MeshIntegrationConfig, WarpConfigStitching
+import parameter_config as pcfg
 
-# Initialize defaults from Pydantic models
-default_mesh = MeshIntegrationConfig()
-default_warp = WarpConfigStitching()
+# Reusing your standard configs
+default_mesh = pcfg.MeshIntegrationConfig()
+default_warp = pcfg.WarpConfigStitching()
 
 
 def layout(active_service=None):
-
     # Determine the initial path(s)
     initial_output_dir = UI.get_proj_dir(active_service)
     stitch_yaml_path = UI.get_stitching_config_path(active_service)
@@ -19,14 +18,6 @@ def layout(active_service=None):
         inp_stitch_cfg["value"] = stitch_yaml_path
 
     return dbc.Container([
-        # dbc.Row([
-        #     dbc.Col([
-        #         html.H3("Step 2: Section Stitching", className="mt-3"),
-        #         html.P("Configure SOFIMA alignment and perform coarse offset estimation.",
-        #                className="text-muted small"),
-        #     ], width=12)
-        # ]),
-
         # 1. CONFIGURATION SECTION (COLLAPSIBLE)
         dbc.Row([
             dbc.Col([
@@ -38,7 +29,7 @@ def layout(active_service=None):
                             "Stitching Configuration Manager",
                             dbc.Badge("Ready", color="success", className="ms-2", id="sync-badge"),
                             html.Small(id="header-path-summary", className="ms-3 text-muted",
-                                     style={"fontSize": "11px", "fontWeight": "normal"})
+                                       style={"fontSize": "11px", "fontWeight": "normal"})
                         ]),
                         children=[
                             # Path Selection
@@ -48,7 +39,8 @@ def layout(active_service=None):
                                     dbc.InputGroup([
                                         dbc.Input(**inp_stitch_cfg),
                                         dbc.Button("Load", id=UI.ID_STITCH_LOAD_YAML, color="primary", size="sm"),
-                                        dbc.Button("Save / Export", id=UI.ID_STITCH_SAVE_YAML, color="success", size="sm"),
+                                        dbc.Button("Save / Export", id=UI.ID_STITCH_SAVE_YAML, color="success",
+                                                   size="sm"),
                                     ]),
                                     html.Div(id="config-load-status", className="small mt-1 text-muted")
                                 ], width=12, className="mb-3")
@@ -61,8 +53,10 @@ def layout(active_service=None):
                                         UI.label_factory(UI.LBL_OUT_DIR),
                                         dbc.Input(id="conf-output-dir", value=initial_output_dir, size="sm"),
                                         dbc.Row([
-                                            dbc.Col([UI.label_factory("Start Section"), dbc.Input(id="conf-start", type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("End Section"), dbc.Input(id="conf-end", type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Start Section"),
+                                                     dbc.Input(id="conf-start", type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("End Section"),
+                                                     dbc.Input(id="conf-end", type="number", size="sm")], width=6),
                                         ], className="mt-2"),
                                     ], className="p-3 border-start border-end border-bottom")
                                 ]),
@@ -71,22 +65,50 @@ def layout(active_service=None):
                                 dbc.Tab(label="Registration (SOFIMA)", tab_id="tab-reg", children=[
                                     html.Div([
                                         dbc.Row([
-                                            dbc.Col([UI.label_factory("Overlaps X (csv)"), dbc.Input(id=UI.ID_CONF_OVERLAPS_X, placeholder="200, 300, 400", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Overlaps Y (csv)"), dbc.Input(id=UI.ID_CONF_OVERLAPS_Y, placeholder="200, 300, 400", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Range (csv)"), dbc.Input(id=UI.ID_CONF_MIN_RANGE, placeholder="10, 100, 0", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Overlap"), dbc.Input(id=UI.ID_CONF_MIN_OVERLAP, placeholder="20",  type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Filter Size"), dbc.Input(id=UI.ID_CONF_FILTER_SIZE, placeholder="10",  type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Patch Size (csv)"), dbc.Input(id=UI.ID_CONF_PATCH, placeholder="120, 120", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Batch Size"), dbc.Input(id=UI.ID_CONF_BATCH, placeholder="8000", type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Peak Ratio"), dbc.Input(id=UI.ID_CONF_MIN_PKR, placeholder="1.0", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Peak Sharpness"), dbc.Input(id=UI.ID_CONF_MIN_PKS, placeholder="1.0", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Max Deviation"), dbc.Input(id=UI.ID_CONF_MAX_DEV, placeholder="6", type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Overlaps X (csv)"),
+                                                     dbc.Input(id=UI.ID_CONF_OVERLAPS_X, placeholder="200, 300, 400",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Overlaps Y (csv)"),
+                                                     dbc.Input(id=UI.ID_CONF_OVERLAPS_Y, placeholder="200, 300, 400",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Min Range (csv)"),
+                                                     dbc.Input(id=UI.ID_CONF_MIN_RANGE, placeholder="10, 100, 0",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Min Overlap"),
+                                                     dbc.Input(id=UI.ID_CONF_MIN_OVERLAP, placeholder="20",
+                                                               type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Filter Size"),
+                                                     dbc.Input(id=UI.ID_CONF_FILTER_SIZE, placeholder="10",
+                                                               type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Patch Size (csv)"),
+                                                     dbc.Input(id=UI.ID_CONF_PATCH, placeholder="120, 120", size="sm")],
+                                                    width=6),
+                                            dbc.Col([UI.label_factory("Batch Size"),
+                                                     dbc.Input(id=UI.ID_CONF_BATCH, placeholder="8000", type="number",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Min Peak Ratio"),
+                                                     dbc.Input(id=UI.ID_CONF_MIN_PKR, placeholder="1.0", size="sm")],
+                                                    width=6),
+                                            dbc.Col([UI.label_factory("Min Peak Sharpness"),
+                                                     dbc.Input(id=UI.ID_CONF_MIN_PKS, placeholder="1.0", size="sm")],
+                                                    width=6),
+                                            dbc.Col([UI.label_factory("Max Deviation"),
+                                                     dbc.Input(id=UI.ID_CONF_MAX_DEV, placeholder="6", type="number",
+                                                               size="sm")], width=6),
                                         ]),
                                         dbc.Row([
-                                            dbc.Col([UI.label_factory("Max Magnitude"), dbc.Input(id=UI.ID_CONF_MAX_MAG, placeholder="0", type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Min Patch Size"), dbc.Input(id=UI.ID_CONF_MIN_PATCH, placeholder="10", type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Max Gradient"), dbc.Input(id=UI.ID_CONF_MAX_GRAD, placeholder="12", type="number", size="sm")], width=6),
-                                            dbc.Col([UI.label_factory("Rec. Flow Max Dev"), dbc.Input(id=UI.ID_CONF_REC_FLOW_MAX_GRAD, placeholder="-1", type="number", size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Max Magnitude"),
+                                                     dbc.Input(id=UI.ID_CONF_MAX_MAG, placeholder="0", type="number",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Min Patch Size"),
+                                                     dbc.Input(id=UI.ID_CONF_MIN_PATCH, placeholder="10", type="number",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Max Gradient"),
+                                                     dbc.Input(id=UI.ID_CONF_MAX_GRAD, placeholder="12", type="number",
+                                                               size="sm")], width=6),
+                                            dbc.Col([UI.label_factory("Rec. Flow Max Dev"),
+                                                     dbc.Input(id=UI.ID_CONF_REC_FLOW_MAX_GRAD, placeholder="-1",
+                                                               type="number", size="sm")], width=6),
                                         ], className="mt-2"),
                                     ], className="p-3 border-start border-end border-bottom")
                                 ]),
@@ -231,55 +253,72 @@ def layout(active_service=None):
             ], width=12)
         ]),
 
-        # 2. EXECUTION SECTION (COLLAPSIBLE)
+        # 2. PIPELINE EXECUTION SECTION
         dbc.Row([
             dbc.Col([
-                dbc.Accordion([
-                    dbc.AccordionItem(
-                        item_id="execution-control",
-                        title=html.Div([html.I(className="bi bi-play-circle-fill me-2"), "Execution Control & Console"]),
-                        children=[
-                            dbc.Row([
+                dbc.Card([
+                    dbc.CardHeader([
+                        html.I(className="bi bi-cpu-fill me-2"),
+                        "Stitching Pipeline Controller"
+                    ], className="fw-bold bg-danger text-white"),
 
-                                dbc.Col([
-                                    UI.label_factory("Section Selection for Estimation", is_bold=True),
-                                    dbc.Input(id=UI.ID_RUN_ESTIM_INP, placeholder="e.g. 0-100, 105, 106 or 'all'", size="sm"),
-                                    html.P("Iterates through all overlaps within the specified layers.", className="text-muted mb-0", style={"fontSize": "11px"}),
-                                ], width=8),
+                    dbc.CardBody([
+                        dbc.Row([
+                            # COLUMN A: Section Selection
+                            dbc.Col([
+                                UI.label_factory("1. Target Sections", is_bold=True),
+                                dbc.Input(id=UI.ID_STITCH_PPLN_INP, placeholder="e.g. 0-100 or 'all'", size="sm"),
+                                html.P("Define the range for the operations below.", className="text-muted small mb-0"),
+                            ], width=4, className="border-end"),
 
-                                dbc.Col([
-                                    dbc.Button([html.I(className="bi bi-play-fill me-2"), "Run Estimation"],
-                                               id=UI.ID_RUN_ESTIM_BTN, color="danger", className="w-100 h-100", size="sm"),
-                                ], width=4),
-                            ]),
-                            html.Hr(),
-                            html.Div(
-                                id=UI.ID_RUN_ESTIM_CONSOLE,
-                                children=[],
-                                className="bg-dark text-white p-3 rounded",  # p-3 for a bit of internal padding
-                                style={
-                                    "height": "350px",  # Fixed height creates the "window"
-                                    "overflowY": "auto",  # Shows scrollbar only when needed
-                                    "fontFamily": "monospace",  # Essential for that CLI look
-                                    "fontSize": "12px",
-                                    "whiteSpace": "pre-wrap",  # Preserves line breaks and wrapping
-                                    "border": "1px solid #444",
-                                    "display": "flex",
-                                    "flexDirection": "column",  # Standard top-to-bottom flow
-                                }
-                            ),
-                            dcc.Store(id="scroll-trigger-dummy"),
-                            html.Div(id="stitch-progress-container", children=[
-                                dcc.Interval(id="stitch-progress-interval", interval=1000, disabled=True),
-                                dbc.Progress(id="stitch-progress-bar", value=0, striped=True, animated=True,
-                                             className="mb-2", style={"display": "none"}),
-                                html.Small(id="stitch-progress-text", className="text-muted")
-                            ])
-                        ]
-                    )
-                ], active_item="execution-control", className="shadow-sm border-danger")
+                            # COLUMN B: Step Selection (The Checklist)
+                            dbc.Col([
+                                UI.label_factory("2. Select Pipeline Steps", is_bold=True),
+                                dbc.Checklist(
+                                    id=UI.ID_STITCH_PPLN_STEPS,
+                                    options=UI.PPLN_STEPS,
+                                    value=[s["value"] for s in UI.PPLN_STEPS[:3]],
+                                    inline=False,
+                                    switch=True,
+                                    className="small custom-checklist"
+                                ),
+                            ], width=5),
+
+                            # COLUMN C: Actions
+                            dbc.Col([
+                                dbc.Button([
+                                    html.I(className="bi bi-play-circle-fill me-2"), "Run Pipeline"
+                                ], id=UI.ID_STITCH_PPLN_BTN, color="danger", className="w-100 mb-2"),
+
+                                dbc.Button([
+                                    html.I(className="bi bi-stop-fill me-2"), "Abort"
+                                ], id="abort-pipeline-btn", color="secondary", outline=True, size="sm",
+                                    className="w-100"),
+                            ], width=3, className="d-flex flex-column justify-content-center"),
+                        ]),
+                    ]),
+                ], className="shadow-sm mt-4 border-danger")
             ], width=12)
-        ])
+        ]),
+
+        # 3. CONSOLE & PROGRESS (Refined)
+        dbc.Row([
+            dbc.Col([
+                html.Div(id="pipeline-status-bar", className="mt-3"),  # Shows "Step 2/5: Building Masks..."
+                html.Div(
+                    id=UI.ID_STITCH_PPLN_CONSOLE,
+                    className="bg-dark text-white p-3 rounded mt-2",
+                    style={
+                        "height": "300px", "overflowY": "auto",
+                        "fontFamily": "monospace", "fontSize": "11px",
+                        "border": "1px solid #444"
+                    }
+                ),
+                dbc.Progress(id=UI.ID_STITCH_PPLN_PROGRESS, value=0, striped=True, animated=True, className="mt-2",
+                             style={"height": "10px"})
+            ], width=12)
+        ]),
+
+        dcc.Interval(id=UI.ID_STITCH_PPLN_PROGRESS_INT, interval=1000, disabled=True),
+        dcc.Store(id="scroll-trigger-dummy")
     ], fluid=True)
-
-

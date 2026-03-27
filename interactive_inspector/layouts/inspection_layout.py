@@ -4,7 +4,7 @@ from data_service import service
 from .components_layouts import create_grid_navigator
 
 
-def create_layout():
+def layout():
 
     # --- DATA PREP  ---
     meta = service.get_slider_metadata()

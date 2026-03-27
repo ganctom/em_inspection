@@ -302,9 +302,30 @@ class UIConstants:
     ID_CONF_WARP_CLAHE = "conf-warp-clahe"
 
     # Execution IDs
-    ID_STITCH_RUN_BTN = "run-stitching-btn"
-    ID_STITCH_CONSOLE = "stitching-results-console"
-    ID_STITCH_SECTION_INP = "section-selection-input"
+    ID_RUN_ESTIM_BTN = "run-estim-btn"
+    ID_RUN_ESTIM_CONSOLE = "run-estim-console"
+    ID_RUN_ESTIM_INP = "run-estim-input"
+
+    ID_STITCH_PPLN_BTN = "stitch-ppln-btn"
+    ID_STITCH_PPLN_CONSOLE = "stitch-ppln-console"
+    ID_STITCH_PPLN_INP = "stitch-ppln-inp"
+    ID_STITCH_PPLN_STEPS = "stitch-ppln-steps"
+    ID_STITCH_PPLN_PROGRESS = "stitch-ppln-progress"
+    ID_STITCH_PPLN_PROGRESS_INT = "stitch-ppln-progress-int"
+
+    # Pipeline Step Definitions
+    PPLN_STEPS = [
+        {"label": "Compute Coarse Meshes", "value": "coarse_mesh"},
+        {"label": "Build Margin Masks", "value": "masks"},
+        {"label": "Compute Fine Flows", "value": "fine_flow"},
+        {"label": "Get Fine Meshes", "value": "fine_mesh"},
+        {"label": "Warp Section", "value": "warp"},
+        {"label": "Downscale Result", "value": "downscale"},
+    ]
+
+    # Helper to get just the values in logical order
+    PPLN_MASTER_ORDER = [step["value"] for step in PPLN_STEPS]
+
 
     STITCH_STATUS = {
         "active": True,
@@ -360,14 +381,15 @@ class UIConstants:
     TAB_4_NAME = "4. STITCHING"
     TAB_5_NAME = "5. FINE ALIGNMENT"
 
-    TAB_1_DSCR = "1. SETUP"
-    TAB_2_DSCR = "2. COARSE ALIGNMENT"
-    TAB_3_DSCR = "3. INSPECTION"
+    TAB_1_DSCR = "Step 1. Experiment selection and parsing."
+    TAB_2_DSCR = "Step 2. Tile coarse-alignment."
+    TAB_3_DSCR = "Step 3. Inspection of tile coarse-alignment."
     TAB_4_DSCR = "Step 4: Section Stitching"
     TAB_5_DSCR = "Step 5: Section Fine-Alignment"
     TAB_X_DSCR = "Background processing engine placeholder."
 
-    TAB_3_ALERT = f"No experiment loaded. Please go to {TAB_1_NAME} first."
+    TAB_3_ALERT = f"No experiment loaded. Please go to {TAB_1_NAME} first and load experiment."
+    TAB_4_ALERT = TAB_3_ALERT
 
     TAB_1_URL = "/setup"
     TAB_2_URL = "/coarse-alignment"

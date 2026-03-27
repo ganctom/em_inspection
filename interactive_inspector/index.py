@@ -11,12 +11,15 @@ from app import app
 from constants import Nav, UIConstants
 
 # 3. Import layouts
-from layouts import setup_layout, coarse_align_layout
-from layouts.inspection_layout import create_layout
+from layouts import setup_layout, coarse_align_layout, stitching_layout, inspection_layout
 from data_service import service
 
 # 4. Register all callbacks
 import callbacks
+import callbacks.stitching_callbacks
+import callbacks.coarse_align_callbacks
+import callbacks.inspection_callbacks
+import callbacks.setup_callbacks
 
 # --- GLOBAL APP SHELL ---
 app.layout = html.Div([
@@ -77,41 +80,44 @@ def display_page(pathname):
     Returns: (Layout, Pathname)
     """
 
-    # 1. Handle Cold Start / Root Redirect
+    # 0. Handle Cold Start / Root Redirect
     # If the user hits '/' or None, push them to the setup URL formally
     if pathname == "/" or pathname is None:
         return setup_layout.layout(), UIConstants.TAB_1_URL
 
-    # 2. Setup Page
+    # 1. Setup Page
     if pathname == UIConstants.TAB_1_URL:
         return setup_layout.layout(), no_update
 
-    # 3. Stitching Page
+    # 2. Coarse Align Page
     elif pathname == UIConstants.TAB_2_URL:
         # Check if project is initialized
         if service.exp_config and service.acq_config:
             return coarse_align_layout.layout(active_service=service), no_update
 
         # Fallback if Step 1 is incomplete
-        logging.debug('AcqConfig or ExpConfig not initialized.')
         return coarse_align_layout.layout(), no_update
 
-    # 4. Inspection Page
+    # 3. Inspection Page
     elif pathname == UIConstants.TAB_3_URL:
         if service.processor is None:
             return dbc.Container([
                 dbc.Alert(UIConstants.TAB_3_ALERT, color="warning", className="mt-5")
             ]), no_update
-        return create_layout(), no_update
+        return inspection_layout.layout(), no_update
 
-    # 5. Processing Page
+    # 4. Stitching Page
     elif pathname == UIConstants.TAB_4_URL:
-        return html.Div([
-            html.H3(UIConstants.TAB_4_DSCR),
-            dbc.Alert(UIConstants.TAB_X_DSCR, color="secondary")
+        if service.exp_config and service.acq_config:
+            return stitching_layout.layout(active_service=service), no_update
+
+        # Fallback if Step 1 is incomplete
+        return dbc.Container([
+            dbc.Alert(UIConstants.TAB_4_ALERT, color="warning", className="mt-5")
         ], className="p-5"), no_update
 
-    # 6. 404 Fallback
+
+    # 5. 404 Fallback
     else:
         return html.Div([
             html.H1("404", className="text-danger"),
