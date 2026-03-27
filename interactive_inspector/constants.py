@@ -370,9 +370,9 @@ class UIConstants:
     TAB_3_ALERT = f"No experiment loaded. Please go to {TAB_1_NAME} first."
 
     TAB_1_URL = "/setup"
-    TAB_2_URL = "/stitching"
+    TAB_2_URL = "/coarse-alignment"
     TAB_3_URL = "/inspection"
-    TAB_4_URL = "/post-processing"
+    TAB_4_URL = "/stitching"
     TAB_5_URL = "/fine-alignment"
 
     TAB_1_NAV_ID = "step-1"
