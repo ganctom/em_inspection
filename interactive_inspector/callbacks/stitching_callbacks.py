@@ -21,6 +21,7 @@ from inspection_utils_refactor import parse_section_range, validate_section_numb
         Output(UI.ID_CONF_OVERLAPS_Y, "value"),
         Output(UI.ID_CONF_MIN_OVERLAP, "value"),
         Output(UI.ID_CONF_MIN_RANGE, "value"),
+        Output(UI.ID_CONF_FILTER_SIZE, "value"),
         Output(UI.ID_CONF_PATCH, "value"),
         Output(UI.ID_CONF_BATCH, "value"),
         # Mesh
@@ -68,6 +69,7 @@ def handle_config_load(n_clicks, file_path):
             ", ".join(map(str, reg.overlaps_y)),
             reg.min_overlap,
             ", ".join(map(str, reg.min_range)),
+            reg.filter_size,
             ", ".join(map(str, reg.patch_size)),
             reg.batch_size,
             # Mesh
@@ -104,6 +106,7 @@ def handle_config_load(n_clicks, file_path):
         State(UI.ID_CONF_MIN_OVERLAP, "value"),
         State(UI.ID_CONF_MIN_RANGE, "value"),
         State(UI.ID_CONF_PATCH, "value"),
+        State(UI.ID_CONF_FILTER_SIZE, "value"),
         State(UI.ID_CONF_BATCH, "value"),
         State(UI.ID_CONF_MIN_PKR, "value"),
         State(UI.ID_CONF_MIN_PKS, "value"),
@@ -151,7 +154,7 @@ def handle_config_save(n_clicks, path, *args):
 
     try:
         (out_dir, start, end,
-         ox, oy, m_ov, m_rng, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_g,
+         ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_g,
          m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
          w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe) = args
 
@@ -160,6 +163,7 @@ def handle_config_save(n_clicks, path, *args):
             "overlaps_y": parse_csv(oy),
             "min_overlap": m_ov,
             "min_range": parse_csv(m_rng),
+            "filter_size": fs,
             "patch_size": parse_csv(patch),
             "batch_size": batch,
             "min_peak_ratio": pkr,
@@ -230,14 +234,14 @@ def run_stitching_estimation(n_clicks, range_str, config_path, ox, oy, m_range, 
         return [msg], True, {"display": "none"}
 
     # 2. Section Validation Logic
-    fs = service.exp_config.first_sec
-    ls = service.exp_config.last_sec
-    valid_sec_nums = list(range(fs, ls + 1))
+    first_sec = service.exp_config.first_sec
+    last_sec = service.exp_config.last_sec
+    valid_sec_nums = list(range(first_sec, last_sec + 1))
 
     if str(range_str).lower() != 'all':
         try:
             all_requested = parse_section_range(range_str)
-            valid_sec_nums = validate_section_numbers(fs, ls, all_requested)
+            valid_sec_nums = validate_section_numbers(first_sec, last_sec, all_requested)
         except ValueError as e:
             logging.warning(f"Validation failed: {e}")
             return [UI.log_row(f"Error: {e}", type="error")], True, {"display": "none"}
