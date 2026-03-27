@@ -1,22 +1,22 @@
+/* --- 1. SLIDER FIXES (RC-SLIDER) --- */
+
 /* Flips the slider handle back so it doesn't look inverted */
 .custom-vertical-slider .rc-slider-handle {
     transform: scaleY(-1) !important;
 }
 
-/* 1. Target the handle specifically */
+/* Target the handle specifically */
 .rc-slider-vertical .rc-slider-handle {
     width: 12px !important;
     height: 12px !important;
-    /* margin-left is relative to the track.
-       If track is 4px, -4px or -5px usually centers a 12px handle */
     margin-left: -4px !important;
-    margin-bottom: -6px !important; /* Helps with vertical centering */
+    margin-bottom: -6px !important;
     border: 2px solid white !important;
     background-color: #6f42c1 !important;
     box-shadow: none !important;
 }
 
-/* 2. Target the 'active' state to prevent it growing when clicked */
+/* Target the 'active' state to prevent handle jumping/growing */
 .rc-slider-vertical .rc-slider-handle:active,
 .rc-slider-vertical .rc-slider-handle:focus,
 .rc-slider-vertical .rc-slider-handle-click-focused {
@@ -25,27 +25,54 @@
     box-shadow: 0 0 5px rgba(111, 66, 193, 0.5) !important;
 }
 
-/* 3. Make the rail (track) a bit thinner to look proportional */
+/* Rail styling */
 .rc-slider-vertical .rc-slider-rail {
     width: 4px !important;
     background-color: #e9ecef !important;
 }
 
 
-/* Target the active NavLink specifically within your workflow nav */
-.nav-link.active {
-    color: #ffffff !important;           /* Pure white text for focus */
-    font-weight: 700 !important;        /* Bold the text */
-    border-bottom: 3px solid #0dcaf0;   /* Bright Cyan underline (Matches your grid active color) */
-    background-color: rgba(255, 255, 255, 0.1); /* Very subtle background lift */
-    transition: all 0.3s ease-in-out;
+/* --- 2. WORKFLOW NAVIGATION (TOP BAR ONLY) --- */
+
+/* IMPORTANT: We use the .navbar prefix here so these styles
+   DO NOT leak into internal dbc.Tabs or Accordions.
+*/
+
+/* Base transition for smooth hovering */
+.navbar .nav-link {
+    transition: all 0.2s ease-in-out;
 }
 
-/* Optional: add a small 'dot' before the text of the active page */
-.nav-link.active::before {
+/* Highlight for the active Top-Level page */
+.navbar .nav-link.active {
+    color: #ffffff !important;           /* Pure white text for focus */
+    font-weight: 700 !important;         /* Bold the text */
+    border-bottom: 3px solid #0dcaf0;    /* Cyan underline */
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* The 'active dot' indicator for the top bar */
+.navbar .nav-link.active::before {
     content: "●";
     margin-right: 6px;
     font-size: 8px;
     vertical-align: middle;
     color: #0dcaf0;
+}
+
+
+/* --- 3. INTERNAL TABS (CONFIG MANAGER) --- */
+
+/* Ensures sub-tabs (Acquisition, Mesh, etc.) remain readable
+   and use standard Bootstrap styling.
+*/
+.nav-tabs .nav-link {
+    color: #495057; /* Standard dark text */
+    border-bottom: none;
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff !important; /* Blue for the active sub-tab */
+    font-weight: 600 !important;
+    border-bottom: 1px solid #fff; /* Restores standard tab look */
 }

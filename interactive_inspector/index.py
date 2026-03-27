@@ -1,29 +1,24 @@
 import logging
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, callback
+from dash import html, dcc, Input, Output, callback, no_update
 from dash_extensions import EventListener
-from data_service import service
 
-### Set up logging
-# logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
+# 1. Setup logging
 logging.basicConfig(level=logging.WARNING)
 
-
-# 1. Import the app instance first
+# 2. Import the app instance and standardized constants
 from app import app
-
-# 2. Import layouts (Ensure the filenames match your actual files)
-from layouts.coarse_inspection import create_layout
-from layouts import project_setup, stitching_setup
-from data_service import service
 from constants import Nav, UIConstants
 
-# 3. Register all callbacks by importing the module
+# 3. Import layouts
+from layouts import project_setup, stitching_setup
+from layouts.coarse_inspection import create_layout
+from data_service import service
+
+# 4. Register all callbacks
 import callbacks
 
-# 4. Define the Global App Shell
-# Updated index.py layout section
+# --- GLOBAL APP SHELL ---
 app.layout = html.Div([
     dcc.Location(id='url', refresh=False),
 
@@ -48,6 +43,7 @@ app.layout = html.Div([
                     className="me-4 fw-bold",
                     style={"fontSize": "15px"}
                 ),
+                # The Nav items are generated from the WorkflowNav class
                 dbc.Nav(Nav.get_nav(), navbar=True, className="flex-row"),
             ], fluid=True, className="justify-content-start"),
             color="dark",
@@ -56,83 +52,73 @@ app.layout = html.Div([
             style={"height": "35px"}
         ),
 
-        # 3. THE DYNAMIC CONTENT
+        # DYNAMIC CONTENT AREA
         html.Div(
             id='page-content',
             className="flex-grow-1",
             style={
                 "height": "calc(100vh - 35px)",
-                "overflow": "auto"  # Changed to auto so pages can scroll if content is long
+                "overflow": "auto"
             }
         )
     ], style={"height": "100vh", "display": "flex", "flexDirection": "column"})
 ])
 
 
-# --- ROUTING CALLBACKS ---
+# --- ROUTING CALLBACK ---
 @callback(
-    Output('page-content', 'children'),
+    [Output('page-content', 'children'),
+     Output('url', 'pathname')],  # Added URL Output for clean redirection
     Input('url', 'pathname')
 )
 def display_page(pathname):
-    """Swaps the layout based on the URL."""
+    """
+    Swaps the layout based on the URL and handles redirects for the cold-start.
+    Returns: (Layout, Pathname)
+    """
 
-    # Default/Setup path
-    if pathname == UIConstants.TAB_1_URL or pathname == '/' or pathname is None:
-        return project_setup.layout()
+    # 1. Handle Cold Start / Root Redirect
+    # If the user hits '/' or None, push them to the setup URL formally
+    if pathname == "/" or pathname is None:
+        return project_setup.layout(), UIConstants.TAB_1_URL
 
+    # 2. Setup Page
+    if pathname == UIConstants.TAB_1_URL:
+        return project_setup.layout(), no_update
+
+    # 3. Stitching Page
     elif pathname == UIConstants.TAB_2_URL:
-        if service.exp_config is not None and service.acq_config is not None:
-            return stitching_setup.layout(active_service=service)
-        else:
-            if service.acq_config is None:
-                logging.debug(f'AcqConfig not initialized.')
-            return stitching_setup.layout()
+        # Check if project is initialized
+        if service.exp_config and service.acq_config:
+            return stitching_setup.layout(active_service=service), no_update
 
+        # Fallback if Step 1 is incomplete
+        logging.debug('AcqConfig or ExpConfig not initialized.')
+        return stitching_setup.layout(), no_update
+
+    # 4. Inspection Page
     elif pathname == UIConstants.TAB_3_URL:
         if service.processor is None:
             return dbc.Container([
                 dbc.Alert(UIConstants.TAB_3_ALERT, color="warning", className="mt-5")
-            ])
-        return create_layout()
+            ]), no_update
+        return create_layout(), no_update
 
+    # 5. Processing Page
     elif pathname == UIConstants.TAB_4_URL:
         return html.Div([
             html.H3(UIConstants.TAB_4_DSCR),
             dbc.Alert(UIConstants.TAB_X_DSCR, color="secondary")
-        ], className="p-5")
+        ], className="p-5"), no_update
 
-    elif pathname == UIConstants.TAB_5_URL:
-        return html.Div([
-            html.H3(UIConstants.TAB_5_DSCR),
-            dbc.Alert(UIConstants.TAB_X_DSCR, color="secondary")
-        ], className="p-5")
-
+    # 6. 404 Fallback
     else:
         return html.Div([
-            html.H1("404"),
+            html.H1("404", className="text-danger"),
             html.P(f"Path '{pathname}' not found.")
-        ], className="p-5 text-center")
+        ], className="p-5 text-center"), no_update
 
-
-@callback(
-    [Output(UIConstants.TAB_1_NAV_ID, "active"),
-     Output(UIConstants.TAB_2_NAV_ID, "active"),
-     Output(UIConstants.TAB_3_NAV_ID, "active"),
-     Output(UIConstants.TAB_4_NAV_ID, "active"),
-     Output(UIConstants.TAB_5_NAV_ID, "active")],
-    [Input("url", "pathname")]
-)
-def update_stepper_style(pathname):
-    """Visually highlights the current step in the top nav."""
-    return [
-        (pathname == UIConstants.TAB_1_URL or pathname == "/"),
-        (pathname == UIConstants.TAB_2_URL),
-        (pathname == UIConstants.TAB_3_URL),
-        (pathname == UIConstants.TAB_4_URL),
-        (pathname == UIConstants.TAB_5_URL),
-    ]
 
 if __name__ == '__main__':
-    # Using '0.0.0.0' makes it accessible on your local network
-    app.run(debug=True, port=8050)
+    # '0.0.0.0' allows access from other machines in the lab network
+    app.run(debug=True, port=8050, host='0.0.0.0')
