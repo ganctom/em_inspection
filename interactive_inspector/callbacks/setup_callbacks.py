@@ -140,71 +140,70 @@ def toggle_parse_button(exp_name, feedback, n_init):
     return button_disabled, tooltip_msg
 
 
-# Callback for storing all cx_cy.json files into a .npz container
-@callback(
-    [Output("setup-feedback", "children", allow_duplicate=True),
-     Output("progress-interval", "disabled", allow_duplicate=True)],
-    Input(UI.ID_BTN_BCKP_CO, "n_clicks"),
-    State(UI.ID_SEL_EXPERIMENT, "value"),
-    prevent_initial_call=True
-)
-def handle_coarse_offset_backup(n_clicks, sel_name):
-    if not n_clicks or not sel_name:
-        return dash.no_update, dash.no_update
-
-    try:
-        # Start the thread
-        thread = threading.Thread(target=service.run_offsets_backup_thread, daemon=True)
-        thread.start()
-
-        # UI initialization
-        initial_ui = dbc.Alert([
-            html.Div("Initializing backup...", className="small fw-bold mb-1"),
-            dbc.Progress(value=0, striped=True, animated=True, style={"height": "25px"}),
-        ], color="info", className="mt-3")
-
-        return initial_ui, False # Enable interval
-
-    except Exception as e:
-        return dbc.Alert(f"Error: {str(e)}", color="danger", className="mt-3"), True
-
-
-@callback(
-    [Output(UI.ID_BTN_BCKP_CO, "disabled"),
-     Output(UI.ID_TTP_BCKP, "children")],
-    [Input(UI.ID_SEL_EXPERIMENT, "value"),
-     Input("setup-feedback", "children"),
-     Input(UI.ID_BTN_INIT, "n_clicks")],
-    State(UI.ID_TTP_BCKP, "children"),
-    prevent_initial_call=False
-)
-def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
-    # 1. Backend Match Check:
-    has_matching_config = (
-        service.exp_config is not None and
-        service.exp_config.name == sel_name
-    )
-
-    # 2. Frontend Check: Is an experiment actually selected?
-    has_selection = bool(sel_name and sel_name.strip())
-
-    # 3. Validation Check: Did the last initialization fail?
-    is_error = False
-    if isinstance(feedback, dict) and 'props' in feedback:
-        is_error = feedback.get('props', {}).get('color') == 'danger'
-
-    # The "Green Light" condition
-    is_ready = has_matching_config and has_selection and not is_error
-
-    # Final States
-    button_disabled = not is_ready
-    new_msg = UI.MSG_BCKP_CO_READY if is_ready else UI.MSG_BCKP_CO_DISABLED
-
-    # Only update tooltip text if it changed (prevents tab-switch flickering)
-    tooltip_output = new_msg if new_msg != current_ttp_text else dash.no_update
-
-    return button_disabled, tooltip_output
-
+# # Callback for storing all cx_cy.json files into a .npz container
+# @callback(
+#     [Output("setup-feedback", "children", allow_duplicate=True),
+#      Output("progress-interval", "disabled", allow_duplicate=True)],
+#     Input(UI.ID_BTN_BCKP_CO, "n_clicks"),
+#     State(UI.ID_SEL_EXPERIMENT, "value"),
+#     prevent_initial_call=True
+# )
+# def handle_coarse_offset_backup(n_clicks, sel_name):
+#     if not n_clicks or not sel_name:
+#         return dash.no_update, dash.no_update
+#
+#     try:
+#         # Start the thread
+#         thread = threading.Thread(target=service.run_offsets_backup_thread, daemon=True)
+#         thread.start()
+#
+#         # UI initialization
+#         initial_ui = dbc.Alert([
+#             html.Div("Initializing backup...", className="small fw-bold mb-1"),
+#             dbc.Progress(value=0, striped=True, animated=True, style={"height": "25px"}),
+#         ], color="info", className="mt-3")
+#
+#         return initial_ui, False # Enable interval
+#
+#     except Exception as e:
+#         return dbc.Alert(f"Error: {str(e)}", color="danger", className="mt-3"), True
+#
+#
+# @callback(
+#     [Output(UI.ID_BTN_BCKP_CO, "disabled"),
+#      Output(UI.ID_TTP_BCKP, "children")],
+#     [Input(UI.ID_SEL_EXPERIMENT, "value"),
+#      Input("setup-feedback", "children"),
+#      Input(UI.ID_BTN_INIT, "n_clicks")],
+#     State(UI.ID_TTP_BCKP, "children"),
+#     prevent_initial_call=False
+# )
+# def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
+#     # 1. Backend Match Check:
+#     has_matching_config = (
+#         service.exp_config is not None and
+#         service.exp_config.name == sel_name
+#     )
+#
+#     # 2. Frontend Check: Is an experiment actually selected?
+#     has_selection = bool(sel_name and sel_name.strip())
+#
+#     # 3. Validation Check: Did the last initialization fail?
+#     is_error = False
+#     if isinstance(feedback, dict) and 'props' in feedback:
+#         is_error = feedback.get('props', {}).get('color') == 'danger'
+#
+#     # The "Green Light" condition
+#     is_ready = has_matching_config and has_selection and not is_error
+#
+#     # Final States
+#     button_disabled = not is_ready
+#     new_msg = UI.MSG_BCKP_CO_READY if is_ready else UI.MSG_BCKP_CO_DISABLED
+#
+#     # Only update tooltip text if it changed (prevents tab-switch flickering)
+#     tooltip_output = new_msg if new_msg != current_ttp_text else dash.no_update
+#
+#     return button_disabled, tooltip_output
 
 @callback(
     [Output("parsing-progress-bar", "value"),
@@ -219,40 +218,17 @@ def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
     prevent_initial_call=True
 )
 def master_ui_poller(n):
-    """A single source of truth for all background process UI updates."""
+    """Handles ONLY Parsing background process for the Setup Page."""
 
-    # --- CASE A: BACKUP IS ACTIVE ---
-    if service.backup_status["active"] or (
-            service.backup_status["progress"] == 100 and not service.backup_status["error"] is None):
-        status = service.backup_status
-        active = status["active"]
-        progress = status["progress"]
-        finished = not active and progress >= 100
-
-        # Reset state on finish so we don't loop
-        if finished: service.backup_status["progress"] = 0
-
-        content = dbc.Alert([
-            html.Div([
-                html.Div(status["message"], className="small fw-bold mb-1"),
-                dbc.Progress(value=progress, label=f"{progress}%", striped=True,
-                             animated=active, color="success" if finished else "primary", style={"height": "25px"}),
-            ])
-        ], color="success" if finished else "info", className="mt-3")
-
-        # Return Backup UI (Fill parsing outputs with no_update)
-        return (dash.no_update, dash.no_update, dash.no_update, finished, content,
-                dash.no_update, dash.no_update, dash.no_update)
-
-    # --- CASE B: PARSING IS ACTIVE ---
-    elif service.parsing_status["active"] or service.parsing_status["progress"] > 0:
+    # --- PARSING IS ACTIVE ---
+    if service.parsing_status["active"] or service.parsing_status["progress"] > 0:
         service.update_percentage_only()
         status = service.parsing_status
         finished = not status["active"] and status["progress"] >= 100
 
         final_alert = dash.no_update
         if finished:
-            service.parsing_status["progress"] = 0  # Reset
+            service.parsing_status["progress"] = 0  # Reset for next run
             alert_color = "success" if (status.get("missing_count", 0) == 0) else "warning"
             final_alert = dbc.Alert([
                 html.H5("Processing Complete", className="alert-heading"),
@@ -262,8 +238,22 @@ def master_ui_poller(n):
                 ], className="mb-0")
             ], color=alert_color, className="mt-3")
 
-        return (status["progress"], f"{status['progress']}%", status["message"], finished,
-                final_alert, not finished, not finished, "success" if finished else "primary")
+        # Return state: value, label, status_text, interval_disabled, feedback, animated, striped, color
+        return (
+            status["progress"],
+            f"{status['progress']}%",
+            status["message"],
+            finished,
+            final_alert,
+            not finished,
+            not finished,
+            "success" if finished else "primary"
+        )
 
-    # --- CASE C: NOTHING ACTIVE ---
-    return dash.no_update, dash.no_update, dash.no_update, True, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    # --- NOTHING ACTIVE ---
+    # Shut down the interval to save resources
+    return (
+        dash.no_update, dash.no_update, dash.no_update,
+        True,  # Disable interval
+        dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    )

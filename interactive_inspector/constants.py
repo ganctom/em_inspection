@@ -1,10 +1,10 @@
 import time
 from dataclasses import dataclass
-from dash import html
+from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 import parameter_config
-from parameter_config import DEF_CT, DEF_PX_SIZE
+from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class UIConstants:
     }
 
     # --- CONFIG FILENAMES --- #
-    FN_CFG_TILE_STITCHING = "tile_stitching_config.yaml"
+    FN_CFG_TILE_STITCHING = FN_STITCHING_CFG
 
     # --- LABELS ---
     NAME_WORKFLOW = "SBFI WORKFLOW"
@@ -65,6 +65,8 @@ class UIConstants:
     LBL_CFG_PATH_YAML = "Config File Path (.yaml)"
     LBL_ACQ_RNG = "Acquisition & Range"
     LBL_OUT_DIR = "Output Directory"
+    LBL_COL_COARSE_INP = "Section Selection for Coarse Offsets Estimation"
+    LBL_COARSE_TAB_REG = "Registration (SOFIMA)"
 
     # --- IDs ---
     ID_INP_NAME = "new-exp-name"
@@ -181,6 +183,11 @@ class UIConstants:
             ]
         )
 
+    @classmethod
+    def label_factory(cls, text, is_bold=False):
+        className = "small mb-1" + (" fw-bold" if is_bold else "")
+        return dbc.Label(text, className=className)
+
     # --- COMPONENT REGISTRY ---
     @property
     def INP_NAME(self):
@@ -250,11 +257,215 @@ class UIConstants:
             children=self.MSG_PARSE_DISABLED
         )
 
-    @property
-    def INP_STITCH_CFG(self):
-        return self.text_factory(
-            self.ID_STITCH_CONFIG_PATH, f"/Volumes/.../run-01/{parameter_config.FN_STITCHING_CFG}"
+    # --- COARSE ALIGNMENT SECTION PROPERTIES ---
+
+    @classmethod
+    def TAB_ACQUISITION(cls, active_service=None):
+        """Generates the Acquisition & Range tab with dynamic initial values."""
+        # Calculate dynamic values from service
+        initial_output_dir = cls.get_proj_dir(active_service)
+
+        # Pull defaults from the service config if available, otherwise None
+        start_val = active_service.exp_config.first_sec if active_service and active_service.exp_config else None
+        end_val = active_service.exp_config.last_sec if active_service and active_service.exp_config else None
+
+        # Define the inner content
+        content = [
+            cls.label_factory(cls.LBL_OUT_DIR),
+            dbc.Input(id="conf-output-dir", value=initial_output_dir, size="sm"),
+            dbc.Row([
+                dbc.Col([
+                    cls.label_factory("Start Section"),
+                    dbc.Input(**cls.numeric_factory("conf-start", value=start_val, is_int=True))
+                ], width=6),
+                dbc.Col([
+                    cls.label_factory("End Section"),
+                    dbc.Input(**cls.numeric_factory("conf-end", value=end_val, is_int=True))
+                ], width=6),
+            ], className="mt-2"),
+        ]
+
+        # Wrap in your existing tab_factory
+        return cls.tab_factory(
+            label=cls.LBL_ACQ_RNG,
+            tab_id="tab-acq",
+            children=content
         )
+
+
+    @classmethod
+    def TAB_REGISTRATION(cls, active_service=None):
+        """Generates the Registration (SOFIMA) tab using defaults from RegistrationConfig."""
+
+        # Access the defaults from the Pydantic model
+        defaults = RegistrationConfig()
+
+        # Helper to convert list defaults to CSV strings for placeholders
+        def to_csv(val_list):
+            return ", ".join(map(str, val_list))
+
+        content = [
+            dbc.Row([
+                dbc.Col([
+                    cls.label_factory("Overlaps X (csv)"),
+                    dbc.Input(**cls.text_factory(
+                        cls.ID_CONF_OVERLAPS_X,
+                        placeholder=to_csv(defaults.overlaps_x)
+                    ))
+                ], width=6),
+
+                dbc.Col([
+                    cls.label_factory("Overlaps Y (csv)"),
+                    dbc.Input(**cls.text_factory(
+                        cls.ID_CONF_OVERLAPS_Y,
+                        placeholder=to_csv(defaults.overlaps_y)
+                    ))
+                ], width=6),
+
+                dbc.Col([
+                    cls.label_factory("Min Range (csv)"),
+                    dbc.Input(**cls.text_factory(
+                        cls.ID_CONF_MIN_RANGE,
+                        placeholder=to_csv(defaults.min_range)
+                    ))
+                ], width=6),
+
+                # Pure Numeric Inputs
+                dbc.Col([
+                    cls.label_factory("Min Overlap"),
+                    dbc.Input(**cls.numeric_factory(
+                        cls.ID_CONF_MIN_OVERLAP,
+                        placeholder=str(defaults.min_overlap),
+                        is_int=True
+                    ))
+                ], width=6),
+
+                dbc.Col([
+                    cls.label_factory("Filter Size"),
+                    dbc.Input(**cls.numeric_factory(
+                        cls.ID_CONF_FILTER_SIZE,
+                        placeholder=str(defaults.filter_size),
+                        is_int=True
+                    ))
+                ], width=6),
+            ]),
+        ]
+
+        return cls.tab_factory(
+            label="Registration (SOFIMA)",
+            tab_id="tab-reg",
+            children=content
+        )
+
+    @property
+    def TTP_BCKP_CO(self):
+        """Factory-generated config for the Backup Tooltip."""
+        return self.tooltip_factory(
+            id=self.ID_TTP_BCKP,
+            target=self.ID_BTN_BCKP_WRAPPER,
+            children=self.MSG_BCKP_CO_DISABLED
+        )
+
+    @property
+    def INP_RUN_ESTIM(self):
+        return self.text_factory(self.ID_RUN_ESTIM_INP, "e.g. 0-100 or 'all'")
+
+    @property
+    def BTN_RUN_ESTIM(self):
+        return self.button_factory(
+            id=self.ID_RUN_ESTIM_BTN,
+            children=[html.I(className="bi bi-play-fill me-2"), "Run Estimation"],
+            color="danger",
+            outline=False,
+            className="w-100 mb-2",
+            size="sm"
+        )
+
+    @property
+    def CONSOLE_COARSE(self):
+        """Unified Console for Coarse Alignment."""
+        return html.Div(
+            id=self.ID_RUN_ESTIM_CONSOLE,
+            children=[],
+            className="bg-dark text-white p-3 rounded",
+            style={
+                "height": "350px",
+                "overflowY": "auto",
+                "fontFamily": "monospace",
+                "fontSize": "12px",
+                "whiteSpace": "pre-wrap",
+                "border": "1px solid #444",
+                "display": "flex",
+                "flexDirection": "column",
+            }
+        )
+
+    @property
+    def PROGRESS_COARSE(self):
+        """Standardized progress area for the coarse alignment page."""
+        return html.Div(id="stitch-progress-container", className="mt-2", children=[
+            dcc.Interval(id="stitch-progress-interval", interval=1000, disabled=True),
+            dbc.Progress(
+                id="stitch-progress-bar",
+                value=0,
+                striped=True,
+                animated=True,
+                className="mb-2",
+                style={"height": "10px", "display": "none"}
+            ),
+            html.Small(id="stitch-progress-text", className="text-muted", style={"fontSize": "11px"})
+        ])
+
+    @property
+    def COL_COARSE_INP(self):
+        return dbc.Col([
+           self.label_factory(self.LBL_COL_COARSE_INP, is_bold=True),
+           dbc.Input(**self.INP_RUN_ESTIM),
+           html.P("Iterates through overlaps within specified layers.",
+                  className="text-muted mb-0", style={"fontSize": "11px"}),
+       ], width=6)
+
+    @property
+    def COL_COARSE_BCKP_CO(self):
+        # Notice the ** inside Button and Tooltip
+        return dbc.Col([
+            html.Span([
+                dbc.Button(**self.BTN_BCKP_CO)
+            ], id=self.ID_BTN_BCKP_WRAPPER, className="d-grid"),
+            dbc.Tooltip(**self.TTP_BCKP_CO),
+        ], width=12)
+
+    @classmethod
+    def INP_STITCH_CFG(cls, active_service=None):
+        """Generates the config path input with the correct initial value."""
+        stitch_yaml_path = cls.get_stitching_config_path(active_service)
+
+        # Start with the base factory dictionary
+        inp_cfg = cls.text_factory(
+            id=cls.ID_STITCH_CONFIG_PATH,
+            placeholder=f"/Volumes/.../{parameter_config.FN_STITCHING_CFG}"
+        )
+
+        # Inject the path if the service provides one
+        if stitch_yaml_path:
+            inp_cfg["value"] = stitch_yaml_path
+
+        return inp_cfg
+
+    @classmethod
+    def PATH_SELECTOR_STITCH(cls, active_service=None):
+        """Standardized Path Input Group with Load/Save buttons."""
+        return dbc.Row([
+            dbc.Col([
+                cls.label_factory(cls.LBL_CFG_PATH_YAML, is_bold=True),
+                dbc.InputGroup([
+                    dbc.Input(**cls.INP_STITCH_CFG(active_service)),
+                    dbc.Button("Load", id=cls.ID_STITCH_LOAD_YAML, color="primary", size="sm"),
+                    dbc.Button("Save / Export", id=cls.ID_STITCH_SAVE_YAML, color="success", size="sm"),
+                ]),
+                html.Div(id="config-load-status", className="small mt-1 text-muted")
+            ], width=12, className="mb-3")
+        ])
 
     # ---- STITCHING PAGE ----  #
     # --- Stitching IDs ---
@@ -428,10 +639,6 @@ class UIConstants:
         "current_sections": ""
     }
 
-    @classmethod
-    def label_factory(cls, text, is_bold=False):
-        className = "small mb-1" + (" fw-bold" if is_bold else "")
-        return dbc.Label(text, className=className)
 
     @classmethod
     def _get_active_proc_dir(cls, service) -> str | None:

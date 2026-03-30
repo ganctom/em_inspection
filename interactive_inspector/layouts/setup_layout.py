@@ -122,18 +122,6 @@ def layout():
                     html.Div([
                         # 1. Initialize Project Button
                         dbc.Button(**UI.BTN_INIT),
-
-                        # 2. Store Offsets & Maps Button with Tooltip Wrapper
-                        html.Span([
-                            dbc.Button(**UI.BTN_BCKP_CO)
-                        ], id=UI.ID_BTN_BCKP_WRAPPER, className="d-grid"),
-
-                        dbc.Tooltip(
-                            id=UI.ID_TTP_BCKP,
-                            target=UI.ID_BTN_BCKP_WRAPPER,
-                            placement="bottom",
-                            trigger="hover",
-                        )
                     ], className="d-grid gap-2 mt-3")  # mt-3 separates buttons from the details card
 
                 ], className="p-4 bg-light border rounded h-100")

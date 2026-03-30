@@ -284,6 +284,8 @@ def layout(active_service=None):
             ], width=12)
         ], className="px-3"),
 
+
+
         dcc.Interval(id=UI.ID_STITCH_PPLN_PROGRESS_INT, interval=1000, disabled=True),
         dcc.Store(id="scroll-trigger-dummy")
     ], fluid=True)
