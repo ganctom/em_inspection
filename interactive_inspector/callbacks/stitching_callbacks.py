@@ -11,7 +11,7 @@ from inspection_utils_refactor import parse_section_range, validate_section_numb
     [Output(UI.ID_STITCH_PPLN_CONSOLE, "children"),
      Output(UI.ID_STITCH_PPLN_PROGRESS, "value"),
      Output(UI.ID_STITCH_PPLN_PROGRESS_INT, "disabled")], # Use the NEW unique ID
-    Input(UI.ID_STITCH_PPLN_BTN, "n_clicks"),
+    Input(UI.ID_STITCH_PPLN_RUN, "n_clicks"),
     [State(UI.ID_STITCH_PPLN_INP, "value"),
      State(UI.ID_STITCH_PPLN_STEPS, "value"),
      State(UI.ID_STITCH_CONFIG_PATH, "value")],

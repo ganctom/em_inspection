@@ -97,6 +97,7 @@ class UIConstants:
     LBL_CFG = {"className": "small mb-0"}
 
     # --- THE FACTORIES ---
+
     @staticmethod
     def _base_cfg(id, placeholder, persistence=True):
         """Shared logic for all setup inputs."""
@@ -306,12 +307,104 @@ class UIConstants:
     ID_RUN_ESTIM_CONSOLE = "run-estim-console"
     ID_RUN_ESTIM_INP = "run-estim-input"
 
-    ID_STITCH_PPLN_BTN = "stitch-ppln-btn"
+    ID_STITCH_PPLN_RUN = "stitch-ppln-run-btn"
+    NAME_STITCH_PPLN_RUN = "Run Pipeline"
     ID_STITCH_PPLN_CONSOLE = "stitch-ppln-console"
     ID_STITCH_PPLN_INP = "stitch-ppln-inp"
     ID_STITCH_PPLN_STEPS = "stitch-ppln-steps"
     ID_STITCH_PPLN_PROGRESS = "stitch-ppln-progress"
     ID_STITCH_PPLN_PROGRESS_INT = "stitch-ppln-progress-int"
+
+    ID_STITCH_PPLN_ABORT = "stitch-ppln-abort-btn"
+    NAME_STITCH_PPLN_ABORT = "Abort"
+
+
+    # --- HEADER ---
+    @property
+    def STITCH_PPLN_HEADER(self):
+        return dbc.CardHeader([
+            html.I(className="bi bi-cpu-fill me-2"),
+            "Stitching Pipeline Controller"
+        ], className="fw-bold bg-danger text-white")
+
+    # --- COLUMN A: Section Selection ---
+    @property
+    def COL_STITCH_TARGETS(self):
+        return dbc.Col([
+            self.label_factory("1. Target Sections", is_bold=True),
+            dbc.Input(id=self.ID_STITCH_PPLN_INP, placeholder="e.g. 0-100 or 'all'", size="sm"),
+            html.P("Define the range for the operations below.", className="text-muted small mb-0"),
+        ], width=4, className="border-end")
+
+    # --- COLUMN B: Step Selection ---
+    @property
+    def COL_STITCH_STEPS(self):
+        return dbc.Col([
+            self.label_factory("2. Select Pipeline Steps", is_bold=True),
+            dbc.Checklist(
+                id=self.ID_STITCH_PPLN_STEPS,
+                options=self.PPLN_STEPS,
+                value=[s["value"] for s in self.PPLN_STEPS[:3]],
+                inline=False,
+                switch=True,
+                className="small custom-checklist"
+            ),
+        ], width=5)
+
+    # Pipeline execution buttons
+    @property
+    def BTN_STITCH_PPLN_RUN(self):
+        """Factory-generated config for the Run button."""
+        children = [html.I(className="bi bi-play-circle-fill me-2"), self.NAME_STITCH_PPLN_RUN]
+        return self.button_factory(
+            id=self.ID_STITCH_PPLN_RUN,
+            children=children,
+            color="danger",
+            outline=False,
+            className="w-100 mb-2"
+        )
+
+    @property
+    def BTN_STITCH_PPLN_ABORT(self):
+        """Factory-generated config for the Abort button."""
+        children = [html.I(className="bi bi-stop-fill me-2"), self.NAME_STITCH_PPLN_ABORT]
+        return self.button_factory(
+            id=self.ID_STITCH_PPLN_ABORT,
+            children=children,
+            color="secondary",
+            outline=True,
+            size="sm",
+            className="w-100"
+        )
+
+    # --- CONSOLE & PROGRESS PROPERTIES ---
+
+    @property
+    def STITCH_PPLN_CONSOLE(self):
+        """The dark-themed log output area."""
+        return html.Div(
+            id=self.ID_STITCH_PPLN_CONSOLE,
+            className="bg-dark text-white p-3 rounded mt-2",
+            style={
+                "height": "300px",
+                "overflowY": "auto",
+                "fontFamily": "monospace",
+                "fontSize": "11px",
+                "border": "1px solid #444"
+            }
+        )
+
+    @property
+    def STITCH_PPLN_PROGRESS_BAR(self):
+        """The animated progress indicator."""
+        return dbc.Progress(
+            id=self.ID_STITCH_PPLN_PROGRESS,
+            value=0,
+            striped=True,
+            animated=True,
+            className="mt-2",
+            style={"height": "10px"}
+        )
 
     # Pipeline Step Definitions
     PPLN_STEPS = [
@@ -372,6 +465,7 @@ class UIConstants:
             html.Span(f"[{timestamp}] ", className="text-muted me-2", style={"fontSize": "10px"}),
             html.Span(msg, className=colors.get(type, "text-white"))
         ], className="border-bottom border-secondary pb-1 mb-1", style={"fontSize": "12px"})
+
 
 
     # --- PAGE NAVIGATION FACTORY ---

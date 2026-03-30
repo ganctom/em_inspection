@@ -15,7 +15,6 @@ from layouts import setup_layout, coarse_align_layout, stitching_layout, inspect
 from data_service import service
 
 # 4. Register all callbacks
-import callbacks
 import callbacks.stitching_callbacks
 import callbacks.coarse_align_callbacks
 import callbacks.inspection_callbacks

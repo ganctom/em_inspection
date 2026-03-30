@@ -257,43 +257,16 @@ def layout(active_service=None):
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader([
-                        html.I(className="bi bi-cpu-fill me-2"),
-                        "Stitching Pipeline Controller"
-                    ], className="fw-bold bg-danger text-white"),
-
+                    UI.STITCH_PPLN_HEADER,
                     dbc.CardBody([
                         dbc.Row([
-                            # COLUMN A: Section Selection
-                            dbc.Col([
-                                UI.label_factory("1. Target Sections", is_bold=True),
-                                dbc.Input(id=UI.ID_STITCH_PPLN_INP, placeholder="e.g. 0-100 or 'all'", size="sm"),
-                                html.P("Define the range for the operations below.", className="text-muted small mb-0"),
-                            ], width=4, className="border-end"),
-
-                            # COLUMN B: Step Selection (The Checklist)
-                            dbc.Col([
-                                UI.label_factory("2. Select Pipeline Steps", is_bold=True),
-                                dbc.Checklist(
-                                    id=UI.ID_STITCH_PPLN_STEPS,
-                                    options=UI.PPLN_STEPS,
-                                    value=[s["value"] for s in UI.PPLN_STEPS[:3]],
-                                    inline=False,
-                                    switch=True,
-                                    className="small custom-checklist"
-                                ),
-                            ], width=5),
+                            UI.COL_STITCH_TARGETS,
+                            UI.COL_STITCH_STEPS,
 
                             # COLUMN C: Actions
                             dbc.Col([
-                                dbc.Button([
-                                    html.I(className="bi bi-play-circle-fill me-2"), "Run Pipeline"
-                                ], id=UI.ID_STITCH_PPLN_BTN, color="danger", className="w-100 mb-2"),
-
-                                dbc.Button([
-                                    html.I(className="bi bi-stop-fill me-2"), "Abort"
-                                ], id="abort-pipeline-btn", color="secondary", outline=True, size="sm",
-                                    className="w-100"),
+                                dbc.Button(**UI.BTN_STITCH_PPLN_RUN),
+                                dbc.Button(**UI.BTN_STITCH_PPLN_ABORT),
                             ], width=3, className="d-flex flex-column justify-content-center"),
                         ]),
                     ]),
@@ -304,20 +277,12 @@ def layout(active_service=None):
         # 3. CONSOLE & PROGRESS (Refined)
         dbc.Row([
             dbc.Col([
-                html.Div(id="pipeline-status-bar", className="mt-3"),  # Shows "Step 2/5: Building Masks..."
-                html.Div(
-                    id=UI.ID_STITCH_PPLN_CONSOLE,
-                    className="bg-dark text-white p-3 rounded mt-2",
-                    style={
-                        "height": "300px", "overflowY": "auto",
-                        "fontFamily": "monospace", "fontSize": "11px",
-                        "border": "1px solid #444"
-                    }
-                ),
-                dbc.Progress(id=UI.ID_STITCH_PPLN_PROGRESS, value=0, striped=True, animated=True, className="mt-2",
-                             style={"height": "10px"})
+                # Status Bar (Dynamic Text)
+                html.Div(id="pipeline-status-bar", className="mt-3 fw-bold small text-secondary"),
+                UI.STITCH_PPLN_CONSOLE,  # The Main Console Output
+                UI.STITCH_PPLN_PROGRESS_BAR   # The Progress Indicator
             ], width=12)
-        ]),
+        ], className="px-3"),
 
         dcc.Interval(id=UI.ID_STITCH_PPLN_PROGRESS_INT, interval=1000, disabled=True),
         dcc.Store(id="scroll-trigger-dummy")
