@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import time
+from collections import deque
 from dataclasses import dataclass
 import logging
 from pathlib import Path
@@ -18,6 +19,7 @@ from sofima.mesh import IntegrationConfig
 import parse_sbem_dataset as parse
 
 import inspection_refactored
+from Section_refactored import CoarseStitchConfig
 from experiment_configs import ExperimentRegistry, ExpConfig
 from parameter_config import AcquisitionConfig, StitchingConfig
 from Tile_refactored import Tile
@@ -71,6 +73,7 @@ class DataService:
         self.coarse_align_status = UI.STITCH_STATUS
         self.abort_requested = False
         self.stitch_status = {"active": False, "pending_messages": []}
+        self.message_queue = deque()
 
 
     def create_and_save_new_experiment(
@@ -688,116 +691,86 @@ class DataService:
             return StitchingConfig(**raw_dict)  # Brute force attempt
 
 
-    def run_coarse_align_thread(self, section_numbers, reg_params):
-        self.abort_requested = False  # Reset flag at entry
-
+    def run_coarse_align_thread(self, section_numbers, reg_params: CoarseStitchConfig):
+        self.abort_requested = False
         self.coarse_align_status = {
             "active": True,
             "progress": 0,
             "message": "Initializing...",
-            "pending_messages": [UI.log_row("🚀 Coarse Alignment Started", type="info")],
+            "pending_messages": [UI.log_row("Coarse Alignment Started", type="info")],
             "error": None
         }
 
+        total = len(section_numbers)
+        failed_sections = []  # ← Track which sections failed
+        successful = 0
+
         try:
-            total = len(section_numbers)
             for i, sec_num in enumerate(section_numbers):
-                # CHECK: Exit if user requested abort
                 if self.abort_requested:
                     self.coarse_align_status["pending_messages"].append(
-                        UI.log_row("🛑 Abort signal received. Cleaning up...", type="warning")
+                        UI.log_row("🛑 Abort signal received. Stopping...", type="warning")
                     )
                     break
 
-                # 1. Update status for Poller
                 msg = f"Processing section {sec_num} ({i + 1}/{total})"
                 self.coarse_align_status["message"] = msg
+                self.coarse_align_status["pending_messages"].append(UI.log_row(msg, type="info"))
 
-                # 2. Only log to console every N sections or at start/end to avoid UI lag
-                if i % 5 == 0 or i == total - 1:
-                    self.coarse_align_status["pending_messages"].append(UI.log_row(msg))
+                try:
+                    # === Core per-section logic with error handling ===
+                    section = self._init_section(sec_num)
+                    coarse_offsets = section.compute_coarse_offsets_section(
+                        config=reg_params, overwrite=True
+                    )
 
-                # 3. Core Logic
-                section = self._init_section(sec_num)
-                coarse_offsets = section.compute_coarse_offset_section(**reg_params)
-                utils.save_coarse_mat(coarse_offsets, section.path)
+                    if coarse_offsets is not None:
+                        utils.save_coarse_mat(coarse_offsets, section.path)
+                        successful += 1
+                        self.coarse_align_status["message"] = f"✓ Section {sec_num} completed successfully"
 
-                # 4. Update Progress
+                    else:
+                        # compute_coarse_offset_section returned None (skipped or early return)
+                        msg = f"⚠️ Section {sec_num} skipped (already done or failed to load tiles)"
+                        self.coarse_align_status["message"] = msg
+
+
+                except Exception as e:
+                    error_msg = f"Failed to process section {sec_num}: {e}"
+                    logging.error(error_msg)
+                    failed_sections.append(sec_num)
+
+                    self.coarse_align_status["pending_messages"].append(
+                        UI.log_row(f"❌ Section {sec_num} failed: {e}", type="error")
+                    )
+
+                # Update progress even if section failed
                 self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
 
-            # Final Cleanup
-            if self.abort_requested:
-                self.coarse_align_status["message"] = "Operation Aborted."
+        except Exception as e:
+            # This catches very unexpected errors (e.g. bug in the loop itself)
+            logging.error(f"Unexpected error in coarse alignment thread: {e}")
+            self.coarse_align_status["pending_messages"].append(
+                UI.log_row(f"Critical error: {e}", type="error")
+            )
+
+        finally:
+            # === Final summary ===
+            self.coarse_align_status["active"] = False
+
+            if failed_sections:
+                fail_msg = f"Finished with {len(failed_sections)} failed sections: {failed_sections}"
+                logging.warning(fail_msg)
+                self.coarse_align_status["pending_messages"].append(
+                    UI.log_row(f"⚠️ Completed with errors. Failed sections: {failed_sections}", type="warning")
+                )
+                self.coarse_align_status["error"] = fail_msg
             else:
-                self.coarse_align_status["message"] = f"Finished {total} sections."
+                self.coarse_align_status["message"] = f"Successfully processed {successful}/{total} sections."
                 self.coarse_align_status["progress"] = 100
                 self.coarse_align_status["pending_messages"].append(
                     UI.log_row("🏁 Coarse Alignment Complete", type="success")
                 )
-
-        except Exception as e:
-            logging.error(f"Coarse Align Error: {e}")
-            self.coarse_align_status["error"] = str(e)
-            self.coarse_align_status["pending_messages"].append(
-                UI.log_row(f"❌ ERROR: {e}", type="error")
-            )
-        finally:
-            self.coarse_align_status["active"] = False
-
-
-    def run_pipeline_thread(self, section_numbers, tasks, config_path):
-        self.abort_requested = False  # Reset flag at start
-        self.stitch_status = {
-            "active": True, "progress": 0, "message": "Starting...",
-            "pending_messages": [UI.log_row("🚀 Pipeline Started", type="info")],
-            "error": None
-        }
-
-        try:
-            total_tasks = len(tasks)
-            total_sections = len(section_numbers)
-            # cfg = self.load_stitching_config(config_path)
-            logging.info(f'cfg loading ...')
-            cfg=None
-
-            for t_idx, task in enumerate(tasks):
-                # CHECK 1: Before starting a new major task
-                if self.abort_requested: break
-
-                task_label = task.replace("_", " ").upper()
-                self.stitch_status["pending_messages"].append(
-                    UI.log_row(f"▶️ STEP {t_idx + 1}: {task_label}", type="info"))
-
-                for s_idx, sec_num in enumerate(section_numbers):
-                    # CHECK 2: Before processing each section
-                    if self.abort_requested:
-                        self.stitch_status["pending_messages"].append(
-                            UI.log_row("🛑 Abort signal received. Stopping...", type="warning"))
-                        break
-
-                    # Execute the actual logic
-                    print(f'executing: {sec_num}')
-                    # self._execute_task_by_name(task, sec_num, cfg)
-
-                    # Update Progress
-                    prog = int(((t_idx + (s_idx + 1) / total_sections) / total_tasks) * 100)
-                    self.stitch_status["progress"] = prog
-                    self.stitch_status["message"] = f"[{task_label}] Sec {sec_num}"
-
-                if self.abort_requested: break  # Exit outer loop if inner loop aborted
-
-            if self.abort_requested:
-                self.stitch_status["message"] = "Pipeline Aborted by User."
-            else:
-                self.stitch_status["progress"] = 100
-                self.stitch_status["message"] = "Pipeline Complete!"
-                self.stitch_status["pending_messages"].append(UI.log_row("🏁 ALL TASKS COMPLETE", type="success"))
-
-        except Exception as e:
-            self.stitch_status["error"] = str(e)
-            self.stitch_status["pending_messages"].append(UI.log_row(f"❌ ERROR: {e}", type="error"))
-        finally:
-            self.stitch_status["active"] = False
 
 
     def execute_fine_alignment_step(self, section_num: int, task_name: str, config: StitchingConfig) -> None:
@@ -834,6 +807,7 @@ class DataService:
                 rim_size=config.mask_config.rim_size,
                 overwrite=True
             )
+
 
 
         return None

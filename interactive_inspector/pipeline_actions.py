@@ -1,6 +1,7 @@
 import logging
 import threading
 
+from Section_refactored import CoarseStitchConfig
 from constants import Task, UI
 from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
 from parameter_config import StitchingConfig, RegistrationConfig
@@ -35,7 +36,6 @@ class PipelineOrchestrator:
                 )
 
                 for sec_num in section_numbers:
-                    # CHECK: Exit immediately if user clicked Abort
                     if self.service.abort_requested:
                         self.service.stitch_status["message"] = "Pipeline Aborted by User"
                         self.service.stitch_status["pending_messages"].append(
@@ -74,23 +74,6 @@ class PipelineOrchestrator:
             self.service.stitch_status["active"] = False
 
 
-    # def _run_parallel_task(self, task_key, section_numbers, config):
-    #     """Mimics your fine_align_sections_multiproc logic."""
-    #     import multiprocessing
-    #
-    #     # We use a partial to lock in the task and config
-    #     worker = partial(self.service.execute_fine_alignment_step,
-    #                      task_name=task_key, config=config)
-    #
-    #     num_procs = config.warp_config.warp_parallelism
-    #     with multiprocessing.Pool(processes=num_procs) as pool:
-    #         # We use imap to track progress
-    #         for _ in pool.imap_unordered(worker, section_numbers):
-    #             if self.service.abort_requested:
-    #                 pool.terminate()
-    #                 break
-
-
     def validate_and_prepare(self, range_str, config_path, ui_params_raw) -> tuple[list[int], StitchingConfig]:
         """Logic-only: Validates sections and prepares params."""
         if not self.service.exp_config:
@@ -118,13 +101,12 @@ class PipelineOrchestrator:
     def start_coarse_align(self, sec_nums: list[int], reg_cfg: RegistrationConfig):
         """Launches the thread via DataService."""
 
-        reg_params = dict(
-            overlaps_xy=tuple((tuple(reg_cfg.overlaps_x), tuple(reg_cfg.overlaps_y))),
+        reg_params = CoarseStitchConfig(
+            overlaps_xy=(tuple(reg_cfg.overlaps_x), tuple(reg_cfg.overlaps_y)),
             min_range=tuple(reg_cfg.min_range),
             min_overlap=int(reg_cfg.min_overlap),
             filter_size=int(reg_cfg.filter_size),
-            clahe=True,
-            overwrite_cxcy=True
+            apply_clahe=True
         )
 
         thread = threading.Thread(

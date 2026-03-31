@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -5,7 +7,7 @@ import pickle
 import platform
 from functools import lru_cache
 from pathlib import Path
-from typing import Union, Optional, Any, Dict
+from typing import Union, Optional, Any, Dict, Tuple
 import logging
 import numpy as np
 import skimage
@@ -38,9 +40,18 @@ def cached_read_image(path: str):
     # it returns the numpy array from RAM instantly.
     return skimage.io.imread(path)
 
+@dataclass(frozen=True)
+class CoarseStitchConfig:
+    """Encapsulates hyper-parameters for rigid stitching alignment."""
+    overlaps_xy: Tuple[Tuple[int, ...], Tuple[int, ...]] = ((200, 300), (200, 300))
+    min_range: Tuple[int, ...] = (10, 100, 0)
+    min_overlap: int = 20
+    filter_size: int = 10
+    apply_clahe: bool = True
+
+
 class Section:
     def __init__(self, path: Union[Path, str]):
-
 
         path = Path(utils.cross_platform_path(str(path)))
         if not path.is_dir():
@@ -70,6 +81,7 @@ class Section:
         self.roi_mask_map: MaskMap = {}
         self.smr_mask_map: MaskMap = {}
         self.tile_map: MaskMap = {}
+        self.margin_masks: MaskMap | None = None
 
 
     @property
@@ -232,7 +244,6 @@ class Section:
 
         # Convert to a tuple of integers, handling np.nans
         co = tuple(int(x) if not (np.isinf(x) | np.isnan(x)) else x for x in co)
-
         logging.debug(f'tile_id_map: {self.tile_id_map}')
         logging.debug(f'y, x: {y, x}')
         logging.debug(f'loaded offset: {co}')
@@ -250,7 +261,6 @@ class Section:
             print(f"File '{self.path_cmesh}' not found.")
         except Exception as e:
             print(f"An error occurred while reading cmesh {self.path_cmesh}: {e}")
-
 
 
     def build_margin_masks(
@@ -275,7 +285,6 @@ class Section:
                 to avoid holes in warped image. Defaults to 60 pixels.
         """
 
-
         def _tile_mask_junction(
                 tile_id: int,
                 row_is_odd: bool,
@@ -291,7 +300,6 @@ class Section:
                         to avoid holes in warped image.
             :param min_rim: minimal masked extent from each edge of a tile
             """
-
 
             mask = np.full(self.tile_shape, fill_value=True)
             y, x = np.where(tile_id == grid)
@@ -1616,19 +1624,24 @@ class Section:
                 if clahe:
                     img = utils.apply_clahe(img)
                 return (x, y), img
+
             except KeyError:
                 logging.error(f"Section {self.section_num}: tile_id {tile_id} not found in tile_dicts!")
+                return (x, y), None
             except Exception as e:
                 logging.error(f"Failed to load tile {tile_id} at ({x},{y}): {e}")
-            return (x, y), None
+                return (x, y), None
 
         positions = list(np.ndindex(self.tile_id_map.shape))
 
         if parallel:
             with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                for (x, y), img in executor.map(_load_tile, positions):
-                    if img is not None:
-                        self.tile_map[(x, y)] = img
+                try:
+                    for (x, y), img in executor.map(_load_tile, positions):
+                        if img is not None:
+                            self.tile_map[(x, y)] = img
+                except Exception as e:
+                    logging.error(f"Unexpected error during parallel tile loading: {e}")
         else:
             for pos in positions:
                 (x, y), img = _load_tile(pos)
@@ -1636,50 +1649,60 @@ class Section:
                     self.tile_map[(x, y)] = img
 
 
-    def compute_coarse_offset_section(
-        self,
-        overlaps_xy: tuple[tuple[int, ...], tuple[int, ...]] = ((200, 300), (200, 300)),
-        min_range: tuple[int, int, int] = (10, 100, 0),
-        min_overlap: int = 20,
-        filter_size: int = 10,
-        clahe: bool = True,
-        overwrite_cxcy: bool = False,
-    ) -> Optional[np.ndarray]:
-        """
-        Compute coarse offsets (cx, cy) for the entire section using rigid stitching.
+    def _is_cache_valid(self, overwrite: bool) -> bool:
+        return Path(self.path_cxy).exists() and not overwrite
 
-        If cx_cy.json already exists and overwrite_cxcy=False, the computation is skipped.
-        """
-        # Early return if result already exists
-        if Path(self.path_cxy).exists() and not overwrite_cxcy:
-            logging.info(f"Section {self.section_num}: cx_cy.json already exists. Skipping coarse offset computation.")
-            return None
+    def _ensure_tile_map_ready(self, apply_clahe: bool) -> bool:
+        """Validates state and attempts lazy-load if telemetry is missing."""
+        if self.tile_map is not None and len(self.tile_map) > 0:
+            return True
 
-        if self.tile_map is None or len(self.tile_map) == 0:
-            try:
-                self.load_tile_map(clahe=clahe, parallel=True)
-            except Exception as e:
-                logging.warning(f"Failed to load tile map for section {self.section_num}: {e}")
-                return None
+        try:
+            self.load_tile_map(clahe=apply_clahe, parallel=True)
+            return True
+        except RuntimeError as e:
+            logging.error(f"Indeterminate state: Tile map load failed for S{self.section_num}: {e}")
+            return False
 
-        # Compute coarse offsets
+
+    def _compute_and_persist_offsets(self, config: CoarseStitchConfig) -> Optional[np.ndarray]:
+        """Pure computational bridge to the stitch_rigid backend."""
         try:
             cx, cy = stitch_rigid.compute_coarse_offsets(
                 yx_shape=self.section_shape,
                 tile_map=self.tile_map,
-                overlaps_xy=overlaps_xy,
-                min_range=min_range,
-                min_overlap=min_overlap,
-                filter_size=filter_size,
+                overlaps_xy=config.overlaps_xy,
+                min_range=config.min_range,
+                min_overlap=config.min_overlap,
+                filter_size=config.filter_size,
                 mask_map=self.mask_map,
             )
-        except Exception as e:
-            logging.info(f"Coarse offset computation failed for section {self.section_num}: {e}")
+
+            # Store result and return
+            self.cxy = np.array([np.squeeze(cx), np.squeeze(cy)])
+            return self.cxy
+
+        except ValueError as e:
+            logging.error(f"Algorithmic failure in S{self.section_num}: {e}")
             return None
 
-        # Store result and return
-        self.cxy = np.array([np.squeeze(cx), np.squeeze(cy)])
-        return self.cxy
+    def compute_coarse_offsets_section(
+            self,
+            config: CoarseStitchConfig,
+            overwrite: bool = False
+    ) -> Optional[np.ndarray]:
+        """
+        Orchestrates coarse offset retrieval, prioritizing cache hits before
+        triggering heavy compute.
+        """
+        if self._is_cache_valid(overwrite):
+            logging.info(f"Section {self.section_num} cx_cy.json exists. Skipping coarse offsets computation.")
+            return self.cxy
+
+        if not self._ensure_tile_map_ready(config.apply_clahe):
+            return None
+
+        return self._compute_and_persist_offsets(config)
 
 
 #### ---------   FUNCTIONS    ---------
@@ -1834,7 +1857,7 @@ def fine_align_section(
     section.compute_coarse_mesh(cfg=cfg, overwrite=overwrite)
 
     # # Create margin masks for warping
-    # section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
+    section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
 
     # # Compute flows between overlaps
     # section.compute_fie_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
