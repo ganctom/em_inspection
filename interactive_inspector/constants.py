@@ -12,6 +12,43 @@ class OverlapType:
     HORIZONTAL = "H"
     VERTICAL = "V"
 
+class Task:
+    # 1. THE KEYS (Internal IDs)
+    COARSE_OFFSETS = "coarse_offsets"
+    COARSE_MESH    = "coarse_mesh"
+    MARGIN_MASKS   = "margin_masks"
+    FINE_FLOWS     = "fine_flows"
+    FINE_MESHES    = "fine_meshes"
+    WARP_SECTION   = "warp_section"
+    DOWNSCALE      = "downscale_warped_section"
+
+    @classmethod
+    def get_master_order(cls):
+        """Returns the strict execution sequence."""
+        return [
+            cls.COARSE_OFFSETS,
+            cls.COARSE_MESH,
+            cls.MARGIN_MASKS,
+            cls.FINE_FLOWS,
+            cls.FINE_MESHES,
+            cls.WARP_SECTION,
+            cls.DOWNSCALE,
+        ]
+
+    @classmethod
+    def get_ui_options(cls):
+        """Returns metadata for the Dash Checklist."""
+        labels = {
+            cls.COARSE_OFFSETS: "Compute Coarse Offsets",
+            cls.COARSE_MESH:    "Compute Coarse Meshes",
+            cls.MARGIN_MASKS:   "Build Margin Masks",
+            cls.FINE_FLOWS:     "Compute Fine Flows",
+            cls.FINE_MESHES:    "Get Fine Meshes",
+            cls.WARP_SECTION:   "Warp Section",
+            cls.DOWNSCALE:      "Downscale Warped Section",
+        }
+        return [{"label": labels[t], "value": t} for t in cls.get_master_order()]
+
 
 class UIConstants:
 
@@ -689,8 +726,8 @@ class UIConstants:
             self.label_factory("2. Select Pipeline Steps", is_bold=True),
             dbc.Checklist(
                 id=self.ID_STITCH_PPLN_STEPS,
-                options=self.PPLN_STEPS,
-                value=[s["value"] for s in self.PPLN_STEPS[:3]],
+                options=Task.get_ui_options(),
+                value=[s["value"] for s in Task.get_ui_options()[:3]],
                 inline=False,
                 switch=True,
                 className="small custom-checklist"
@@ -751,19 +788,6 @@ class UIConstants:
             className="mt-2",
             style={"height": "10px"}
         )
-
-    # Pipeline Step Definitions
-    PPLN_STEPS = [
-        {"label": "Compute Coarse Meshes", "value": "coarse_mesh"},
-        {"label": "Build Margin Masks", "value": "masks"},
-        {"label": "Compute Fine Flows", "value": "fine_flow"},
-        {"label": "Get Fine Meshes", "value": "fine_mesh"},
-        {"label": "Warp Section", "value": "warp"},
-        {"label": "Downscale Result", "value": "downscale"},
-    ]
-
-    # Helper to get just the values in logical order
-    PPLN_MASTER_ORDER = [step["value"] for step in PPLN_STEPS]
 
 
     STITCH_STATUS = {

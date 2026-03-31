@@ -12,22 +12,22 @@ import plotly.express as px
 import numpy as np
 import gc
 import threading
-
 import yaml
+
+import parse_sbem_dataset as parse
 
 import inspection_refactored
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig
+from parameter_config import AcquisitionConfig, StitchingConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC
-import parse_sbem_dataset as parse
+from constants import UIConstants as UI
 
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image
 )
 
-from constants import UIConstants as UI
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -631,157 +631,115 @@ class DataService:
             "initial_value": z_max
         }
 
-
     @staticmethod
     @functools.lru_cache(maxsize=32)
     def prepare_stitching_params(
             config_path: str | os.PathLike | None = None,
-            ui_params: tuple[tuple[str, any], ...] | None = None,  # hashable version
-    ) -> dict:
+            ui_params: tuple[tuple[str, any], ...] | None = None,
+    ) -> StitchingConfig:
         """
-        Merge YAML defaults with UI overrides into stitching parameters.
-        Uses lru_cache for performance.
+        1. Loads YAML (The Base)
+        2. Overlays UI Overrides (The specific edits)
+        3. Validates via Pydantic (The Type Guard)
         """
-        # Convert tuple-of-items back to dict (or empty dict)
-        ui_params = dict(ui_params) if ui_params else {}
+        ui_params_dict = dict(ui_params) if ui_params else {}
 
-        # Load base config from YAML
-        base_config: dict = {}
-        if config_path:
-            config_path = Path(config_path)
-            if config_path.exists():
-                try:
-                    with open(config_path, encoding="utf-8") as f:
-                        base_config = yaml.safe_load(f) or {}
-                except Exception as e:
-                    logging.error(f"Failed to load config {config_path}: {e}")
-
-        # Robust tuple parser
-        def parse_tuple(key: str, default: tuple[int, ...]) -> tuple[int, ...]:
-            value = ui_params.get(key) or base_config.get(key)
-            if not value:
-                return default
+        # 1. Load the raw dictionary from disk
+        raw_dict: dict = {}
+        if config_path and Path(config_path).exists():
             try:
-                return tuple(int(x.strip()) for x in str(value).split(",") if x.strip())
-            except (ValueError, TypeError):
-                logging.warning(f"Invalid value for {key}: {value}. Using default {default}.")
-                return default
+                with open(config_path, encoding="utf-8") as f:
+                    raw_dict = yaml.safe_load(f) or {}
+            except Exception as e:
+                logging.error(f"IO Error: {e}")
 
-        return {
-            "overlaps_xy": (
-                parse_tuple("overlaps_x", (200, 300, 400)),
-                parse_tuple("overlaps_y", (200, 300, 400)),
-            ),
-            "min_range": tuple(base_config.get("min_range", (10, 100, 0))),
-            "min_overlap": int(ui_params.get("min_overlap") or base_config.get("min_overlap", 20)),
-            "filter_size": base_config.get("filter_size", 10),
-            "clahe": bool(base_config.get("clahe", True)),
-            "overwrite_cxcy": True,
-        }
+        # 2. Map UI Overrides to the correct nested structure
+        # This keeps the DataService clean from UI-specific naming
+        def _apply_overrides(target_dict):
+            # Registration Config
+            if "registration_config" not in target_dict:
+                target_dict["registration_config"] = {}
 
-    def run_coarse_align_thread(self, section_numbers, final_params):
-        # 1. Initialize with all required keys
+            reg = target_dict["registration_config"]
+            if "overlaps_x" in ui_params_dict:
+                reg["overlaps_x"] = [int(x.strip()) for x in str(ui_params_dict["overlaps_x"]).split(",") if x.strip()]
+            if "overlaps_y" in ui_params_dict:
+                reg["overlaps_y"] = [int(x.strip()) for x in str(ui_params_dict["overlaps_y"]).split(",") if x.strip()]
+            if "min_overlap" in ui_params_dict:
+                reg["min_overlap"] = int(ui_params_dict["min_overlap"])
+
+            # Warp Config
+            if "warp_config" not in target_dict:
+                target_dict["warp_config"] = {}
+
+            if "clahe" in ui_params_dict:  # If UI has a 'clahe' checkbox
+                target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["clahe"])
+
+        _apply_overrides(raw_dict)
+
+        # 3. Recursive Validation
+        try:
+            return StitchingConfig.model_validate(raw_dict)
+        except Exception as e:
+            logging.warning(f"Validation warning: {e}. Returning defaults for missing keys.")
+            return StitchingConfig(**raw_dict)  # Brute force attempt
+
+
+    def run_coarse_align_thread(self, section_numbers, reg_params):
+        self.abort_requested = False  # Reset flag at entry
+
         self.coarse_align_status = {
             "active": True,
             "progress": 0,
             "message": "Initializing...",
-            "pending_messages": [],  # Crucial: Ensure this is here
+            "pending_messages": [UI.log_row("🚀 Coarse Alignment Started", type="info")],
             "error": None
         }
+
         try:
             total = len(section_numbers)
-            self.coarse_align_status["pending_messages"].append(f"Using Params: {final_params}")
-
             for i, sec_num in enumerate(section_numbers):
+                # CHECK: Exit if user requested abort
+                if self.abort_requested:
+                    self.coarse_align_status["pending_messages"].append(
+                        UI.log_row("🛑 Abort signal received. Cleaning up...", type="warning")
+                    )
+                    break
+
+                # 1. Update status for Poller
                 msg = f"Processing section {sec_num} ({i + 1}/{total})"
                 self.coarse_align_status["message"] = msg
-                self.coarse_align_status["pending_messages"].append(msg)
-                self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
 
-                # Core Logic
+                # 2. Only log to console every N sections or at start/end to avoid UI lag
+                if i % 5 == 0 or i == total - 1:
+                    self.coarse_align_status["pending_messages"].append(UI.log_row(msg))
+
+                # 3. Core Logic
                 section = self._init_section(sec_num)
-                coarse_offsets = section.compute_coarse_offset_section(**final_params)
+                coarse_offsets = section.compute_coarse_offset_section(**reg_params)
                 utils.save_coarse_mat(coarse_offsets, section.path)
 
-            self.coarse_align_status["message"] = f"Finished {total} sections."
-            self.coarse_align_status["progress"] = 100
+                # 4. Update Progress
+                self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
+
+            # Final Cleanup
+            if self.abort_requested:
+                self.coarse_align_status["message"] = "Operation Aborted."
+            else:
+                self.coarse_align_status["message"] = f"Finished {total} sections."
+                self.coarse_align_status["progress"] = 100
+                self.coarse_align_status["pending_messages"].append(
+                    UI.log_row("🏁 Coarse Alignment Complete", type="success")
+                )
 
         except Exception as e:
+            logging.error(f"Coarse Align Error: {e}")
             self.coarse_align_status["error"] = str(e)
+            self.coarse_align_status["pending_messages"].append(
+                UI.log_row(f"❌ ERROR: {e}", type="error")
+            )
         finally:
             self.coarse_align_status["active"] = False
-
-
-    def run_pipeline_thread(self, section_numbers, tasks, config_path):
-        self.abort_requested = False  # Reset flag at start
-        self.stitch_status = {
-            "active": True, "progress": 0, "message": "Starting...",
-            "pending_messages": [UI.log_row("🚀 Pipeline Started", type="info")],
-            "error": None
-        }
-
-        try:
-            total_tasks = len(tasks)
-            total_sections = len(section_numbers)
-            # cfg = self.load_stitching_config(config_path)
-            logging.info(f'cfg loading ...')
-            cfg=None
-
-            for t_idx, task in enumerate(tasks):
-                # CHECK 1: Before starting a new major task
-                if self.abort_requested: break
-
-                task_label = task.replace("_", " ").upper()
-                self.stitch_status["pending_messages"].append(
-                    UI.log_row(f"▶️ STEP {t_idx + 1}: {task_label}", type="info"))
-
-                for s_idx, sec_num in enumerate(section_numbers):
-                    # CHECK 2: Before processing each section
-                    if self.abort_requested:
-                        self.stitch_status["pending_messages"].append(
-                            UI.log_row("🛑 Abort signal received. Stopping...", type="warning"))
-                        break
-
-                    # Execute the actual logic
-                    _execute_task_by_name(task, sec_num, cfg)
-
-                    # Update Progress
-                    prog = int(((t_idx + (s_idx + 1) / total_sections) / total_tasks) * 100)
-                    self.stitch_status["progress"] = prog
-                    self.stitch_status["message"] = f"[{task_label}] Sec {sec_num}"
-
-                if self.abort_requested: break  # Exit outer loop if inner loop aborted
-
-            if self.abort_requested:
-                self.stitch_status["message"] = "Pipeline Aborted by User."
-            else:
-                self.stitch_status["progress"] = 100
-                self.stitch_status["message"] = "Pipeline Complete!"
-                self.stitch_status["pending_messages"].append(UI.log_row("🏁 ALL TASKS COMPLETE", type="success"))
-
-        except Exception as e:
-            self.stitch_status["error"] = str(e)
-            self.stitch_status["pending_messages"].append(UI.log_row(f"❌ ERROR: {e}", type="error"))
-        finally:
-            self.stitch_status["active"] = False
-
-
-def _execute_task_by_name(self, task_name, sec_num, cfg=None):
-    """Routes a section to the specific backend logic."""
-    section = self._init_section(sec_num)  # Your existing section init logic
-
-    if task_name == "coarse_mesh":
-        # # Example logic
-        # mesh = section.compute_coarse_mesh(cfg.mesh_integration_config)
-        # mesh.save()
-        logging.info("task name: coarse_mesh")
-    elif task_name == "masks":
-        # section.build_margin_masks(cfg.warp_config.margin)
-        logging.info("task name: masks")
-    elif task_name == "fine_flow":
-        logging.info("task name: fine_flow")
-        # section.compute_fine_flows(cfg.registration_config)
-    # ... add remaining steps here ...
 
 
 # Initialize single instance

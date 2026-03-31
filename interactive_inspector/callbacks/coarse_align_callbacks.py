@@ -1,12 +1,15 @@
-import logging
 import threading
 import yaml
 import dash
 from dash import Input, Output, State, callback, no_update, clientside_callback
+
 from constants import UI
 from data_service import service
 import parameter_config as pcfg
-from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
+from pipeline_actions import PipelineOrchestrator
+
+# Initialize the orchestrator (can be done globally or inside the layout)
+orchestrator = PipelineOrchestrator(service)
 
 
 # --- 1. UNIFIED LOAD CALLBACK ---
@@ -182,6 +185,7 @@ def handle_config_save(n_clicks, path, *args):
         return f"Save failed: {str(e)}"
 
 
+
 @callback(
     [Output(UI.ID_RUN_ESTIM_CONSOLE, "children", allow_duplicate=True),
      Output("stitch-progress-interval", "disabled", allow_duplicate=True),
@@ -196,69 +200,32 @@ def handle_config_save(n_clicks, path, *args):
      State(UI.ID_CONF_FILTER_SIZE, "value")],
     prevent_initial_call=True
 )
-def run_coarse_alignment(n_clicks, range_str, config_path, ox, oy, m_range, m_overlap, fs):
-    # 1. Initial experiment check
-    if not service.exp_config:
-        msg = UI.log_row("Error: No active experiment found. Please initialize in Step 1.", type="error")
-        return [msg], True, {"display": "none"}
-
-    if not range_str:
-        msg = UI.log_row("Error: Please specify sections for estimation.", type="error")
-        return [msg], True, {"display": "none"}
-
-    # 2. Section Validation Logic  # TODO move to some utility module (it is also in stitching_callback)
-    first_sec = service.exp_config.first_sec
-    last_sec = service.exp_config.last_sec
-    sec_nums_valid = list(range(first_sec, last_sec+1))
-
-    if str(range_str).lower() != 'all':
-        try:
-            sec_nums_req = parse_section_range(range_str)
-            sec_nums_valid = validate_section_numbers(first_sec, last_sec, sec_nums_req)
-        except ValueError as e:
-            logging.warning(f"Validation failed: {e}")
-            return [UI.log_row(f"Error: {e}", type="error")], True, {"display": "none"}
-
-    if not sec_nums_valid:
-        return [UI.log_row("Error: No valid sections selected.", type="error")], True, {"display": "none"}
-
-    # 3. Parameter Preparation (Consolidated before thread starts)
-    ui_params_dict = {
-        "overlaps_x": ox,
-        "overlaps_y": oy,
-        "min_range": m_range,
-        "min_overlap": m_overlap,
-        "filter_size": fs,
-    }
+def run_coarse_alignment(n_clicks, range_str, config_path, *ui_vals):
+    # 1. Map raw UI values to keys
+    ui_keys = ["overlaps_x", "overlaps_y", "min_range", "min_overlap", "filter_size"]
+    ui_params_raw = dict(zip(ui_keys, ui_vals))
 
     try:
-        final_stitch_params = service.prepare_stitching_params(
-            config_path=config_path,
-            ui_params=make_hashable_params(ui_params_dict)
+        # 2. Delegate logic to Orchestrator
+        sec_nums, stitching_cfg = orchestrator.validate_and_prepare(
+            range_str, config_path, ui_params_raw
         )
+        reg_cfg = stitching_cfg.registration_config
+        orchestrator.start_coarse_align(sec_nums, reg_cfg)
+
+        # 3. Return UI feedback
+        start_log = [
+            UI.log_row("▶ Coarse Alignment Initialized", type="info"),
+            UI.log_row(f"Sections: {sec_nums[0]}-{sec_nums[-1]} ({len(sec_nums)} total)"),
+            UI.log_row(f"Overlaps X: {reg_cfg.overlaps_x}"),
+            UI.log_row(f"Overlaps Y: {reg_cfg.overlaps_y}"),
+            UI.log_row("-" * 50),
+            UI.log_row("▶ Thread active. Monitoring...", type="success")
+        ]
+        return start_log, False, {"display": "block"}
+
     except Exception as e:
-        return [UI.log_row(f"Config Error: {e}", type="error")], True, {"display": "none"}
-
-    # 4. Construct Initial Console UI (List of Components)
-    start_log = [
-        UI.log_row("▶ Starting Coarse Offset Estimation...", type="info"),
-        UI.log_row(f"Experiment location: {service.exp_config.proc_dir}"),
-        UI.log_row(f"Sections: {len(sec_nums_valid)} requested ({sec_nums_valid[0]}-{sec_nums_valid[-1]})"),
-        UI.log_row(f"Using Overlaps: {final_stitch_params['overlaps_xy']}"),
-        UI.log_row("-" * 50),
-        UI.log_row("▶ Thread started. Monitoring progress...", type="success")
-    ]
-
-    # 5. Launch the Thread
-    thread = threading.Thread(
-        target=service.run_coarse_align_thread,
-        args=(sec_nums_valid, final_stitch_params),
-        daemon=True
-    )
-    thread.start()
-
-    # 6. Returns: [Console Children], Interval Disabled=False, Progress Style=Visible
-    return start_log, False, {"display": "block"}
+        return [UI.log_row(f"Initialization Failed: {e}", type="error")], True, {"display": "none"}
 
 
 clientside_callback(
