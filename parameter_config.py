@@ -159,6 +159,11 @@ class WarpConfigStitching(BaseModel):
     warp_parallelism: int = 6
 
 
+class MaskingConfig(BaseModel):
+    mask_margin: int = 0
+    rim_size: int = 40
+
+
 class StitchingConfig(BaseModel):
     output_dir: str = ""
     acquisition_config: AcquisitionConfig = AcquisitionConfig()
@@ -167,8 +172,10 @@ class StitchingConfig(BaseModel):
     mesh_integration_config: MeshIntegrationConfig = MeshIntegrationConfig()
     registration_config: RegistrationConfig = RegistrationConfig()
     warp_config: WarpConfigStitching = WarpConfigStitching()
+    mask_config: MaskingConfig = MaskingConfig()
 
     @field_validator('output_dir', mode='before')
     @classmethod
     def normalize_output_path(cls, v):
         return cross_platform_path(v) if v else v
+

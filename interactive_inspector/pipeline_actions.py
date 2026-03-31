@@ -9,28 +9,6 @@ class PipelineOrchestrator:
     def __init__(self, service):
         self.service = service
 
-    # def run_sequential_pipeline(self, section_numbers, selected_tasks, config: StitchingConfig):
-    #     """
-    #     The Master Thread for the UI.
-    #     """
-    #
-    #     total_work = len(section_numbers) * len(selected_tasks)
-    #     current_work = 0
-    #
-    #     for task_key in Task.get_master_order():
-    #         if task_key not in selected_tasks:
-    #             continue
-    #
-    #         self.service.stitch_status["message"] = f"Running Stage: {task_key}"
-    #
-    #         # Standard sequential loop
-    #         for sec_num in section_numbers:
-    #             if self.service.abort_requested: break
-    #
-    #             self.service.execute_fine_alignment_step(sec_num, task_key, config)
-    #
-    #             current_work += 1
-    #             self.service.stitch_status["progress"] = int((current_work / total_work) * 100)
 
     def run_sequential_pipeline(self, section_numbers, selected_tasks, config: StitchingConfig):
         """
@@ -88,7 +66,7 @@ class PipelineOrchestrator:
             self.service.stitch_status["error"] = str(e)
             self.service.stitch_status["message"] = "Pipeline Failed"
             self.service.stitch_status["pending_messages"].append(
-                UI.log_row(f"❌ CRITICAL ERROR: {e}", type="error")
+                UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} {e}", type="error")
             )
 
         finally:

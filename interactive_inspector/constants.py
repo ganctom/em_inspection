@@ -4,7 +4,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 import parameter_config as pcfg
-from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig
+from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig, MaskingConfig
 
 
 @dataclass(frozen=True)
@@ -329,6 +329,30 @@ class UIConstants:
             children=content
         )
 
+    @classmethod
+    def TAB_MASKING(cls):
+        """Unified Mesh Integration and Warping configuration tab."""
+        m_def = MaskingConfig()
+
+        content = [
+            html.H6("Margin masks parameters", className="small fw-bold mt-2 mb-3 text-primary"),
+
+            # Row 1: Core Physics Params
+            dbc.Row([
+              dbc.Col([cls.label_factory("Margin"),
+                       dbc.Input(**cls.numeric_factory(cls.ID_CONF_MASK_MARGIN, value=m_def.mask_margin))],
+                      width=3),
+              dbc.Col([cls.label_factory("Rim size"),
+                       dbc.Input(**cls.numeric_factory(cls.ID_CONF_MASK_RIM_SIZE, value=m_def.rim_size))],
+                      width=3),
+            ], className="mb-3"),
+        ]
+
+        return cls.tab_factory(
+            label="Masking",
+            tab_id="tab-mask",
+            children=content
+        )
 
     @classmethod
     def TAB_REGISTRATION(cls, active_service=None):
@@ -660,6 +684,10 @@ class UIConstants:
     ID_CONF_MIN_PATCH = "conf-min-patch"
     ID_CONF_MAX_GRAD = "conf-max-grad"
     ID_CONF_REC_FLOW_MAX_GRAD = "conf-rec-flow-max-grad"
+
+    # Masking IDs
+    ID_CONF_MASK_MARGIN = "conf-mask-margin"
+    ID_CONF_MASK_RIM_SIZE = "conf-mask-rim-size"
 
     # Mesh IDs
     ID_CONF_MESH_DT = "conf-mesh-dt"

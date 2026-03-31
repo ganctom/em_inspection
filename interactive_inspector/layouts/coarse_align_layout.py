@@ -26,6 +26,7 @@ def layout(active_service=None):
                             # 1. CONFIGURATION SECTION (Final Tabs Assembly)
                             dbc.Tabs([
                                 UI.TAB_ACQUISITION(active_service),
+                                UI.TAB_MASKING(),
                                 UI.TAB_REGISTRATION(active_service),
                                 UI.TAB_STITCHING_PARAMS(),
                                 UI.TAB_MESH_WARP(),

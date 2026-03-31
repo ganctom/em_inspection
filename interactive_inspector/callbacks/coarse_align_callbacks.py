@@ -53,6 +53,9 @@ import parameter_config as pcfg
         Output(UI.ID_CONF_WARP_CLIP, "value"),
         Output(UI.ID_CONF_WARP_NBINS, "value"),
         Output(UI.ID_CONF_WARP_CLAHE, "value"),
+        # Mask (2 outputs)
+        Output(UI.ID_CONF_MASK_MARGIN, "value"),
+        Output(UI.ID_CONF_MASK_RIM_SIZE, "value"),
         # Status
         Output("config-load-status", "children"),
         Output("header-path-summary", "children")
@@ -62,8 +65,8 @@ import parameter_config as pcfg
     prevent_initial_call=True
 )
 def handle_config_load(n_clicks, file_path):
-    # Total outputs = 39. We must return exactly 39 items.
-    total_outputs = 39
+
+    total_outputs = 41
     if not file_path:
         return [no_update] * (total_outputs - 2) + ["Please enter a path", ""]
 
@@ -72,7 +75,7 @@ def handle_config_load(n_clicks, file_path):
             data = yaml.safe_load(f)
 
         cfg = pcfg.StitchingConfig(**data)
-        reg, mesh, warp = cfg.registration_config, cfg.mesh_integration_config, cfg.warp_config
+        reg, mesh, warp, mask = cfg.registration_config, cfg.mesh_integration_config, cfg.warp_config, cfg.mask_config
 
         to_csv = lambda x: ", ".join(map(str, x)) if x else ""
 
@@ -94,6 +97,8 @@ def handle_config_load(n_clicks, file_path):
             warp.margin, warp.warp_parallelism, warp.kernel_size,
             warp.clip_limit, warp.nbins,
             [True] if warp.use_clahe else [],
+            # Masking
+            mask.mask_margin, mask.rim_size,
             # Status
             "Config loaded successfully", f"Active: {file_path.split('/')[-1]}"
         ]
@@ -130,6 +135,8 @@ def handle_config_load(n_clicks, file_path):
         State(UI.ID_CONF_WARP_MARGIN, "value"), State(UI.ID_CONF_WARP_PARALLEL, "value"),
         State(UI.ID_CONF_WARP_KERNEL, "value"), State(UI.ID_CONF_WARP_CLIP, "value"),
         State(UI.ID_CONF_WARP_NBINS, "value"), State(UI.ID_CONF_WARP_CLAHE, "value"),
+        # Masking states
+        State(UI.ID_CONF_MASK_MARGIN, "value"), State(UI.ID_CONF_MASK_RIM_SIZE, "value"),
     ],
     prevent_initial_call=True
 )
@@ -148,7 +155,9 @@ def handle_config_save(n_clicks, path, *args):
         (out_dir, start, end,
          ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_g,
          m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
-         w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe) = args
+         w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe,
+         mask_margin, mask_rim_size
+         ) = args
 
         reg_cfg = pcfg.RegistrationConfig(**clean_dict({
             "overlaps_x": parse_csv(ox), "overlaps_y": parse_csv(oy), "min_overlap": m_ov,
@@ -170,9 +179,19 @@ def handle_config_save(n_clicks, path, *args):
             "clip_limit": w_clip, "nbins": w_nbins, "use_clahe": bool(w_clahe)
         }))
 
+        mask_cfg = pcfg.MaskingConfig(**clean_dict({
+            "mask_margin": mask_margin,
+            "rim_size": mask_rim_size
+        }))
+
         new_cfg = pcfg.StitchingConfig(
-            output_dir=out_dir, start_section=start, end_section=end,
-            registration_config=reg_cfg, mesh_integration_config=mesh_cfg, warp_config=warp_cfg
+            output_dir=out_dir,
+            start_section=start,
+            end_section=end,
+            registration_config=reg_cfg,
+            mesh_integration_config=mesh_cfg,
+            warp_config=warp_cfg,
+            mask_config=mask_cfg,
         )
 
         pcfg.save_to_disk(new_cfg, path)

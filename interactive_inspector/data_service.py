@@ -830,8 +830,8 @@ class DataService:
         if task_name == Task.MARGIN_MASKS:
             section.build_margin_masks(
                 grid_shape=self.acq_config.grid_shape,
-                margin=0,
-                rim_size=40,
+                margin=config.mask_config.mask_margin,
+                rim_size=config.mask_config.rim_size,
                 overwrite=True
             )
 
