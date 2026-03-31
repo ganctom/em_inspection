@@ -1,6 +1,7 @@
+import logging
 import threading
 
-from constants import Task
+from constants import Task, UI
 from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
 from parameter_config import StitchingConfig, RegistrationConfig
 
@@ -8,29 +9,91 @@ class PipelineOrchestrator:
     def __init__(self, service):
         self.service = service
 
+    # def run_sequential_pipeline(self, section_numbers, selected_tasks, config: StitchingConfig):
+    #     """
+    #     The Master Thread for the UI.
+    #     """
+    #
+    #     total_work = len(section_numbers) * len(selected_tasks)
+    #     current_work = 0
+    #
+    #     for task_key in Task.get_master_order():
+    #         if task_key not in selected_tasks:
+    #             continue
+    #
+    #         self.service.stitch_status["message"] = f"Running Stage: {task_key}"
+    #
+    #         # Standard sequential loop
+    #         for sec_num in section_numbers:
+    #             if self.service.abort_requested: break
+    #
+    #             self.service.execute_fine_alignment_step(sec_num, task_key, config)
+    #
+    #             current_work += 1
+    #             self.service.stitch_status["progress"] = int((current_work / total_work) * 100)
+
     def run_sequential_pipeline(self, section_numbers, selected_tasks, config: StitchingConfig):
         """
-        The Master Thread for the UI.
+        The Master Thread for the UI. Orchestrates tasks across sections.
         """
+        # 1. Initialize State
+        self.service.stitch_status["active"] = True
+        self.service.stitch_status["progress"] = 0
+        self.service.stitch_status["error"] = None
+        self.service.abort_requested = False
 
         total_work = len(section_numbers) * len(selected_tasks)
         current_work = 0
 
-        for task_key in Task.get_master_order():
-            if task_key not in selected_tasks:
-                continue
+        try:
+            for task_key in Task.get_master_order():
+                if task_key not in selected_tasks:
+                    continue
 
-            self.service.stitch_status["message"] = f"Running Stage: {task_key}"
+                # Update UI header for the current stage
+                self.service.stitch_status["message"] = f"Current Stage: {task_key.upper()}"
+                self.service.stitch_status["pending_messages"].append(
+                    UI.log_row(f"▶️ Starting {task_key.replace('_', ' ')}", type="info")
+                )
 
-            # Standard sequential loop
-            for sec_num in section_numbers:
-                if self.service.abort_requested: break
+                for sec_num in section_numbers:
+                    # CHECK: Exit immediately if user clicked Abort
+                    if self.service.abort_requested:
+                        self.service.stitch_status["message"] = "Pipeline Aborted by User"
+                        self.service.stitch_status["pending_messages"].append(
+                            UI.log_row("🛑 Pipeline Aborted", type="warning")
+                        )
+                        return  # Exit the thread
 
-                self.service.execute_fine_alignment_step(sec_num, task_key, config)
+                    # 2. Execute the specific worker logic
+                    # This function handles the Section init and task dispatch
+                    self.service.execute_fine_alignment_step(sec_num, task_key, config)
 
-                current_work += 1
-                self.service.stitch_status["progress"] = int((current_work / total_work) * 100)
+                    # 3. Update Progress
+                    current_work += 1
+                    # Ensure we don't divide by zero if input is weird
+                    progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
+                    self.service.stitch_status["progress"] = progress_pct
 
+            # 4. Final Success State
+            self.service.stitch_status["progress"] = 100
+            self.service.stitch_status["message"] = "Pipeline Finished Successfully."
+            self.service.stitch_status["pending_messages"].append(
+                UI.log_row("🏁 ALL STITCHING TASKS COMPLETE", type="success")
+            )
+
+        except Exception as e:
+            # Catch unexpected crashes and report to UI
+            logging.error(f"Pipeline Failure: {e}")
+            self.service.stitch_status["error"] = str(e)
+            self.service.stitch_status["message"] = "Pipeline Failed"
+            self.service.stitch_status["pending_messages"].append(
+                UI.log_row(f"❌ CRITICAL ERROR: {e}", type="error")
+            )
+
+        finally:
+            # 5. KILL SWITCH: This tells the Dash Poller to stop the Interval
+            self.service.stitch_status["active"] = False
 
 
     # def _run_parallel_task(self, task_key, section_numbers, config):

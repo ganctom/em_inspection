@@ -55,8 +55,8 @@ class OverlapContext:
 class DataService:
     def __init__(self):
         self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
-        self.acq_config = None
-        self.exp_config = None
+        self.acq_config: AcquisitionConfig | None = None
+        self.exp_config: ExpConfig | None = None
         self.stitch_config = None
         self.inspection = None
         self.processor = None
@@ -827,9 +827,18 @@ class DataService:
 
             section.compute_coarse_mesh(conf=cfg, overwrite=True)
 
+        if task_name == Task.MARGIN_MASKS:
+            section.build_margin_masks(
+                grid_shape=self.acq_config.grid_shape,
+                margin=0,
+                rim_size=40,
+                overwrite=True
+            )
+
+
         return None
 
-    
+
 # Initialize single instances
 service = DataService()
 orchestrator = PipelineOrchestrator(service)

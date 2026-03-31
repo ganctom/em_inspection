@@ -8,9 +8,9 @@ from inspection_utils_refactor import parse_section_range, validate_section_numb
 
 
 @callback(
-    [Output(UI.ID_STITCH_PPLN_CONSOLE, "children"),
-     Output(UI.ID_STITCH_PPLN_PROGRESS, "value"),
-     Output(UI.ID_STITCH_PPLN_PROGRESS_INT, "disabled")],
+    [Output(UI.ID_STITCH_PPLN_CONSOLE, "children", allow_duplicate=True),
+     Output(UI.ID_STITCH_PPLN_PROGRESS, "value", allow_duplicate=True),
+     Output(UI.ID_STITCH_PPLN_PROGRESS_INT, "disabled", allow_duplicate=True)],
     Input(UI.ID_STITCH_PPLN_RUN, "n_clicks"),
     [State(UI.ID_STITCH_PPLN_INP, "value"),
      State(UI.ID_STITCH_PPLN_STEPS, "value"),
@@ -50,10 +50,6 @@ def start_stitching_pipeline(n_clicks, range_str, selected_steps, config_path):
         UI.log_row("-" * 40)
     ]
 
-    logging.info(f'sec nums valid: {sec_nums_valid}')
-    logging.info(f'selected steps: {selected_steps}')
-    logging.info(f'final config: {final_config}')
-
     thread = threading.Thread(
         target=orchestrator.run_sequential_pipeline,
         args=(sec_nums_valid, selected_steps, final_config),
@@ -62,3 +58,47 @@ def start_stitching_pipeline(n_clicks, range_str, selected_steps, config_path):
     thread.start()
 
     return init_log, 5, False
+
+
+# --- CALLBACK B: SYNC PROGRESS ---
+@callback(
+    [Output(UI.ID_STITCH_PPLN_CONSOLE, "children", allow_duplicate=True),
+     Output(UI.ID_STITCH_PPLN_PROGRESS, "value", allow_duplicate=True),
+     Output(UI.ID_STITCH_PPLN_PROGRESS, "animated"),
+     Output(UI.ID_STITCH_PPLN_PROGRESS, "striped"),
+     Output(UI.ID_STITCH_PPLN_PROGRESS_INT, "disabled", allow_duplicate=True),
+     Output("pipeline-status-bar", "children")],
+    Input(UI.ID_STITCH_PPLN_PROGRESS_INT, "n_intervals"),
+    State(UI.ID_STITCH_PPLN_CONSOLE, "children"),
+    prevent_initial_call=True
+)
+def sync_pipeline_progress(n, current_logs):
+    status = service.stitch_status
+
+    # 1. Fetch new logs and clear the buffer
+    new_logs = status.get("pending_messages", [])
+    status["pending_messages"] = []  # Clear the bridge
+
+    updated_logs = current_logs + new_logs
+    progress = status.get("progress", 0)
+    msg = status.get("message", "Processing...")
+    is_active = status.get("active", False)
+
+    # 2. Logic for Finished State
+    if not is_active and progress >= 100:
+        # Stop animation, stop the interval, show final success msg
+        return (
+            updated_logs,
+            100,  # Progress
+            False,  # Animated
+            False,  # Striped
+            True,  # Disable Interval (Stops the loop)
+            f"✅ {msg}"
+        )
+
+    # 3. Logic for Aborted/Error State
+    if not is_active and status.get("error"):
+        return updated_logs, progress, False, False, True, f"❌ Error: {status['error']}"
+
+    # 4. Standard Running State
+    return updated_logs, progress, True, True, False, f"⏳ {msg}"

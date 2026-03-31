@@ -235,7 +235,7 @@ class Section:
 
         logging.debug(f'tile_id_map: {self.tile_id_map}')
         logging.debug(f'y, x: {y, x}')
-        logging.info(f'loaded offset: {co}')
+        logging.debug(f'loaded offset: {co}')
         return co
 
 
@@ -509,7 +509,7 @@ class Section:
             cy = cy[:, np.newaxis, ...]
 
         self.coarse_mesh = stitch_rigid.optimize_coarse_mesh(cx, cy, conf)
-        self.coarse_mesh = None
+
         if self.coarse_mesh is None:
             logging.warning(f'Section s{self.section_num} coarse mesh not computed.')
         elif store:
@@ -1784,7 +1784,7 @@ def fine_align_section(
     rescale_fct = 0.5 # Store .jpg thumbnail into section folder
     # rescale_fct = None  # Store .jpg thumbnail into section folder
     # parallelism: int = 1
-    # overwrite = True
+    overwrite = True
     # rot_angle = 0
     # masking = True
     # clahe_kwargs = dict(kernel_size=256, clip_limit=0.5, nbins=64)
