@@ -1214,7 +1214,7 @@ if __name__ == "__main__":
 
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT
-    # main_par_multiproc(exp)
+    main_par_multiproc(exp)
 
 
     ### DETECT BEAD COARSE OFFSETS

@@ -1,4 +1,5 @@
 import yaml
+from dataclasses import dataclass
 from pydantic import BaseModel, field_validator, model_validator
 from typing import Tuple, Dict
 
@@ -121,6 +122,23 @@ class MeshIntegrationConfig(BaseModel):
     final_cap: float = 10
     prefer_orig_order: bool = True
     remove_drift: bool = True
+
+
+# @dataclass(frozen=True)
+# class IntegrationConfig:
+#     dt: float
+#     gamma: float
+#     k0: float
+#     k: float
+#     stride: int
+#     num_iters: int
+#     max_iters: int
+#     stop_v_max: float
+#     dt_max: float
+#     start_cap: float
+#     final_cap: float
+#     prefer_orig_order: bool
+#     remove_drift: bool
 
 
 class WarpConfig(BaseModel):

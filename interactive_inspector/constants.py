@@ -26,7 +26,7 @@ class Task:
     def get_master_order(cls):
         """Returns the strict execution sequence."""
         return [
-            cls.COARSE_OFFSETS,
+            # cls.COARSE_OFFSETS,
             cls.COARSE_MESH,
             cls.MARGIN_MASKS,
             cls.FINE_FLOWS,
@@ -39,7 +39,7 @@ class Task:
     def get_ui_options(cls):
         """Returns metadata for the Dash Checklist."""
         labels = {
-            cls.COARSE_OFFSETS: "Compute Coarse Offsets",
+            # cls.COARSE_OFFSETS: "Compute Coarse Offsets",
             cls.COARSE_MESH:    "Compute Coarse Meshes",
             cls.MARGIN_MASKS:   "Build Margin Masks",
             cls.FINE_FLOWS:     "Compute Fine Flows",

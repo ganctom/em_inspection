@@ -4,12 +4,9 @@ import dash
 from dash import Input, Output, State, callback, no_update, clientside_callback
 
 from constants import UI
-from data_service import service
+from data_service import service, orchestrator
 import parameter_config as pcfg
-from pipeline_actions import PipelineOrchestrator
 
-# Initialize the orchestrator (can be done globally or inside the layout)
-orchestrator = PipelineOrchestrator(service)
 
 
 # --- 1. UNIFIED LOAD CALLBACK ---
@@ -183,7 +180,6 @@ def handle_config_save(n_clicks, path, *args):
 
     except Exception as e:
         return f"Save failed: {str(e)}"
-
 
 
 @callback(

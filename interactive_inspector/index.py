@@ -5,6 +5,7 @@ from dash_extensions import EventListener
 
 # 1. Setup logging
 # logging.basicConfig(level=logging.DEBUG)
+# logging.basicConfig(level=logging.INFO)
 logging.basicConfig(level=logging.WARNING)
 
 # 2. Import the app instance and standardized constants
@@ -15,7 +16,8 @@ from constants import Nav, UIConstants
 from layouts import setup_layout, coarse_align_layout, stitching_layout, inspection_layout
 from data_service import service
 
-# 4. Register all callbacks
+
+# 4. Register all callbacks and services
 import callbacks.stitching_callbacks
 import callbacks.coarse_align_callbacks
 import callbacks.inspection_callbacks

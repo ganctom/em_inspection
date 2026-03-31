@@ -479,7 +479,6 @@ class Section:
         return
 
 
-
     def compute_coarse_mesh(self, conf: Optional[mesh.IntegrationConfig] = None, store=True, overwrite=False) -> None:
 
         if conf is None:
@@ -510,7 +509,7 @@ class Section:
             cy = cy[:, np.newaxis, ...]
 
         self.coarse_mesh = stitch_rigid.optimize_coarse_mesh(cx, cy, conf)
-
+        self.coarse_mesh = None
         if self.coarse_mesh is None:
             logging.warning(f'Section s{self.section_num} coarse mesh not computed.')
         elif store:
@@ -1832,7 +1831,7 @@ def fine_align_section(
     #     stop_v_max=0.001,
     #     dt_max=100,
     # )
-    # section.compute_coarse_mesh(cfg=cfg, overwrite=overwrite)
+    section.compute_coarse_mesh(cfg=cfg, overwrite=overwrite)
 
     # # Create margin masks for warping
     # section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)

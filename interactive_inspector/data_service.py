@@ -14,19 +14,22 @@ import gc
 import threading
 import yaml
 
+from sofima.mesh import IntegrationConfig
 import parse_sbem_dataset as parse
 
 import inspection_refactored
 from experiment_configs import ExperimentRegistry, ExpConfig
 from parameter_config import AcquisitionConfig, StitchingConfig
 from Tile_refactored import Tile
-from constants import DataConstants as DC
+from constants import DataConstants as DC, Task
 from constants import UIConstants as UI
 
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image
 )
+
+from pipeline_actions import PipelineOrchestrator
 
 
 @dataclass(frozen=True)
@@ -742,5 +745,91 @@ class DataService:
             self.coarse_align_status["active"] = False
 
 
-# Initialize single instance
+    def run_pipeline_thread(self, section_numbers, tasks, config_path):
+        self.abort_requested = False  # Reset flag at start
+        self.stitch_status = {
+            "active": True, "progress": 0, "message": "Starting...",
+            "pending_messages": [UI.log_row("🚀 Pipeline Started", type="info")],
+            "error": None
+        }
+
+        try:
+            total_tasks = len(tasks)
+            total_sections = len(section_numbers)
+            # cfg = self.load_stitching_config(config_path)
+            logging.info(f'cfg loading ...')
+            cfg=None
+
+            for t_idx, task in enumerate(tasks):
+                # CHECK 1: Before starting a new major task
+                if self.abort_requested: break
+
+                task_label = task.replace("_", " ").upper()
+                self.stitch_status["pending_messages"].append(
+                    UI.log_row(f"▶️ STEP {t_idx + 1}: {task_label}", type="info"))
+
+                for s_idx, sec_num in enumerate(section_numbers):
+                    # CHECK 2: Before processing each section
+                    if self.abort_requested:
+                        self.stitch_status["pending_messages"].append(
+                            UI.log_row("🛑 Abort signal received. Stopping...", type="warning"))
+                        break
+
+                    # Execute the actual logic
+                    print(f'executing: {sec_num}')
+                    # self._execute_task_by_name(task, sec_num, cfg)
+
+                    # Update Progress
+                    prog = int(((t_idx + (s_idx + 1) / total_sections) / total_tasks) * 100)
+                    self.stitch_status["progress"] = prog
+                    self.stitch_status["message"] = f"[{task_label}] Sec {sec_num}"
+
+                if self.abort_requested: break  # Exit outer loop if inner loop aborted
+
+            if self.abort_requested:
+                self.stitch_status["message"] = "Pipeline Aborted by User."
+            else:
+                self.stitch_status["progress"] = 100
+                self.stitch_status["message"] = "Pipeline Complete!"
+                self.stitch_status["pending_messages"].append(UI.log_row("🏁 ALL TASKS COMPLETE", type="success"))
+
+        except Exception as e:
+            self.stitch_status["error"] = str(e)
+            self.stitch_status["pending_messages"].append(UI.log_row(f"❌ ERROR: {e}", type="error"))
+        finally:
+            self.stitch_status["active"] = False
+
+
+    def execute_fine_alignment_step(self, section_num: int, task_name: str, config: StitchingConfig) -> None:
+        """
+        The low-level worker that maps a Pipeline Task to a Section method.
+        """
+        # 1. Initialize Section Object
+        section = self._init_section(section_num)
+        section.feed_section_data()
+
+        # 2. Dispatch based on Task
+        if task_name == Task.COARSE_MESH:
+            # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
+            cfg_yaml = config.mesh_integration_config
+
+            cfg = IntegrationConfig(
+                dt=cfg_yaml.dt,  # dt=cfg_yaml.dt
+                gamma=cfg_yaml.gamma,
+                k0=0.0,  # unused
+                k=cfg_yaml.k,
+                stride=(1,1),  # unused
+                num_iters=cfg_yaml.num_iters,
+                max_iters=cfg_yaml.max_iters,
+                stop_v_max=cfg_yaml.stop_v_max,
+                dt_max=cfg_yaml.dt_max,
+            )
+
+            section.compute_coarse_mesh(conf=cfg, overwrite=True)
+
+        return None
+
+    
+# Initialize single instances
 service = DataService()
+orchestrator = PipelineOrchestrator(service)
