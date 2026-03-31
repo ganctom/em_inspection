@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
-import parameter_config
+import parameter_config as pcfg
 from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig
 
 
@@ -357,6 +357,141 @@ class UIConstants:
             children=content
         )
 
+    @classmethod
+    def TAB_STITCHING_PARAMS(cls):
+        """Refactored Registration Tab: Now 'Stitching Parameters'."""
+        defaults = pcfg.RegistrationConfig()
+
+        def to_csv(val_list):
+            return ", ".join(map(str, val_list))
+
+        content = [
+            dbc.Row([
+                # Row 1
+                dbc.Col([cls.label_factory("Patch Size (csv)"),
+                         dbc.Input(**cls.text_factory(cls.ID_CONF_PATCH, to_csv(defaults.patch_size)))], width=6),
+                dbc.Col([cls.label_factory("Batch Size"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_BATCH, value=defaults.batch_size, is_int=True))],
+                        width=6),
+                # Row 2
+                dbc.Col([cls.label_factory("Min Peak Ratio"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MIN_PKR, value=defaults.min_peak_ratio))],
+                        width=6),
+                dbc.Col([cls.label_factory("Min Peak Sharpness"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MIN_PKS, value=defaults.min_peak_sharpness))],
+                        width=6),
+                # Row 3
+                dbc.Col([cls.label_factory("Max Deviation"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_MAX_DEV, value=defaults.max_deviation, is_int=True))], width=6),
+                dbc.Col([cls.label_factory("Max Magnitude"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_MAX_MAG, value=defaults.max_magnitude, is_int=True))], width=6),
+                # Row 4
+                dbc.Col([cls.label_factory("Min Patch Size"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_MIN_PATCH, value=defaults.min_patch_size, is_int=True))],
+                        width=6),
+                dbc.Col([cls.label_factory("Max Gradient"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MAX_GRAD, value=defaults.max_gradient))], width=6),
+                # Row 5
+                dbc.Col([cls.label_factory("Rec. Flow Max Dev"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_REC_FLOW_MAX_GRAD, value=defaults.reconcile_flow_max_deviation))],
+                        width=12),
+            ], className="g-2")
+        ]
+
+        return cls.tab_factory(label="Stitching Parameters", tab_id="tab-stitch-params", children=content)
+
+    @classmethod
+    def TAB_MESH_WARP(cls):
+        """Unified Mesh Integration and Warping configuration tab."""
+        m_def = pcfg.MeshIntegrationConfig()
+        w_def = pcfg.WarpConfigStitching()
+
+        content = [
+            html.H6("Mesh Integration (Elastic Solver)", className="small fw-bold mt-2 mb-3 text-primary"),
+
+            # Row 1: Core Physics Params
+            dbc.Row([
+                dbc.Col([cls.label_factory("dt"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_DT, value=m_def.dt))], width=3),
+                dbc.Col([cls.label_factory("gamma"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_GAMMA, value=m_def.gamma))], width=3),
+                dbc.Col([cls.label_factory("k0"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_K0, value=m_def.k0))], width=3),
+                dbc.Col([cls.label_factory("k"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_K, value=m_def.k))], width=3),
+            ], className="mb-3"),
+
+            # Row 2: Iteration & Step Control
+            dbc.Row([
+                dbc.Col([cls.label_factory("Stride"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_STRIDE, value=m_def.stride, is_int=True))],
+                        width=3),
+                dbc.Col([cls.label_factory("Num Iters"),
+                         dbc.Input(
+                             **cls.numeric_factory(cls.ID_CONF_MESH_NUM_ITERS, value=m_def.num_iters, is_int=True))],
+                        width=3),
+                dbc.Col([cls.label_factory("Max Iters"),
+                         dbc.Input(
+                             **cls.numeric_factory(cls.ID_CONF_MESH_MAX_ITERS, value=m_def.max_iters, is_int=True))],
+                        width=3),
+                dbc.Col([cls.label_factory("Stop v Max"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_STOP_V, value=m_def.stop_v_max))], width=3),
+            ], className="mb-3"),
+
+            # Row 3: Limits & Caps (The Missing Entries)
+            dbc.Row([
+                dbc.Col([cls.label_factory("DT Max"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_DT_MAX, value=m_def.dt_max))], width=4),
+                dbc.Col([cls.label_factory("Start Cap"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_START_CAP, value=m_def.start_cap))], width=4),
+                dbc.Col([cls.label_factory("Final Cap"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_FINAL_CAP, value=m_def.final_cap))], width=4),
+            ], className="mb-3"),
+
+            # Row 4: Switches
+            dbc.Row([
+                dbc.Col([
+                    dbc.Checklist(id=cls.ID_CONF_MESH_ORIG_ORDER,
+                                  options=[{"label": "Prefer Orig Order", "value": True}],
+                                  value=[True] if m_def.prefer_orig_order else [], switch=True, className="small")
+                ], width=4),
+                dbc.Col([
+                    dbc.Checklist(id=cls.ID_CONF_MESH_REMOVE_DRIFT,
+                                  options=[{"label": "Remove Drift", "value": True}],
+                                  value=[True] if m_def.remove_drift else [], switch=True, className="small")
+                ], width=4),
+            ], className="mb-3"),
+
+            # Warping
+            html.Hr(),
+            html.H6("Warping (Image Rendering)", className="small fw-bold mt-2 mb-3 text-primary"),
+            dbc.Row([
+                dbc.Col([cls.label_factory("Margin"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_MARGIN, value=w_def.margin, is_int=True))],
+                        width=4),
+                dbc.Col([cls.label_factory("Parallelism"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_WARP_PARALLEL, value=w_def.warp_parallelism, is_int=True))],
+                        width=4),
+                dbc.Col([cls.label_factory("Kernel Size"), dbc.Input(
+                    **cls.numeric_factory(cls.ID_CONF_WARP_KERNEL, value=w_def.kernel_size, is_int=True))], width=4),
+            ], className="mb-3"),
+
+            dbc.Row([
+                dbc.Col([cls.label_factory("Clip Limit"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_CLIP, value=w_def.clip_limit))], width=4),
+                dbc.Col([cls.label_factory("nbins"),
+                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_NBINS, value=w_def.nbins, is_int=True))],
+                        width=4),
+                dbc.Col([
+                    dbc.Checklist(id=cls.ID_CONF_WARP_CLAHE, options=[{"label": "Use CLAHE", "value": True}],
+                                  value=[True] if w_def.use_clahe else [], switch=True, className="small")
+                ], width=4),
+            ])
+        ]
+        return cls.tab_factory(label="Mesh & Warp", tab_id="tab-mesh", children=content)
+
+
+
     @property
     def TTP_BCKP_CO(self):
         """Factory-generated config for the Backup Tooltip."""
@@ -443,7 +578,7 @@ class UIConstants:
         # Start with the base factory dictionary
         inp_cfg = cls.text_factory(
             id=cls.ID_STITCH_CONFIG_PATH,
-            placeholder=f"/Volumes/.../{parameter_config.FN_STITCHING_CFG}"
+            placeholder=f"/Volumes/.../{pcfg.FN_STITCHING_CFG}"
         )
 
         # Inject the path if the service provides one

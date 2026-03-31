@@ -27,6 +27,8 @@ def layout(active_service=None):
                             dbc.Tabs([
                                 UI.TAB_ACQUISITION(active_service),
                                 UI.TAB_REGISTRATION(active_service),
+                                UI.TAB_STITCHING_PARAMS(),
+                                UI.TAB_MESH_WARP(),
                             ], id="config-tabs", active_tab="tab-acq")
                         ]
                     )
