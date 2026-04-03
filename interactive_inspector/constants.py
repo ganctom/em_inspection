@@ -113,7 +113,7 @@ class UIConstants:
     ID_BTN_PARSE = "parse-exp-btn"
     ID_BTN_PARSE_WRAPPER = "parse-btn-wrapper"
     ID_TTP_PARSE = "parse-btn-tooltip"
-    ID_BTN_INIT = "load-config-btn"
+    ID_BTN_INIT = "load-stitch_config-btn"
     ID_INP_PX_SIZE = "new-exp-px-size"
     ID_INP_CT = "new-exp-ct"
     ID_INP_GS_X = "new-exp-grid-size-x"
@@ -299,10 +299,10 @@ class UIConstants:
     @classmethod
     def TAB_ACQUISITION(cls, active_service=None):
         """Generates the Acquisition & Range tab with dynamic initial values."""
-        # Calculate dynamic values from service
+        # Calculate dynamic values from ppln_service
         initial_output_dir = cls.get_proj_dir(active_service)
 
-        # Pull defaults from the service config if available, otherwise None
+        # Pull defaults from the ppln_service stitch_config if available, otherwise None
         start_val = active_service.exp_config.first_sec if active_service and active_service.exp_config else None
         end_val = active_service.exp_config.last_sec if active_service and active_service.exp_config else None
 
@@ -555,7 +555,7 @@ class UIConstants:
 
     @property
     def TTP_BCKP_CO(self):
-        """Factory-generated config for the Backup Tooltip."""
+        """Factory-generated stitch_config for the Backup Tooltip."""
         return self.tooltip_factory(
             id=self.ID_TTP_BCKP,
             target=self.ID_BTN_BCKP_WRAPPER,
@@ -633,7 +633,7 @@ class UIConstants:
 
     @classmethod
     def INP_STITCH_CFG(cls, active_service=None):
-        """Generates the config path input with the correct initial value."""
+        """Generates the stitch_config path input with the correct initial value."""
         stitch_yaml_path = cls.get_stitching_config_path(active_service)
 
         # Start with the base factory dictionary
@@ -642,7 +642,7 @@ class UIConstants:
             placeholder=f"/Volumes/.../{pcfg.FN_STITCHING_CFG}"
         )
 
-        # Inject the path if the service provides one
+        # Inject the path if the ppln_service provides one
         if stitch_yaml_path:
             inp_cfg["value"] = stitch_yaml_path
 
@@ -659,13 +659,13 @@ class UIConstants:
                     dbc.Button("Load", id=cls.ID_STITCH_LOAD_YAML, color="primary", size="sm"),
                     dbc.Button("Save / Export", id=cls.ID_STITCH_SAVE_YAML, color="success", size="sm"),
                 ]),
-                html.Div(id="config-load-status", className="small mt-1 text-muted")
+                html.Div(id="stitch_config-load-status", className="small mt-1 text-muted")
             ], width=12, className="mb-3")
         ])
 
     # ---- STITCHING PAGE ----  #
     # --- Stitching IDs ---
-    ID_STITCH_CONFIG_PATH = "config-path"
+    ID_STITCH_CONFIG_PATH = "stitch_config-path"
     ID_STITCH_LOAD_YAML = "btn-load-yaml"
     ID_STITCH_SAVE_YAML = "btn-save-yaml"
 
@@ -725,6 +725,7 @@ class UIConstants:
     ID_STITCH_PPLN_STEPS = "stitch-ppln-steps"
     ID_STITCH_PPLN_PROGRESS = "stitch-ppln-progress"
     ID_STITCH_PPLN_PROGRESS_INT = "stitch-ppln-progress-int"
+    ID_STITCH_PPLN_PARALLEL_TOGGLE = "stitch-ppln-parallel-toggle"
 
     ID_STITCH_PPLN_ABORT = "stitch-ppln-abort-btn"
     NAME_STITCH_PPLN_ABORT = "Abort"
@@ -765,7 +766,7 @@ class UIConstants:
     # Pipeline execution buttons
     @property
     def BTN_STITCH_PPLN_RUN(self):
-        """Factory-generated config for the Run button."""
+        """Factory-generated stitch_config for the Run button."""
         children = [html.I(className="bi bi-play-circle-fill me-2"), self.NAME_STITCH_PPLN_RUN]
         return self.button_factory(
             id=self.ID_STITCH_PPLN_RUN,
@@ -777,7 +778,7 @@ class UIConstants:
 
     @property
     def BTN_STITCH_PPLN_ABORT(self):
-        """Factory-generated config for the Abort button."""
+        """Factory-generated stitch_config for the Abort button."""
         children = [html.I(className="bi bi-stop-fill me-2"), self.NAME_STITCH_PPLN_ABORT]
         return self.button_factory(
             id=self.ID_STITCH_PPLN_ABORT,
@@ -829,7 +830,7 @@ class UIConstants:
 
     @classmethod
     def _get_active_proc_dir(cls, service) -> str | None:
-        """Internal helper to safely extract proc_dir from the service."""
+        """Internal helper to safely extract proc_dir from the ppln_service."""
         if service and hasattr(service, 'exp_config') and service.exp_config:
             return getattr(service.exp_config, 'proc_dir', None)
         return None

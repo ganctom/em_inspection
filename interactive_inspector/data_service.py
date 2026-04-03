@@ -74,6 +74,7 @@ class DataService:
         self.abort_requested = False
         self.stitch_status = {"active": False, "pending_messages": []}
         self.message_queue = deque()
+        self.service_initialized = False
 
 
     def create_and_save_new_experiment(
@@ -94,7 +95,15 @@ class DataService:
         self.acq_config = self._prepare_acquisition_config(config)
         self.inspection = Inspection(config)
         self.processor = self.inspection.co_processor
+        self.service_initialized = True
         logging.info(f"DataService: Active experiment set to {config.name}")
+
+
+    def get_sec_path(self, sec_num: int) -> str:
+        sec_dir = Path(self.exp_config.proc_dir, 'sections')
+        grid_num = self.exp_config.grid_num
+        sec_name = f"s{sec_num}_g{grid_num}"
+        return str(sec_dir / sec_name)
 
 
     def get_latest_logs(self):
@@ -202,14 +211,14 @@ class DataService:
 
     def load_experiment(self, config):
         """
-        Loads inspector, coarse offsets tensor & UI data using specified config file
+        Loads inspector, coarse offsets tensor & UI data using specified stitch_config file
         """
         self.initialize_experiment_from_config(config)
         try:
             self.processor.load_all_offsets_and_tile_id_maps_from_npz()
             self.tile_ids = self.processor.get_largest_tile_id_map()
         except FileNotFoundError as _:
-            # print(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
+            # print(f"DataService: Loaded {stitch_config.name}. Coarse offsets not loaded.")
             logging.info(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
 
         self.clear_cache()
@@ -808,9 +817,14 @@ class DataService:
                 overwrite=True
             )
 
+        # if task_name == Task.FINE_FLOWS:
+        #     # Compute flows between overlaps
+        #     section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
 
 
         return None
+
+
 
 
 # Initialize single instances

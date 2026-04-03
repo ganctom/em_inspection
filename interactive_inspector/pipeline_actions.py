@@ -1,25 +1,35 @@
 import logging
 import threading
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 
-from Section_refactored import CoarseStitchConfig
+from sofima.mesh import IntegrationConfig
+
+from Section_refactored import CoarseStitchConfig, Section
 from constants import Task, UI
 from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
-from parameter_config import StitchingConfig, RegistrationConfig
+from parameter_config import StitchingConfig, RegistrationConfig, AcquisitionConfig, ExpConfig
+
 
 class PipelineOrchestrator:
-    def __init__(self, service):
-        self.service = service
+    def __init__(self, dat_service):
+        self.ppln_service = dat_service
 
 
-    def run_sequential_pipeline(self, section_numbers, selected_tasks, config: StitchingConfig):
+    def run_sequential_pipeline(
+            self,
+            section_numbers,
+            selected_tasks,
+            config: StitchingConfig,
+    ):
         """
         The Master Thread for the UI. Orchestrates tasks across sections.
         """
         # 1. Initialize State
-        self.service.stitch_status["active"] = True
-        self.service.stitch_status["progress"] = 0
-        self.service.stitch_status["error"] = None
-        self.service.abort_requested = False
+        self.ppln_service.stitch_status["active"] = True
+        self.ppln_service.stitch_status["progress"] = 0
+        self.ppln_service.stitch_status["error"] = None
+        self.ppln_service.abort_requested = False
 
         total_work = len(section_numbers) * len(selected_tasks)
         current_work = 0
@@ -30,57 +40,57 @@ class PipelineOrchestrator:
                     continue
 
                 # Update UI header for the current stage
-                self.service.stitch_status["message"] = f"Current Stage: {task_key.upper()}"
-                self.service.stitch_status["pending_messages"].append(
+                self.ppln_service.stitch_status["message"] = f"Current Stage: {task_key.upper()}"
+                self.ppln_service.stitch_status["pending_messages"].append(
                     UI.log_row(f"▶️ Starting {task_key.replace('_', ' ')}", type="info")
                 )
 
                 for sec_num in section_numbers:
-                    if self.service.abort_requested:
-                        self.service.stitch_status["message"] = "Pipeline Aborted by User"
-                        self.service.stitch_status["pending_messages"].append(
+                    if self.ppln_service.abort_requested:
+                        self.ppln_service.stitch_status["message"] = "Pipeline Aborted by User"
+                        self.ppln_service.stitch_status["pending_messages"].append(
                             UI.log_row("🛑 Pipeline Aborted", type="warning")
                         )
                         return  # Exit the thread
 
                     # 2. Execute the specific worker logic
                     # This function handles the Section init and task dispatch
-                    self.service.execute_fine_alignment_step(sec_num, task_key, config)
+                    self.ppln_service.execute_fine_alignment_step(sec_num, task_key, config)
 
                     # 3. Update Progress
                     current_work += 1
                     # Ensure we don't divide by zero if input is weird
                     progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
-                    self.service.stitch_status["progress"] = progress_pct
+                    self.ppln_service.stitch_status["progress"] = progress_pct
 
             # 4. Final Success State
-            self.service.stitch_status["progress"] = 100
-            self.service.stitch_status["message"] = "Pipeline Finished Successfully."
-            self.service.stitch_status["pending_messages"].append(
+            self.ppln_service.stitch_status["progress"] = 100
+            self.ppln_service.stitch_status["message"] = "Pipeline Finished Successfully."
+            self.ppln_service.stitch_status["pending_messages"].append(
                 UI.log_row("🏁 ALL STITCHING TASKS COMPLETE", type="success")
             )
 
         except Exception as e:
             # Catch unexpected crashes and report to UI
             logging.error(f"Pipeline Failure: {e}")
-            self.service.stitch_status["error"] = str(e)
-            self.service.stitch_status["message"] = "Pipeline Failed"
-            self.service.stitch_status["pending_messages"].append(
+            self.ppln_service.stitch_status["error"] = str(e)
+            self.ppln_service.stitch_status["message"] = "Pipeline Failed"
+            self.ppln_service.stitch_status["pending_messages"].append(
                 UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} {e}", type="error")
             )
 
         finally:
             # 5. KILL SWITCH: This tells the Dash Poller to stop the Interval
-            self.service.stitch_status["active"] = False
+            self.ppln_service.stitch_status["active"] = False
 
 
     def validate_and_prepare(self, range_str, config_path, ui_params_raw) -> tuple[list[int], StitchingConfig]:
         """Logic-only: Validates sections and prepares params."""
-        if not self.service.exp_config:
+        if not self.ppln_service.exp_config:
             raise ValueError("No active experiment found.")
 
         # 1. Section Validation
-        first, last = self.service.exp_config.first_sec, self.service.exp_config.last_sec
+        first, last = self.ppln_service.exp_config.first_sec, self.ppln_service.exp_config.last_sec
         if str(range_str).lower() == 'all':
             sec_nums = list(range(first, last + 1))
         else:
@@ -92,7 +102,7 @@ class PipelineOrchestrator:
 
         # 2. Param Prep
         hashable_ui = make_hashable_params(ui_params_raw)
-        stitching_config = self.service.prepare_stitching_params(
+        stitching_config = self.ppln_service.prepare_stitching_params(
             config_path=config_path,
             ui_params=hashable_ui
         )
@@ -110,9 +120,110 @@ class PipelineOrchestrator:
         )
 
         thread = threading.Thread(
-            target=self.service.run_coarse_align_thread,
+            target=self.ppln_service.run_coarse_align_thread,
             args=(sec_nums, reg_params),
             daemon=True
         )
         thread.start()
         return thread
+
+
+    def run_parallel_pipeline(
+            self,
+            section_numbers,
+            selected_tasks,
+            stitch_config: StitchingConfig,
+    ):
+        self.ppln_service.stitch_status["active"] = True
+        self.ppln_service.stitch_status["progress"] = 0
+
+        if not self.ppln_service.service_initialized:
+            self.ppln_service.initialize_experiment_from_config(stitch_config.exp_config)
+
+
+        # Limit workers to avoid OOM (Out of Memory)
+        num_workers = min(len(section_numbers), 20)
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            # Submit all sections as individual futures
+            future_to_sec = {
+                executor.submit(
+                    section_worker_wrapper,
+                    self.ppln_service.get_sec_path(n),
+                    selected_tasks,
+                    stitch_config,
+                )
+                : n for n in section_numbers
+            }
+
+            for i, future in enumerate(as_completed(future_to_sec)):
+                sec_num, success, message = future.result()
+
+                if success:
+                    self.ppln_service.stitch_status["pending_messages"].append(
+                        UI.log_row(f"✅ Section {sec_num} finished", type="success")
+                    )
+                else:
+                    self.ppln_service.stitch_status["pending_messages"].append(
+                        UI.log_row(f"❌ Section {sec_num} failed: {message}", type="error")
+                    )
+
+                # Update Progress based on completed sections
+                self.ppln_service.stitch_status["progress"] = int(((i + 1) / len(section_numbers)) * 100)
+
+        self.ppln_service.stitch_status["active"] = False
+
+
+
+
+def section_worker_wrapper(
+        sec_path: str,
+        task_keys: list,
+        stitch_cfg: StitchingConfig,
+):
+    """
+    Standalone worker. Initializes its own Section instance to ensure
+    memory isolation between processes.
+    """
+    try:
+        # 1. Initialize a clean Section instance for this process
+        # Assuming you have a way to get the path from the stitch_config/ppln_service
+        section = Section(sec_path)
+        section.feed_section_data()
+
+        # 2. Dispatch based on Task
+        for task_name in task_keys:
+
+            if task_name == Task.COARSE_MESH:
+                # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
+                cfg_yaml = stitch_cfg.mesh_integration_config
+
+                cfg = IntegrationConfig(
+                    dt=cfg_yaml.dt,  # dt=cfg_yaml.dt
+                    gamma=cfg_yaml.gamma,
+                    k0=0.0,  # unused
+                    k=cfg_yaml.k,
+                    stride=(1, 1),  # unused
+                    num_iters=cfg_yaml.num_iters,
+                    max_iters=cfg_yaml.max_iters,
+                    stop_v_max=cfg_yaml.stop_v_max,
+                    dt_max=cfg_yaml.dt_max,
+                )
+
+                section.compute_coarse_mesh(conf=cfg, overwrite=True)
+
+            if task_name == Task.MARGIN_MASKS:
+                section.build_margin_masks(
+                    grid_shape=stitch_cfg.acquisition_config.grid_shape,
+                    margin=stitch_cfg.mask_config.mask_margin,
+                    rim_size=stitch_cfg.mask_config.rim_size,
+                    overwrite=True
+                )
+
+            # if task_name == Task.FINE_FLOWS:
+            #     # Compute flows between overlaps
+            #     section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
+
+        return (sec_path, True, "Success")
+    except Exception as e:
+        return (sec_path, False, str(e))

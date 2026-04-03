@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import skimage
 from matplotlib import pyplot as plt
-from sofima import mesh, stitch_rigid
+from sofima import mesh, stitch_rigid, stitch_elastic
 from skimage.metrics import structural_similarity as ssim
 from concurrent.futures import ThreadPoolExecutor
 
@@ -29,9 +29,15 @@ from Tile_refactored import Tile
 UniPath = Union[str, Path]
 TileXY = tuple[int, int]
 Vector = Union[tuple[int, int], tuple[int, int, int], Union[tuple[int], tuple[Any, ...]]]  # [z]yx order
-MaskMap = dict[TileXY, Optional[np.ndarray]]
-TileMap = dict[TileXY, np.ndarray]
 GridXY = tuple[Any, Any, Any]
+TileFlow = Dict[TileXY, np.ndarray]
+TileOffset = Dict[TileXY, Vector]
+TileMap = Dict[TileXY, np.ndarray]
+FineFlow = Union[Tuple[TileFlow, TileOffset], None]
+FineFlows = Tuple[Optional[FineFlow], Optional[FineFlow]]
+MaskMap = Dict[TileXY, Optional[np.ndarray]]
+TileFlowData = Tuple[np.ndarray, TileFlow, TileOffset]
+MarginOverrides = Dict[TileXY, Tuple[int, int, int, int]]
 
 
 @lru_cache(maxsize=32)
@@ -76,6 +82,11 @@ class Section:
         self.mesh_offsets: Optional[np.ndarray[float]] = None
         self.cxy: Optional[np.ndarray[float]] = None
         self.coarse_mesh: Optional[np.ndarray[float]] = None
+
+        self.fflows: Optional[FineFlows] = None
+        self.fflows_clean: Optional[FineFlows] = None
+        self.fflows_recon: Optional[FineFlows] = None
+        self.fmesh: Optional[Dict[TileXY, np.ndarray]] = None
 
         self.mask_map: MaskMap | None = None
         self.roi_mask_map: MaskMap = {}
@@ -1571,84 +1582,61 @@ class Section:
 
         return shift_vec
 
-
-    def load_tile_map_(self, clahe: bool = False) -> None:
-        """
-           Get a tile-data-map mapping tile (x, y) coordinates to the loaded image data.
-
-           :return: tile-data-map
-           """
-
-        h, w = self.tile_id_map.shape
-
-        for y in range(h):
-            for x in range(w):
-                tile_id = int(self.tile_id_map[y, x])
-                if tile_id != -1:
-                    try:
-                        tile_path = self.tile_dicts[tile_id]
-                    except KeyError as _:
-                        logging.error(f's{self.section_num} tile_id {tile_id} not found in tile_dicts!')
-                        return None
-
-                    if tile_path is not None and Path(tile_path).exists():
-                        logging.debug(f'Loading tile: {Path(tile_path).name}')
-                        img = skimage.io.imread(tile_path)
-                        img = utils.apply_clahe(img) if clahe else img
-                        self.tile_map[(x, y)] = img
-                    else:
-                        logging.warning(f'Missing tile in raw section data (!): {tile_path}')
-        return
-
+#---- LOADING TILE-MAP ----
     def load_tile_map(
             self,
             clahe: bool = False,
             parallel: bool = False,
-            max_workers: int | None = None
+            max_workers: Optional[int] = None
     ) -> None:
-        """Load valid tiles into self.tile_map. Set parallel=True for faster loading."""
-
-        def _load_tile(pos: tuple[int, int]) -> tuple[tuple[int, int], np.ndarray | None]:
-            y, x = pos
-            tile_id = int(self.tile_id_map[y, x])
-            if tile_id == -1:
-                return (x, y), None
-
-            try:
-                path = Path(self.tile_dicts[tile_id])
-                if not path.exists():
-                    logging.warning(f"Missing tile: {path.name} (tile_id={tile_id})")
-                    return (x, y), None
-
-                img = skimage.io.imread(str(path))
-                if clahe:
-                    img = utils.apply_clahe(img)
-                return (x, y), img
-
-            except KeyError:
-                logging.error(f"Section {self.section_num}: tile_id {tile_id} not found in tile_dicts!")
-                return (x, y), None
-            except Exception as e:
-                logging.error(f"Failed to load tile {tile_id} at ({x},{y}): {e}")
-                return (x, y), None
-
+        """Orchestrates the loading process."""
         positions = list(np.ndindex(self.tile_id_map.shape))
 
         if parallel:
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                try:
-                    for (x, y), img in executor.map(_load_tile, positions):
-                        if img is not None:
-                            self.tile_map[(x, y)] = img
-                except Exception as e:
-                    logging.error(f"Unexpected error during parallel tile loading: {e}")
+            # SMB bottleneck: cap default workers if not specified
+            workers = max_workers or 8
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                results = executor.map(lambda p: self._get_tile_data(p, clahe), positions)
+                self._update_tile_map(results)
         else:
-            for pos in positions:
-                (x, y), img = _load_tile(pos)
-                if img is not None:
-                    self.tile_map[(x, y)] = img
+            results = (self._get_tile_data(p, clahe) for p in positions)
+            self._update_tile_map(results)
+
+    def _get_tile_data(self, pos: Tuple[int, int], clahe: bool) -> Tuple[Tuple[int, int], Optional[np.ndarray]]:
+        """Encapsulates tile lookup, I/O, and post-processing logic."""
+        y, x = pos
+        tile_id = int(self.tile_id_map[y, x])
+
+        if tile_id == -1:
+            return (x, y), None
+
+        try:
+            path = Path(self.tile_dicts[tile_id])
+            img = utils.io_read_tif(path)
+
+            if clahe:
+                img = utils.apply_clahe(img)
+            return (x, y), img
+
+        except FileNotFoundError:
+            logging.warning(f"Missing tile: tile_id {tile_id} at {path}")
+        except KeyError:
+            logging.error(f"Mapping error: tile_id {tile_id} not in tile_dicts")
+        except Exception as e:
+            logging.error(f"Runtime error loading tile {tile_id} at ({x},{y}): {e}")
+
+        return (x, y), None
+
+    def _update_tile_map(self, results) -> None:
+        """Internal helper to commit loaded buffers to the state."""
+        for (x, y), img in results:
+            if img is not None:
+                self.tile_map[(x, y)] = img
+
+# ---- EOF LOADING TILE-MAP ----
 
 
+# ---- Coarse offsets computation ----
     def _is_cache_valid(self, overwrite: bool) -> bool:
         return Path(self.path_cxy).exists() and not overwrite
 
@@ -1703,6 +1691,128 @@ class Section:
             return None
 
         return self._compute_and_persist_offsets(config)
+
+# ---- EOFCoarse offsets computation ----
+
+    def compute_fine_flows(
+            self,
+            patch_size: int,
+            stride: int,
+            masking=False,
+            store=True,
+            overwrite: bool = False,
+            ext: Optional[str] = None,
+    ) -> None:
+
+        def load_infra() -> bool:
+            if self.cxy is None:
+                self.feed_section_data()
+
+            if self.cxy is None:
+                logging.warning(f'compute_fine_flows section s{self.section_num}: coarse offset array not loaded!')
+                return False
+
+            if self.tile_map is None:
+                self.load_tile_map(clahe=False)
+
+            if self.tile_map is None:
+                return False
+
+            if not self.mask_map and masking:
+                self.load_masks()
+
+            return True
+
+        def iter_compute_flows(
+                patch_size=patch_size,
+                ff_iter=0,
+                max_iter=5,
+                min_patch_size=10,
+                step=5
+        ) -> None:
+            """Compute fine flows with iterative decrease if patch size in case of SOFIMA negative
+            dimension error
+            """
+
+            def compute_flows(ps: int, axis: int) -> Tuple[TileFlow, TileOffset]:
+                return stitch_elastic.compute_flow_map(
+                    tile_map=self.tile_map,
+                    offset_map=self.cxy[axis],
+                    axis=axis,
+                    patch_size=(ps, ps),
+                    stride=(stride, stride),
+                    batch_size=256,
+                    tile_masks=self.mask_map,
+                )
+
+            logging.info(f'Computing fine flows for section s{self.section_num}')
+
+            while self.fflows is None or ff_iter == max_iter:
+                try:
+                    logging.info(f's{self.section_num} fflows params: iter={ff_iter}, patch_size={patch_size}')
+                    self.fflows = (
+                        compute_flows(patch_size, axis=0),
+                        compute_flows(patch_size, axis=1)
+                    )
+
+                except ValueError as _:
+                    logging.warning(
+                        f'fine flows s{self.section_num} decreasing patch size ({patch_size} -> {patch_size - step})')
+                    patch_size -= step
+                    ff_iter += 1
+                    if patch_size < min_patch_size:
+                        ff_iter = max_iter
+
+            logging.info(
+                f's{self.section_num} fine flows computed after {ff_iter + 1} iterations. Final patch size: {patch_size}')
+            return
+
+        def store_fflows(fine_flows: FineFlows, ext: Optional[str]):
+            ext = '' if ext is None else ext
+            fname = f'fflows{ext}.pkl'
+            with open(self.path / fname, 'wb') as f:
+                pickle.dump(fine_flows, f)
+            return
+
+        # Load necessary data first
+        infra_loaded = load_infra()
+        if not infra_loaded:
+            return
+
+        if not overwrite:
+            self.load_fflows()  # Load if present
+            if self.fflows is not None:
+                msg = f'compute_fine_flows skipping s{self.section_num} (fflows already exists and overwrite is disabled).'
+                logging.info(msg)
+                return
+
+        # Compute fine flows and fine offsets
+        iter_compute_flows()
+
+        # Store results
+        if store and self.fflows is not None:
+            store_fflows(self.fflows, ext)
+
+        return
+
+
+    def load_fflows(self, ext: Optional[str] = None) -> None:
+        ext = '' if ext is None else ext
+        fp_fflows = self.path / f'fflows{ext}.pkl'
+        logging.info(f's{self.section_num}: loading fine flows from {fp_fflows}.')
+
+        try:
+            with open(fp_fflows, 'rb') as f:
+                self.fflows = pickle.load(f)
+
+        except FileNotFoundError:
+            logging.warning(f's{self.section_num}: fine flows file {fp_fflows} not found!')
+        except EOFError:
+            logging.warning(f's{self.section_num}: EOFError - Ran out of input while reading {fp_fflows}.')
+        except pickle.UnpicklingError as e:
+            logging.error(f's{self.section_num}: Error while unpickling {fp_fflows}: {e}')
+        except Exception as e:
+            logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
 
 
 #### ---------   FUNCTIONS    ---------
@@ -1860,7 +1970,7 @@ def fine_align_section(
     section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
 
     # # Compute flows between overlaps
-    # section.compute_fie_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
+    section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
 
     # #  Compute fine meshes
     # cfg = mesh.IntegrationConfig(
@@ -1874,7 +1984,7 @@ def fine_align_section(
     #     stop_v_max=0.001,
     #     dt_max=100,
     # )
-    # get_fine_mesh(section, stride, overwrite, config=cfg)
+    # get_fine_mesh(section, stride, overwrite, stitch_config=cfg)
 
     # # WARP SECTION
     # warp_kwargs = (stride, margin, use_clahe, clahe_kwargs, zarr_store, rescale_fct, parallelism, rot_angle)

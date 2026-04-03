@@ -147,7 +147,7 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
 
     # --- SECTION 3: Main Data Plotting (Refactored) ---
     for r, c, idx, label in configs:
-        # Determine overlap enum for this specific subplot config
+        # Determine overlap enum for this specific subplot stitch_config
         ov_type = OverlapType.HORIZONTAL if c == 1 else OverlapType.VERTICAL
 
         # We store [OverlapType, EntryType] in each point
@@ -404,7 +404,7 @@ def handle_keyboard_nav(n_events, event, current_slider_val):
      Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
      Input('keyboard-listener', 'n_events')],
     [State('keyboard-listener', 'event'),
-     State({'type': 'nudge-config', 'index': ALL}, 'value'), # Changed to ALL
+     State({'type': 'nudge-stitch_config', 'index': ALL}, 'value'), # Changed to ALL
      State('manual-nudge-store', 'data'),
      State('active-item-index', 'data'),
      State('selection-store', 'data')],

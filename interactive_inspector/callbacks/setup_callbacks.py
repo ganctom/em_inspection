@@ -118,7 +118,7 @@ def trigger_parsing(n, exp_name):
     prevent_initial_call=False
 )
 def toggle_parse_button(exp_name, feedback, n_init):
-    # 1. Check the Backend: Does the service have an active config?
+    # 1. Check the Backend: Does the ppln_service have an active stitch_config?
     has_config = service.exp_config is not None
 
     # 2. Check the Frontend: Is there a name present?
@@ -154,7 +154,7 @@ def toggle_parse_button(exp_name, feedback, n_init):
 #
 #     try:
 #         # Start the thread
-#         thread = threading.Thread(target=service.run_offsets_backup_thread, daemon=True)
+#         thread = threading.Thread(target=ppln_service.run_offsets_backup_thread, daemon=True)
 #         thread.start()
 #
 #         # UI initialization
@@ -181,8 +181,8 @@ def toggle_parse_button(exp_name, feedback, n_init):
 # def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
 #     # 1. Backend Match Check:
 #     has_matching_config = (
-#         service.exp_config is not None and
-#         service.exp_config.name == sel_name
+#         ppln_service.exp_config is not None and
+#         ppln_service.exp_config.name == sel_name
 #     )
 #
 #     # 2. Frontend Check: Is an experiment actually selected?

@@ -19,7 +19,7 @@ ROLI_F1_run-02:
   - 30
   - 25
   first_sec: 9001
-  last_sec: 12000
+  last_sec: 12800
   pixel_size: 10.0
   cut_thickness: 25.0
 ROLI_F1_run-03:

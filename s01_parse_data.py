@@ -114,7 +114,7 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", type=str, default="tile-stitching.config")
+    parser.add_argument("--stitch_config", type=str, default="tile-stitching.stitch_config")
     args = parser.parse_args()
 
     with open(args.config) as f:

@@ -157,6 +157,7 @@ class StitchingConfig(BaseModel):
     warp_config: WarpConfigStitching = WarpConfigStitching()
     mask_config: MaskingConfig = MaskingConfig()
 
+
     @field_validator('output_dir', mode='before')
     @classmethod
     def normalize_output_path(cls, v):

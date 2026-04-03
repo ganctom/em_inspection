@@ -11,7 +11,7 @@ def layout(active_service=None):
             dbc.Col([
                 dbc.Accordion([
                     dbc.AccordionItem(
-                        item_id="config-manager",
+                        item_id="stitch_config-manager",
                         title=html.Div([
                             html.I(className="bi bi-sliders2 me-2"),
                             "Stitching Configuration Manager",
@@ -30,10 +30,10 @@ def layout(active_service=None):
                                 UI.TAB_REGISTRATION(active_service),
                                 UI.TAB_STITCHING_PARAMS(),
                                 UI.TAB_MESH_WARP(),
-                            ], id="config-tabs", active_tab="tab-acq")
+                            ], id="stitch_config-tabs", active_tab="tab-acq")
                         ]
                     )
-                ], active_item="config-manager", className="shadow-sm mt-4")
+                ], active_item="stitch_config-manager", className="shadow-sm mt-4")
             ], width=12)
         ]),
 

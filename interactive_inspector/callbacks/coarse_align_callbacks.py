@@ -57,7 +57,7 @@ import parameter_config as pcfg
         Output(UI.ID_CONF_MASK_MARGIN, "value"),
         Output(UI.ID_CONF_MASK_RIM_SIZE, "value"),
         # Status
-        Output("config-load-status", "children"),
+        Output("stitch_config-load-status", "children"),
         Output("header-path-summary", "children")
     ],
     Input(UI.ID_STITCH_LOAD_YAML, "n_clicks"),
@@ -305,7 +305,7 @@ def handle_coarse_offset_backup(n_clicks):
     prevent_initial_call=True
 )
 def unified_progress_poller(n, current_log):
-    # 1. Determine which process is currently active in the service
+    # 1. Determine which process is currently active in the ppln_service
     # We check Backup first, then Coarse Alignment
     if service.backup_status["active"] or service.backup_status["progress"] > 0:
         status = service.backup_status

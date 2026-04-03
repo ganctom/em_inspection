@@ -16,7 +16,7 @@ def layout(active_service=None):
             dbc.Col([
                 dbc.Accordion([
                     dbc.AccordionItem(
-                        item_id="config-manager",
+                        item_id="stitch_config-manager",
                         title=html.Div([
                             html.I(className="bi bi-sliders2 me-2"),
                             "Stitching Configuration Manager",
@@ -31,10 +31,10 @@ def layout(active_service=None):
                             # 1. CONFIGURATION SECTION (Final Tabs Assembly)
                             dbc.Tabs([
                                 UI.TAB_ACQUISITION(active_service)
-                            ], id="config-tabs", active_tab="tab-acq")
+                            ], id="stitch_config-tabs", active_tab="tab-acq")
                         ]
                     )
-                ], active_item="config-manager", className="shadow-sm mt-4")
+                ], active_item="stitch_config-manager", className="shadow-sm mt-4")
             ], width=12)
         ]),
 
@@ -52,6 +52,17 @@ def layout(active_service=None):
                             dbc.Col([
                                 dbc.Button(**UI.BTN_STITCH_PPLN_RUN),
                                 dbc.Button(**UI.BTN_STITCH_PPLN_ABORT),
+
+                                dcc.RadioItems(
+                                    id=UI.ID_STITCH_PPLN_PARALLEL_TOGGLE,
+                                    options=[
+                                        {'label': ' Sequential', 'value': False},
+                                        {'label': ' Parallel', 'value': True}
+                                    ],
+                                    value=False,  # Default to Sequential
+                                    labelStyle={'display': 'inline-block', 'marginRight': '15px'}
+                                )
+
                             ], width=3, className="d-flex flex-column justify-content-center"),
                         ]),
                     ]),

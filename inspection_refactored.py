@@ -714,7 +714,7 @@ def fine_align_sections_multiproc(
         masking: bool = True,
         num_processes: int = 40
 ):
-    # jax.config.update("jax_platform_name", "cpu")
+    # jax.stitch_config.update("jax_platform_name", "cpu")
     if exp.section_dicts is None:
         exp.init_experiment()
 
@@ -1218,7 +1218,7 @@ if __name__ == "__main__":
 
 
     ### DETECT BEAD COARSE OFFSETS
-    # main_get_cxyz_outliers(config=exp_config)
+    # main_get_cxyz_outliers(stitch_config=exp_config)
 
 
     # PLOTTING OVs

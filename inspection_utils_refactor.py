@@ -1,4 +1,6 @@
+import random
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter_ns
 import subprocess
@@ -1798,6 +1800,19 @@ def parse_section_range(input_str: str) -> list[int]:
 def make_hashable_params(params: dict | None) -> tuple[tuple[str, any], ...] | None:
     return tuple(sorted(params.items())) if params else None
 
+
+def io_read_tif(path: Path, retries: int = 3) -> np.ndarray | None:
+    """Low-level I/O with exponential backoff for SMB stability."""
+    for attempt in range(retries):
+        try:
+            # EAFP: Direct read avoids redundant SMB 'stat' calls
+            return skimage.io.imread(str(path))
+        except OSError as e:
+            if e.errno == 1 and attempt < retries - 1:  # Operation not permitted
+                delay = (0.1 * (2 ** attempt)) + random.uniform(0, 0.1)
+                time.sleep(delay)
+                continue
+            raise
 
 
 if __name__ == "__main__":

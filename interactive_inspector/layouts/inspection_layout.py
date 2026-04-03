@@ -205,7 +205,7 @@ def layout():
                         dbc.Col([
                             # Change the id of the nudge-step input:
                             dbc.Input(
-                                id={'type': 'nudge-config', 'index': 'step'},  # Changed from "nudge-step"
+                                id={'type': 'nudge-stitch_config', 'index': 'step'},  # Changed from "nudge-step"
                                 type="number",
                                 value=10,
                                 size="sm",
