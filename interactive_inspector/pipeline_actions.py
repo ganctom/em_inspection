@@ -220,9 +220,15 @@ def section_worker_wrapper(
                     overwrite=True
                 )
 
-            # if task_name == Task.FINE_FLOWS:
-            #     # Compute flows between overlaps
-            #     section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
+            # Compute flows between overlaps
+            if task_name == Task.FINE_FLOWS:
+                section.compute_fine_flows(
+                    ff_config=stitch_cfg.fine_flows_config,
+                    masking=True,
+                    store=True,
+                    overwrite=True,
+                    ext=None,
+                )
 
         return (sec_path, True, "Success")
     except Exception as e:

@@ -105,7 +105,8 @@ class FlowFieldEstimationConfig(BaseModel):
     max_magnitude: float = 80
     max_deviation: float = 20
     max_gradient: float = 0
-    min_patch_size: int = 400
+    min_patch_size: int = 40
+    step_patch_size: int = 5
 
 
 class MeshIntegrationConfig(BaseModel):
@@ -152,8 +153,9 @@ class StitchingConfig(BaseModel):
     acquisition_config: AcquisitionConfig = AcquisitionConfig()
     start_section: int = 0
     end_section: int = 1
-    mesh_integration_config: MeshIntegrationConfig = MeshIntegrationConfig()
     registration_config: RegistrationConfig = RegistrationConfig()
+    fine_flows_config: FlowFieldEstimationConfig = FlowFieldEstimationConfig()
+    mesh_integration_config: MeshIntegrationConfig = MeshIntegrationConfig()
     warp_config: WarpConfigStitching = WarpConfigStitching()
     mask_config: MaskingConfig = MaskingConfig()
 

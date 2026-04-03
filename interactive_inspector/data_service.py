@@ -21,7 +21,7 @@ import parse_sbem_dataset as parse
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig
+from parameter_config import AcquisitionConfig, StitchingConfig, FlowFieldEstimationConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC, Task
 from constants import UIConstants as UI
@@ -817,10 +817,15 @@ class DataService:
                 overwrite=True
             )
 
-        # if task_name == Task.FINE_FLOWS:
-        #     # Compute flows between overlaps
-        #     section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
-
+        # Compute flows between overlaps
+        if task_name == Task.FINE_FLOWS:
+            section.compute_fine_flows(
+                ff_config=config.fine_flows_config,
+                masking=True,
+                store=True,
+                overwrite=True,
+                ext=None,
+            )
 
         return None
 

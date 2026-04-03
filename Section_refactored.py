@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 
 import matplotlib
+from tensorflow.python.ops.gen_batch_ops import batch
+
+from parameter_config import FlowFieldEstimationConfig
+
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pickle
@@ -1640,13 +1644,18 @@ class Section:
     def _is_cache_valid(self, overwrite: bool) -> bool:
         return Path(self.path_cxy).exists() and not overwrite
 
-    def _ensure_tile_map_ready(self, apply_clahe: bool) -> bool:
+    def ensure_tile_map_ready(
+            self,
+            apply_clahe: bool,
+            parallel: bool = True,
+            max_workers: int = 8
+    ) -> bool:
         """Validates state and attempts lazy-load if telemetry is missing."""
         if self.tile_map is not None and len(self.tile_map) > 0:
             return True
 
         try:
-            self.load_tile_map(clahe=apply_clahe, parallel=True)
+            self.load_tile_map(clahe=apply_clahe, parallel=parallel, max_workers=max_workers)
             return True
         except RuntimeError as e:
             logging.error(f"Indeterminate state: Tile map load failed for S{self.section_num}: {e}")
@@ -1687,114 +1696,21 @@ class Section:
             logging.info(f"Section {self.section_num} cx_cy.json exists. Skipping coarse offsets computation.")
             return self.cxy
 
-        if not self._ensure_tile_map_ready(config.apply_clahe):
+        if not self.ensure_tile_map_ready(config.apply_clahe):
             return None
 
         return self._compute_and_persist_offsets(config)
 
 # ---- EOFCoarse offsets computation ----
 
-    def compute_fine_flows(
-            self,
-            patch_size: int,
-            stride: int,
-            masking=False,
-            store=True,
-            overwrite: bool = False,
-            ext: Optional[str] = None,
-    ) -> None:
+# ---- FineFlows computation ----
 
-        def load_infra() -> bool:
-            if self.cxy is None:
-                self.feed_section_data()
+    def compute_fine_flows(self, ff_config: FlowFieldEstimationConfig, **kwargs) -> None:
+        """Proxy method to the Orchestrator service."""
+        orchestrator = FlowFieldOrchestrator(self)
+        orchestrator.compute_fine_flows(ff_config, **kwargs)
 
-            if self.cxy is None:
-                logging.warning(f'compute_fine_flows section s{self.section_num}: coarse offset array not loaded!')
-                return False
-
-            if self.tile_map is None:
-                self.load_tile_map(clahe=False)
-
-            if self.tile_map is None:
-                return False
-
-            if not self.mask_map and masking:
-                self.load_masks()
-
-            return True
-
-        def iter_compute_flows(
-                patch_size=patch_size,
-                ff_iter=0,
-                max_iter=5,
-                min_patch_size=10,
-                step=5
-        ) -> None:
-            """Compute fine flows with iterative decrease if patch size in case of SOFIMA negative
-            dimension error
-            """
-
-            def compute_flows(ps: int, axis: int) -> Tuple[TileFlow, TileOffset]:
-                return stitch_elastic.compute_flow_map(
-                    tile_map=self.tile_map,
-                    offset_map=self.cxy[axis],
-                    axis=axis,
-                    patch_size=(ps, ps),
-                    stride=(stride, stride),
-                    batch_size=256,
-                    tile_masks=self.mask_map,
-                )
-
-            logging.info(f'Computing fine flows for section s{self.section_num}')
-
-            while self.fflows is None or ff_iter == max_iter:
-                try:
-                    logging.info(f's{self.section_num} fflows params: iter={ff_iter}, patch_size={patch_size}')
-                    self.fflows = (
-                        compute_flows(patch_size, axis=0),
-                        compute_flows(patch_size, axis=1)
-                    )
-
-                except ValueError as _:
-                    logging.warning(
-                        f'fine flows s{self.section_num} decreasing patch size ({patch_size} -> {patch_size - step})')
-                    patch_size -= step
-                    ff_iter += 1
-                    if patch_size < min_patch_size:
-                        ff_iter = max_iter
-
-            logging.info(
-                f's{self.section_num} fine flows computed after {ff_iter + 1} iterations. Final patch size: {patch_size}')
-            return
-
-        def store_fflows(fine_flows: FineFlows, ext: Optional[str]):
-            ext = '' if ext is None else ext
-            fname = f'fflows{ext}.pkl'
-            with open(self.path / fname, 'wb') as f:
-                pickle.dump(fine_flows, f)
-            return
-
-        # Load necessary data first
-        infra_loaded = load_infra()
-        if not infra_loaded:
-            return
-
-        if not overwrite:
-            self.load_fflows()  # Load if present
-            if self.fflows is not None:
-                msg = f'compute_fine_flows skipping s{self.section_num} (fflows already exists and overwrite is disabled).'
-                logging.info(msg)
-                return
-
-        # Compute fine flows and fine offsets
-        iter_compute_flows()
-
-        # Store results
-        if store and self.fflows is not None:
-            store_fflows(self.fflows, ext)
-
-        return
-
+# ---- EOF FineFlows computation ----
 
     def load_fflows(self, ext: Optional[str] = None) -> None:
         ext = '' if ext is None else ext
@@ -1813,6 +1729,114 @@ class Section:
             logging.error(f's{self.section_num}: Error while unpickling {fp_fflows}: {e}')
         except Exception as e:
             logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
+
+
+class FlowFieldOrchestrator:
+
+    def __init__(self, section: 'Section'):
+        self.section = section
+
+    def compute_fine_flows(
+            self,
+            ff_config: FlowFieldEstimationConfig,
+            masking: bool = False,
+            store: bool = True,
+            overwrite: bool = False,
+            ext: Optional[str] = None,
+    ) -> None:
+        """High-level orchestration for fine flow computation."""
+
+        # 1. Pre-computation Guards & State Check
+        if not overwrite and self._try_load_existing_fflows():
+            logging.info(f"Skipping s{self.section.section_num}: fflows already exist.")
+            return
+
+        if not self._prepare_infrastructure(masking):
+            logging.error(f"Infrastructure failure for s{self.section.section_num}.")
+            return
+
+        # 2. Execution
+        try:
+            self.section.fflows = self._run_iterative_flow_estimation(ff_config)
+        except RuntimeError as e:
+            logging.error(f"Flow estimation failed: {e}")
+            return
+
+        # 3. Persistence
+        if store and self.section.fflows:
+            self._persist_fflows(self.section.fflows, ext)
+
+    def _prepare_infrastructure(self, masking: bool) -> bool:
+        """Ensures all buffers and remote data are ready for computation."""
+        if self.section.cxy is None:
+            self.section.feed_section_data()
+
+        if self.section.cxy is None:
+            logging.warning(f"Coarse offset array missing for s{self.section.section_num}")
+            return False
+
+        try:
+            # Reusing your hardened SMB-aware loader
+            self.section.ensure_tile_map_ready(apply_clahe=False, max_workers=8)
+        except Exception:
+            return False
+
+        if masking and not self.section.mask_map:
+            self.section.load_masks()
+
+        return True
+
+    def _run_iterative_flow_estimation(
+            self,
+            cfg: FlowFieldEstimationConfig,
+            max_attempts: int = 5
+    ) -> Tuple[Any, Any]:
+        """
+        Executes the SOFIMA flow estimation with a fallback
+        mechanism for negative dimension/ValueError.
+        """
+        ps = cfg.patch_size
+        ps_step = cfg.step_patch_size
+
+        for attempt in range(max_attempts):
+            if ps < cfg.min_patch_size:
+                break
+
+            try:
+                logging.info(f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}")
+                flow_x = self._execute_sofima_call(ps, cfg, axis=0)
+                flow_y = self._execute_sofima_call(ps, cfg, axis=1)
+                return flow_x, flow_y
+
+            except ValueError:
+                logging.warning(
+                    f"Iterative fine flow computation failed at patch size {ps}. Reducing patch size.")
+                ps -= ps_step
+
+        raise RuntimeError(f"Flow estimation exhausted all attempts for s{self.section.section_num}")
+
+    def _execute_sofima_call(self, ps: int, cfg: FlowFieldEstimationConfig, axis: int):
+        """Wrapper for the external library call."""
+        return stitch_elastic.compute_flow_map(
+            tile_map=self.section.tile_map,
+            offset_map=self.section.cxy[axis],
+            axis=axis,
+            patch_size=(ps, ps),
+            stride=(cfg.stride, cfg.stride),
+            batch_size=cfg.batch_size,
+        )
+
+    def _persist_fflows(self, data: Any, ext: Optional[str]) -> None:
+        suffix = ext or ""
+        path = self.section.path / f"fflows{suffix}.pkl"
+        with open(path, "wb") as f:
+            pickle.dump(data, f)
+        logging.info(f"Saved fine flows to {path}")
+
+    def _try_load_existing_fflows(self) -> bool:
+        """Checks the section for existing data."""
+        self.section.load_fflows()
+        return self.section.fflows is not None
 
 
 #### ---------   FUNCTIONS    ---------
@@ -1900,6 +1924,10 @@ def debug_margin_masks():
     return
 
 
+def compute_fine_flows(self, ff_config, **kwargs):
+    orchestrator = FlowFieldOrchestrator(self)
+    return orchestrator.run(ff_config, **kwargs)
+
 
 def fine_align_section(
         section: Section,
@@ -1907,8 +1935,10 @@ def fine_align_section(
         masking=False
 ) -> None:
 
-    # stride = 20  # Fine resolution
-    # patch_size = 120  # For fine-flows
+    patch_size = 120  # For fine-flows
+    stride = 20  # fine-flows resolution
+    batch_size = 256 # fine-flows
+
     rim_size = 40  # Safety margin to custom overlaps
     # margin = max(10, rim_size // 3)  # Cut all tile edges by 'margin'
     margin = 0
@@ -1970,7 +2000,16 @@ def fine_align_section(
     section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
 
     # # Compute flows between overlaps
-    section.compute_fine_flows(patch_size, stride, masking, overwrite=overwrite, ext=None)
+    config = FlowFieldEstimationConfig(
+        patch_size=patch_size,
+        stride=stride,
+        batch_size=batch_size
+    )
+    ff_orchestrator = FlowFieldOrchestrator(section)
+    ff_orchestrator.compute_fine_flows(
+        ff_config=config, masking=True, store=True, overwrite=overwrite, ext=None
+    )
+
 
     # #  Compute fine meshes
     # cfg = mesh.IntegrationConfig(
@@ -1984,7 +2023,7 @@ def fine_align_section(
     #     stop_v_max=0.001,
     #     dt_max=100,
     # )
-    # get_fine_mesh(section, stride, overwrite, stitch_config=cfg)
+    # section.get_fine_mesh(section, stride, overwrite, stitch_config=cfg)
 
     # # WARP SECTION
     # warp_kwargs = (stride, margin, use_clahe, clahe_kwargs, zarr_store, rescale_fct, parallelism, rot_angle)
