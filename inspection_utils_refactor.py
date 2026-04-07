@@ -34,6 +34,8 @@ from scipy.interpolate import CloughTocher2DInterpolator
 from statistics import mean, stdev
 import gc
 
+from schema import InspectionSchema as IS
+
 UniPath = Union[str, Path]
 TileXY = tuple[int, int]
 TileCoord = Union[tuple[int, int, int, int], tuple[int, int]]  # (c, z, y, x)
@@ -46,6 +48,10 @@ GridXY = tuple[Any, Any, Any]
 # logging.basicConfig(level=logging.DEBUG)
 # logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.WARNING)
+
+class InfrastructureError(Exception):
+    """Raised when a section cannot be prepared for computation."""
+    pass
 
 # 1. Standardized Data Model (Interface Segregation)
 @dataclass(frozen=True)
@@ -752,19 +758,13 @@ def compute_tile_id_map(
     return grid[non_empty_rows][:, non_empty_cols]
 
 
-def get_tile_dicts(path: UniPath) -> Optional[Dict[int, str]]:
-    section_yaml = Path(path) / "section.yaml"
-    try:
-        with open(section_yaml, 'r') as file:
-            contents = yaml.safe_load(file)
-            if contents:
-                return {int(s["tile_id"]): str(cross_platform_path(s["path"]))
-                        for s in contents["tiles"]}
-            else:
-                return None
-    except FileNotFoundError as e:
-        print(f"{e} \n {section_yaml} does not exists!")
-        return None
+def get_tile_dicts(path: Path) -> Dict[int, str]:
+    section_yaml = path / IS.FILE_SECTION_CONFIG
+    with open(section_yaml, 'r') as file:
+        contents = yaml.safe_load(file)
+        if not contents:
+            raise InfrastructureError(f"YAML at {section_yaml} is empty.")
+        return {int(s["tile_id"]): str(cross_platform_path(s["path"])) for s in contents["tiles"]}
 
 
 def save_img(path: str, data: np.ndarray):

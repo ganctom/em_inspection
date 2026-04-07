@@ -24,9 +24,10 @@ import inspection_utils_refactor as utils
 import experiment_configs as cfg
 import mask_utils as mutils
 from Tile_refactored import Tile
+from schema import InspectionSchema as IS
 
 ### Set up logging
-# logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.DEBUG)
 # logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.WARNING)
 
@@ -73,11 +74,11 @@ class Section:
         self.section_num = int(str(self.path.name).split("_g")[0][1:])
         self.image: Optional[np.ndarray] = None
 
+        self.path_cxy = str(self.path / IS.FILE_COARSE_OFFSETS)
+        self.path_section_yaml = str(self.path / IS.FILE_SECTION_CONFIG)
+        self.path_margin_masks = str(self.path / IS.FILE_MARGIN_MASKS)
+        self.path_cmesh = str(self.path / IS.FILE_COARSE_MESH)
         self.path_thumb = self.resolve_path_thumb()
-        self.path_cxy = str(self.path / 'cx_cy.json')
-        self.path_section_yaml = str(self.path / 'section.yaml')
-        self.path_margin_masks = str(self.path / 'margin_masks.npz')
-        self.path_cmesh = str(self.path / 'coarse_mesh.pkl')
 
         self.tile_id_map: Optional[np.ndarray[int]] = None
         self.tile_shape = utils.get_tile_shape(self.path_section_yaml)
@@ -108,7 +109,7 @@ class Section:
 
 
     def resolve_dir_stitched(self) -> Path:
-        return self.path.parent.parent / 'stitched-sections' / (str(self.path.name) + ".zarr")
+        return self.path.parent.parent / IS.DIR_STITCHED / (str(self.path.name) + ".zarr")
 
 
     def feed_section_data(self):
@@ -156,7 +157,7 @@ class Section:
         name_end = "_" + str(self.path.name).split("_")[1]
         zfilled = str(self.section_num).zfill(5)
         new_name = "s" + zfilled + name_end
-        thumb_fn = str(self.path.parent.parent / '_inspect' / 'downscaled' / (new_name + ext))
+        thumb_fn = str(self.path.parent.parent / IS.DIR_INSPECTION / IS.DIR_DOWNSCALED / (new_name + ext))
         return thumb_fn
 
 
@@ -196,7 +197,7 @@ class Section:
 
 
     def read_tile_id_map(self) -> None:
-        fp = self.path / 'tile_id_map.json'
+        fp = self.path / IS.FILE_TILE_ID_MAP
         self.tile_id_map = utils.get_tile_id_map(fp) if fp.exists() else None
         return
 
@@ -359,14 +360,14 @@ class Section:
 
             # Set the top tile-edges mask
 
-            # # Mask elastic deformation on bottom edge  (WHY?)
-            # if margin != 0:
-            #     try:
-            #         tid_nn_y = int(grid[y + 1, x])
-            #     except IndexError:
-            #         tid_nn_y = -1
-            #     if tid_nn_y != -1:
-            #         mask[-margin:, :] = False
+            # Mask elastic deformation on bottom edge  (WHY?)
+            if margin != 0:
+                try:
+                    tid_nn_y = int(grid[y + 1, x])
+                except IndexError:
+                    tid_nn_y = -1
+                if tid_nn_y != -1:
+                    mask[-margin:, :] = False
 
             # Mask top tile-edges
             try:
@@ -442,8 +443,8 @@ class Section:
             logging.warning(f'Section s{self.section_num} mesh offsets could not be computed.')
             return
 
-        tiles_xy = utils.build_tiles_coords(self.tile_id_map)
-        _create_margin_masks(tiles_xy, rim_size)
+        tile_space = utils.build_tiles_coords(self.tile_id_map)
+        _create_margin_masks(tile_space, rim_size)
         _store_margin_masks()
         return
 
@@ -794,8 +795,10 @@ class Section:
 
     def load_masks(self):
         """Loads binary masks associated to each tile within section"""
-        fns = ('roi_masks.npz', 'smr_masks.npz', 'tile_masks.npz')
-        maps = (self.roi_mask_map, self.smr_mask_map, self.mask_map)
+
+        fns = IS.FILE_ROI_MASKS, IS.FILE_SMR_MASKS, IS.FILE_TILE_MASKS
+        maps = self.roi_mask_map, self.smr_mask_map, self.mask_map
+
         for fn, i_map in zip(fns, maps):
             path_mask = self.path / fn
             if not path_mask.exists():
@@ -962,7 +965,7 @@ class Section:
         - None
         """
 
-        path_cx_cy = self.path / 'cx_cy.json'
+        _ = self.path / 'cx_cy.json'
         assert len(coord) == 4
 
         c, z, y, x = coord
@@ -977,8 +980,8 @@ class Section:
         logging.info(f"Section {self.section_num} tile-pair IDs: {int(tile_id_a), int(tile_id_b)}")
 
         # Read coarse mat if not already loaded
-        if self.cxy is None and path_cx_cy.exists():
-            _, cx, cy = utils.read_coarse_mat(path_cx_cy)
+        if self.cxy is None and Path(self.path_cxy).exists():
+            _, cx, cy = utils.read_coarse_mat(Path(self.path_cxy))
             self.cxy = np.array((cx, cy))
 
         # Check if there's anything to replace
@@ -996,7 +999,7 @@ class Section:
 
         # Save coarse mat
         if store:
-            utils.save_coarse_mat(self.cxy, path_cx_cy.parent, file_format="json")
+            utils.save_coarse_mat(self.cxy, Path(self.path_cxy).parent, file_format="json")
         else:
             logging.warning('Storing is disabled. Coarse offset will not be written out.')
         return
@@ -1587,6 +1590,7 @@ class Section:
         return shift_vec
 
 #---- LOADING TILE-MAP ----
+
     def load_tile_map(
             self,
             clahe: bool = False,
@@ -1637,13 +1641,6 @@ class Section:
             if img is not None:
                 self.tile_map[(x, y)] = img
 
-# ---- EOF LOADING TILE-MAP ----
-
-
-# ---- Coarse offsets computation ----
-    def _is_cache_valid(self, overwrite: bool) -> bool:
-        return Path(self.path_cxy).exists() and not overwrite
-
     def ensure_tile_map_ready(
             self,
             apply_clahe: bool,
@@ -1661,6 +1658,13 @@ class Section:
             logging.error(f"Indeterminate state: Tile map load failed for S{self.section_num}: {e}")
             return False
 
+# ---- EOF LOADING TILE-MAP ----
+
+
+# ---- Coarse offsets ----
+
+    def _is_cache_valid(self, overwrite: bool) -> bool:
+        return Path(self.path_cxy).exists() and not overwrite
 
     def _compute_and_persist_offsets(self, config: CoarseStitchConfig) -> Optional[np.ndarray]:
         """Pure computational bridge to the stitch_rigid backend."""
@@ -1701,16 +1705,14 @@ class Section:
 
         return self._compute_and_persist_offsets(config)
 
-# ---- EOFCoarse offsets computation ----
+# ---- EOFCoarse offsets ----
 
-# ---- FineFlows computation ----
+# ---- FineFlows ----
 
     def compute_fine_flows(self, ff_config: FlowFieldEstimationConfig, **kwargs) -> None:
         """Proxy method to the Orchestrator service."""
         orchestrator = FlowFieldOrchestrator(self)
         orchestrator.compute_fine_flows(ff_config, **kwargs)
-
-# ---- EOF FineFlows computation ----
 
     def load_fflows(self, ext: Optional[str] = None) -> None:
         ext = '' if ext is None else ext
@@ -1729,6 +1731,8 @@ class Section:
             logging.error(f's{self.section_num}: Error while unpickling {fp_fflows}: {e}')
         except Exception as e:
             logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
+
+# ---- EOF FineFlows ----
 
 
 class FlowFieldOrchestrator:

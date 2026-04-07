@@ -473,7 +473,7 @@ class DataService:
 
         # Pyramidal parameters - can be tuned
         levels: int = 1
-        max_ext: int = 30
+        max_ext: int = 20
         stride: int = 5
 
         ctx = self._get_overlap_context(tid_a, z, overlap_type)

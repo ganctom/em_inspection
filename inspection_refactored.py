@@ -2,9 +2,10 @@ import json
 import logging
 import multiprocessing
 import os
+from dataclasses import dataclass
 from platform import system
 from pathlib import Path
-from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple
+from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple, List
 from functools import partial
 
 import jax
@@ -13,9 +14,11 @@ from tqdm import tqdm
 
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
+import parameter_config
 
 from Section_refactored import Section, fine_align_section, Vector, cached_read_image
 from coarse_offset_processor import CoarseOffsetProcessor
+from schema import InspectionSchema as IS
 
 UniPath = Union[str, Path]
 
@@ -26,8 +29,10 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
 
+
 class Inspection:
     def __init__(self, config: cfg.ExpConfig):
+
         self.config = config
         self.root = Path(config.proc_dir)
         self.grid_nr = config.grid_num
@@ -37,81 +42,68 @@ class Inspection:
         self.acq_dir = utils.cross_platform_path(config.acq_dir)
         self.os_name = system()
 
-        self._initialize_directories()
-        self._initialize_paths()
-        self._initialize_section_data()
-        self._initialize_stitched_data()
-        self._setup_offset_processor_paths()
+        # 1. Initialize Primary Directory Structure using the Schema
+        # We define them as properties of 'self' for easy access elsewhere
+        self.dir_sections = self.root / IS.DIR_SECTIONS
+        self.dir_stitched = self.root / IS.DIR_STITCHED
+        self.dir_inspect = self.root / IS.DIR_INSPECTION
 
-        self.co_processor = CoarseOffsetProcessor(self.config, self.offset_processor_paths)
-        # self.co_processor.load_all_offsets_and_tile_id_maps_from_npz()
+        # Sub-directories of Inspect
+        self.dir_downscaled = self.dir_inspect / IS.DIR_DOWNSCALED
+        self.dir_overlaps = self.dir_inspect / IS.DIR_OVERLAPS
+        self.dir_outliers = self.dir_inspect / IS.DIR_OVERLAPS_OUTLIERS
+        self.dir_inf_overlaps = self.dir_inspect / IS.DIR_INF_OVERLAPS
 
-    def __str__(self):
-        return (
-            f"acq. dir: {self.acq_dir}\n"
-            f"root dir: {self.root}\n"
-            f"sec. dir: {self.dir_sections}\n"
-            f"sec. range: {self.first_sec, self.last_sec}\n"
-            f"grid shape: {self.grid_shape}\n"
-            f"OS: {self.os_name}\n"
+         # INIT FILE-PATHS
+        self.fn_coarse_offsets = IS.FILE_COARSE_OFFSETS
+        self.fn_tile_id_map = IS.FILE_TILE_ID_MAP
+        self.path_cxyz = self._get_inspect_path(IS.FILE_ALL_OFFSETS)
+        self.path_id_maps = self._get_inspect_path(IS.FILE_ALL_TILE_ID_MAPS)
+        self.fp_co_outliers = self._get_inspect_path(IS.FILE_CO_OUTLIERS)
+        self.fp_inf_vals = self._get_inspect_path(IS.FILE_INF_VALS)
+        self.fp_missing_sections = self.root / IS.FILE_MISSING_SECTIONS
+
+        # 2. Section Metadata State
+        self._init_metadata_containers()
+        self._create_inspection_dirs()
+
+        # 3. Component Initialization
+        self.co_processor = CoarseOffsetProcessor(
+            self.config,
+            self._get_processor_paths()
         )
 
-    def _initialize_directories(self):
-        self.dir_sections = self.root / 'sections'
-        self.dir_stitched = self.root / 'stitched-sections'
-        self.dir_inspect = self.root / '_inspect'
-        self.dir_downscaled = self.dir_inspect / 'downscaled'
-        self.dir_overlaps = self.dir_inspect / 'overlaps'
-        self.dir_outliers = self.dir_inspect / 'overlaps_outliers'
-        self.dir_inf_overlaps = self.dir_inspect / 'inf_overlaps'
-        # self.dir_coarse_stacks = self.root / 'coarse-stacks'
-        self.create_inspection_dirs()
-
-    def _initialize_paths(self):
-        self.path_cxyz = self._get_inspect_path('all_offsets.npz')
-        self.path_id_maps = self._get_inspect_path('all_tile_id_maps.npz')
-        self.fp_missing_sections = self.root / 'missing_sections.yaml'
-        self.fp_co_outliers = self.dir_inspect / 'coarse_offset_outliers.txt'
-        self.fp_inf_vals = self.dir_inspect / 'inf_vals.txt'
-        self.fn_coarse_offsets = 'cx_cy.json'
-        self.fn_tile_id_map = 'tile_id_map.json'
-        # self.fp_eval_ov = self._get_overlaps_path('overlap_quality_smr.npz')
-        # self.fp_est_ff_cfg = self.root / 'fine_alignment_config.yaml'
-
-    def _setup_offset_processor_paths(self):
-        """Single Source of Truth for the filesystem structure."""
-        self.offset_processor_paths = {
+    def _get_processor_paths(self) -> Dict[str, Path]:
+        """Provides a mapping of paths based on the Schema."""
+        return {
             'inspect': self.dir_inspect,
-            'cxyz': self.path_cxyz,
-            'tid_maps': self.path_id_maps,
-            'co_outliers': self.fp_co_outliers
+            'cxyz': self.dir_inspect / IS.FILE_ALL_OFFSETS,
+            'tid_maps': self.dir_inspect / IS.FILE_ALL_TILE_ID_MAPS,
+            'co_outliers': self.dir_inspect / IS.FILE_CO_OUTLIERS
         }
 
-
-    def _initialize_section_data(self):
+    def _init_metadata_containers(self):
+        """Initializes empty state for section and stitched data."""
         self.section_dirs: Optional[list[Path]] = None
         self.section_names: Optional[list[str]] = None
         self.section_nums: Optional[list[int]] = None
         self.section_dicts: Optional[dict[int, str]] = None
-        # self.section_nums_duplicates: Optional[list[str]] = None
-        # self.section_nums_skip: Optional[list[str]] = None
         self.missing_sections: Optional[list[int]] = None
-        ...
-
-    def _initialize_stitched_data(self):
         self.stitched_dirs: Optional[list[Path]] = None
         self.stitched_names: Optional[list[str]] = None
         self.stitched_nums: Optional[list[int]] = None
-        # self.stitched_nums_valid: Optional[list[int]] = None
         self.stitched_dicts: Optional[dict[int, str]] = None
-        # self.cross_aligned_nums: Optional[list[int]] = None
-        ...
+
+    def __str__(self):
+        return (
+            f"Inspection Object [{self.os_name}]\n"
+            f"Root: {self.root}\n"
+            f"Sections Path: {self.dir_sections}\n"
+            f"Range: {self.config.first_sec} to {self.config.last_sec}"
+        )
 
     def _get_inspect_path(self, filename: str) -> Path:
         return self.dir_inspect / filename
-    
-    def _get_overlaps_path(self, filename: str) -> Path:
-        return self.dir_overlaps / filename
 
     def init_experiment(self) -> None:
         """Perform initial data processing for Inspection class"""
@@ -179,7 +171,7 @@ class Inspection:
         self.missing_sections = missing_nums
         return
 
-    def create_inspection_dirs(self):
+    def _create_inspection_dirs(self):
         new_dirs = ('overlaps', 'traces', 'downscaled', 'inf_overlaps')
         logging.debug(f'Creating inspection infrastructure {new_dirs}')
         for leaf in new_dirs:

@@ -10,6 +10,7 @@ DEF_CT = 25.
 
 FN_STITCHING_CFG = "tile_stitching_config.yaml"
 
+
 def save_to_disk(cfg_obj: BaseModel, path_out: str):
     """
     Saves a BaseModel to a clean, standard YAML file.
