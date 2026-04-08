@@ -7,7 +7,7 @@ from sofima.mesh import IntegrationConfig
 
 from Section_refactored import CoarseStitchConfig, Section
 from constants import Task, UI
-from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
+from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img
 from parameter_config import StitchingConfig, RegistrationConfig, AcquisitionConfig, ExpConfig
 
 
@@ -84,7 +84,13 @@ class PipelineOrchestrator:
             self.ppln_service.stitch_status["active"] = False
 
 
-    def validate_and_prepare(self, range_str, config_path, ui_params_raw) -> tuple[list[int], StitchingConfig]:
+    def validate_and_prepare(
+            self,
+            range_str,
+            config_path,
+            ui_params_raw: dict | None = None
+    ) -> tuple[list[int], StitchingConfig]:
+
         """Logic-only: Validates sections and prepares params."""
         if not self.ppln_service.exp_config:
             raise ValueError("No active experiment found.")
@@ -175,7 +181,6 @@ class PipelineOrchestrator:
 
 
 
-
 def section_worker_wrapper(
         sec_path: str,
         task_keys: list,
@@ -187,10 +192,13 @@ def section_worker_wrapper(
     """
     try:
         # 1. Initialize a clean Section instance for this process
-        # Assuming you have a way to get the path from the stitch_config/ppln_service
         section = Section(sec_path)
         section.feed_section_data()
+    except NotADirectoryError as _:
+        logging.error(f'Failed to load section at path: {sec_path}')
+        return None
 
+    try:
         # 2. Dispatch based on Task
         for task_name in task_keys:
 
@@ -230,6 +238,30 @@ def section_worker_wrapper(
                     ext=None,
                 )
 
-        return (sec_path, True, "Success")
+            # Downscale stitched .zarr section
+            if task_name == Task.DOWNSCALE:
+                if section.image is None:
+                    img = section.load_image()
+                    if img is None:
+                        return sec_path, False, f"FAILED at {task_name}: Image load failed after retries"
+
+                fct = stitch_cfg.pipeline_config.downscale_factor
+                print(f"fct: {fct}")
+                save_img(
+                    path=section.path_thumb,
+                    data=section.downscale_section(fct)
+                )
+
+        return sec_path, True, "Success"
+
     except Exception as e:
-        return (sec_path, False, str(e))
+        logging.error(f"Worker process crash on {sec_path}: {e}")
+        return sec_path, False, f"CRITICAL: {str(e)}"
+
+    finally:
+        if section is not None:
+            try:
+                section.close_resource()
+                logging.info(f"Resources closed for {sec_path}")
+            except Exception as cleanup_err:
+                logging.warning(f"Cleanup failed for {sec_path}: {cleanup_err}")

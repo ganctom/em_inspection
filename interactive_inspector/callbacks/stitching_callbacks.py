@@ -1,12 +1,9 @@
-import logging
 import threading
 from dash import Input, Output, State, callback
 from dash.exceptions import PreventUpdate
 
-from constants import UI
+from constants import UI, MSG
 from data_service import service, orchestrator
-from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params
-
 
 
 @callback(
@@ -17,41 +14,67 @@ from inspection_utils_refactor import parse_section_range, validate_section_numb
     [State(UI.ID_STITCH_PPLN_PARALLEL_TOGGLE, "value"),
      State(UI.ID_STITCH_PPLN_INP, "value"),
      State(UI.ID_STITCH_PPLN_STEPS, "value"),
-     State(UI.ID_STITCH_CONFIG_PATH, "value")],
+     State(UI.ID_STITCH_CONFIG_PATH, "value"),
+     State(UI.ID_RESCALE_FCT, "value"),
+     ],
     prevent_initial_call=True
 )
-def start_stitching_pipeline(n_clicks, use_parallel, range_str, selected_steps, config_path):
-    if not n_clicks or not selected_steps:
+def start_stitching_pipeline(
+        n_clicks,
+        parallel_value,
+        range_str,
+        selected_steps,
+        config_path,
+        scl_fct
+):
+    if not n_clicks:
         raise PreventUpdate
 
-    # 1. Validation & Config Prep (Logic remains the same)
+    if not selected_steps:
+        return [UI.log_row(MSG.NO_STEPS_ERROR, type="error")], 0, True
+
+    # 1. Resolve parallel state
+    is_par = bool(parallel_value) if not isinstance(parallel_value, list) else 'parallel' in parallel_value
+
+    # 2. Validation & Config Prep
     try:
         sec_nums, final_config = orchestrator.validate_and_prepare(
-            range_str, config_path, ui_params_raw=None
+            range_str,
+            config_path,
+            ui_params_raw = {UI.ID_RESCALE_FCT: scl_fct}
         )
     except Exception as e:
-        return [UI.log_row(f"❌ Setup Error: {e}", type="error")], 0, True
+        return [UI.log_row(MSG.SETUP_ERROR.format(error=e), type="error")], 0, True
 
-    # 2. Launching the Parallel Orchestrator
-    # We launch a single MASTER THREAD that manages the PROCESS POOL.
-    # This prevents the Dash server from hanging while waiting for the pool.
-
-    # Check if 'parallel' was checked in the list
-    target_method = (orchestrator.run_parallel_pipeline if use_parallel
+    # 3. Thread Dispatch
+    target_method = (orchestrator.run_parallel_pipeline if is_par
                      else orchestrator.run_sequential_pipeline)
 
-    thread = threading.Thread(
+    threading.Thread(
         target=target_method,
         args=(sec_nums, selected_steps, final_config),
         daemon=True
-    )
-    thread.start()
+    ).start()
+
+    # 4. Generate Log using MSG Constants
+    mode_str = MSG.MODE_PARALLEL if is_par else MSG.MODE_SEQUENTIAL
+    tsk_lbl = MSG.format_tasks(selected_steps)
 
     init_log = [
-        UI.log_row(f"🚀 Parallel Pipeline Started: {len(selected_steps)} tasks", type="info"),
-        UI.log_row(f"Targeting {len(sec_nums)} sections across multiple cores."),
-        UI.log_row("-" * 40)
+        UI.log_row(MSG.PPLN_START.format(mode=mode_str), type="info"),
+        UI.log_row(MSG.PPLN_TASKS.format(tasks=tsk_lbl)),
+        UI.log_row(MSG.PPLN_SCOPE.format(
+            count=len(sec_nums),
+            first=sec_nums[0],
+            last=sec_nums[-1]
+        )),
     ]
+
+    if is_par:
+        init_log.append(UI.log_row(MSG.PARALLEL_WARN, type="warning"))
+
+    init_log.append(UI.log_row(MSG.PPLN_DIVIDER))
+
     return init_log, 2, False
 
 

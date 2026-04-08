@@ -4,7 +4,7 @@ from dash import html, dcc
 import dash_bootstrap_components as dbc
 
 import parameter_config as pcfg
-from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig, MaskingConfig
+from parameter_config import DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG, RegistrationConfig, MaskingConfig, StitchingConfig
 
 
 @dataclass(frozen=True)
@@ -48,6 +48,32 @@ class Task:
             cls.DOWNSCALE:      "Downscale Warped Section",
         }
         return [{"label": labels[t], "value": t} for t in cls.get_master_order()]
+
+
+class MSG:
+    # Titles & Headers
+    PPLN_START = "🚀 Pipeline Started | Mode: {mode}"
+    PPLN_SCOPE = "Scope: {count} sections ({first} to {last})"
+    PPLN_TASKS = "Tasks: {tasks}"
+    PPLN_DIVIDER = "-" * 40
+
+    # Modes
+    MODE_PARALLEL = "Parallel (Multi-Core)"
+    MODE_SEQUENTIAL = "Sequential (Single-Thread)"
+
+    # Warnings & Errors
+    PARALLEL_WARN = "⚡ Utilizing ProcessPoolExecutor for concurrent I/O."
+    SETUP_ERROR = "❌ Setup Error: {error}"
+    NO_STEPS_ERROR = "❌ Error: No steps selected."
+
+    # Logic-based messages
+    IO_RETRY = "s{sec}: Remote I/O Error ({err}). Retrying in {t:.2f}s..."
+    IO_FAIL = "s{sec}: Final I/O failure after {retries} attempts: {err}"
+
+    @staticmethod
+    def format_tasks(tasks: list) -> str:
+        """Standardizes task naming for the console output."""
+        return ", ".join([t.replace('_', ' ').title() for t in tasks])
 
 
 class UIConstants:
@@ -101,9 +127,11 @@ class UIConstants:
     NAME_INP_CT = "Cutting thickness (nm)"
     LBL_CFG_PATH_YAML = "Config File Path (.yaml)"
     LBL_ACQ_RNG = "Acquisition & Range"
+    LBL_PPLN_CFG = "Pipeline Config"
     LBL_OUT_DIR = "Output Directory"
     LBL_COL_COARSE_INP = "Section Selection for Coarse Offsets Estimation"
     LBL_COARSE_TAB_REG = "Registration (SOFIMA)"
+    LBL_RESCALE_FCT = "Warped Section Downscale Factor"
 
     # --- IDs ---
     ID_INP_NAME = "new-exp-name"
@@ -126,6 +154,10 @@ class UIConstants:
     ID_TTP_BCKP = "bckp-btn-tooltip"
     ID_BTN_BCKP_WRAPPER = "bckp-btn-wrapper"
     ID_INP_SEARCH_RAD= "search-radius-input"
+    ID_TAB_PPLN = "stitch_config-ppln-cfg"
+    ID_TAB_PPLN_CFG = "tab-ppln-cfg"
+    ID_RESCALE_FCT = "resize-fct"
+
 
     # --- Messages ---
     MSG_PARSE_DISABLED = "Add a new experiment or initialize an existing one before parsing acquired data."
@@ -327,6 +359,25 @@ class UIConstants:
         return cls.tab_factory(
             label=cls.LBL_ACQ_RNG,
             tab_id="tab-acq",
+            children=content
+        )
+
+    @classmethod
+    def TAB_PPLN_CONFIG(cls):
+        """Generates the Acquisition & Range tab with dynamic initial values."""
+
+        content = [
+            cls.label_factory(cls.LBL_RESCALE_FCT),
+            dbc.Input(
+                id=cls.ID_RESCALE_FCT,
+                value=DataConstants.DEF_SCALE_FCT,
+                size="sm"
+            ),
+        ]
+
+        return cls.tab_factory(
+            label=cls.LBL_PPLN_CFG,
+            tab_id=cls.ID_TAB_PPLN_CFG,
             children=content
         )
 
@@ -941,7 +992,10 @@ Nav = WorkflowNav()
 
 
 class DataConstants:
+    scfg = StitchingConfig()
     CACHED_BASKET_ITEMS = 15
+    DEF_SCALE_FCT = scfg.pipeline_config.downscale_factor
+
 
 @dataclass()
 class KeyboardShortcuts:

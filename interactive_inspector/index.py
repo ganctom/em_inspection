@@ -5,7 +5,7 @@ from dash_extensions import EventListener
 
 # 1. Setup logging
 # logging.basicConfig(level=logging.DEBUG)
-# logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 logging.basicConfig(level=logging.WARNING)
 
 # 2. Import the app instance and standardized constants

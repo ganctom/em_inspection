@@ -773,24 +773,36 @@ def save_img(path: str, data: np.ndarray):
         logging.warning(f'Image {Path(path).stem} could not be resized.')
         return
 
-    print(f'saving mini to: {path}')
-    # cv2.imwrite(path, cv2.convertScaleAbs(data))
+    logging.info(f'Saving thumbnail to: {path}')
     skimage.io.imsave(path, data)
     return
 
 
-def downscale_image(img: np.ndarray, fct: float) -> np.ndarray:
-    """
-    Downscale an image using OpenCV.
+def downscale_image(
+        img: np.ndarray,
+        factor: float,
+        min_size: int = 64,
+        interpolation: int = cv2.INTER_AREA,
+) -> np.ndarray:
+    if img is None or img.size == 0:
+        raise ValueError("Empty input.")
 
-    Args:
-        img (np.ndarray): The input image.
-        fct (float): The scaling factor.
+    h, w = img.shape[:2]
+    target_w = max(min_size, int(w * factor))
+    target_h = max(min_size, int(h * factor))
 
-    Returns:
-        np.ndarray: The downscaled image.
-    """
-    return cv2.resize(img, None, fx=fct, fy=fct, interpolation=cv2.INTER_AREA)
+    if target_w == w and target_h == h:
+        return img
+
+    current = img
+    if factor < 0.25 and max(h, w) > 1024:
+        while True:
+            next_h, next_w = current.shape[0] // 2, current.shape[1] // 2
+            if next_h < target_h or next_w < target_w:
+                break
+            current = cv2.pyrDown(current)
+
+    return cv2.resize(current, dsize=(target_w, target_h), interpolation=interpolation)
 
 
 def read_zarr_volume(path_volume: Union[Path, str]) -> zarr.Group | None:

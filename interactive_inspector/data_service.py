@@ -21,17 +21,17 @@ import parse_sbem_dataset as parse
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig, FlowFieldEstimationConfig
+from parameter_config import AcquisitionConfig, StitchingConfig, FlowFieldEstimationConfig, PipelineConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC, Task
 from constants import UIConstants as UI
-
+from inspection_utils_refactor import save_img
+from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
-    store_cxyz_to_offset_files, cached_read_image
+    store_cxyz_to_offset_files, cached_read_image,
 )
 
-from pipeline_actions import PipelineOrchestrator
 
 
 @dataclass(frozen=True)
@@ -669,7 +669,6 @@ class DataService:
                 logging.error(f"IO Error: {e}")
 
         # 2. Map UI Overrides to the correct nested structure
-        # This keeps the DataService clean from UI-specific naming
         def _apply_overrides(target_dict):
             # Registration Config
             if "registration_config" not in target_dict:
@@ -687,8 +686,17 @@ class DataService:
             if "warp_config" not in target_dict:
                 target_dict["warp_config"] = {}
 
-            if "clahe" in ui_params_dict:  # If UI has a 'clahe' checkbox
+            if "clahe" in ui_params_dict:
                 target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["clahe"])
+
+            # 3. Pipeline Config
+            if "pipeline_config" not in target_dict:
+                target_dict["pipeline_config"] = {}
+
+            if UI.ID_RESCALE_FCT in ui_params_dict:
+                val = ui_params_dict[UI.ID_RESCALE_FCT]
+                if val is not None:
+                    target_dict["pipeline_config"]["downscale_factor"] = float(val)
 
         _apply_overrides(raw_dict)
 
@@ -782,13 +790,22 @@ class DataService:
                 )
 
 
-    def execute_fine_alignment_step(self, section_num: int, task_name: str, config: StitchingConfig) -> None:
+    def execute_fine_alignment_step(
+            self,
+            section_num: int,
+            task_name: str,
+            config: StitchingConfig
+    ) -> None:
         """
         The low-level worker that maps a Pipeline Task to a Section method.
         """
         # 1. Initialize Section Object
-        section = self._init_section(section_num)
-        section.feed_section_data()
+        try:
+            section = self._init_section(section_num)
+            section.feed_section_data()
+        except NotADirectoryError as _:
+            logging.error(f'failed to load section s{section_num}')
+            return None
 
         # 2. Dispatch based on Task
         if task_name == Task.COARSE_MESH:
@@ -825,6 +842,21 @@ class DataService:
                 store=True,
                 overwrite=True,
                 ext=None,
+            )
+
+        # Downscale stitched .zarr section
+        if task_name == Task.DOWNSCALE:
+            if section.image is None:
+                img = section.load_image()
+                if img is None:
+                    logging.error(f"FAILED at {task_name}: Image load failed after retries")
+                    return None
+
+            fct = config.pipeline_config.downscale_factor
+            print(f'fct: {fct}')
+            save_img(
+                path=section.path_thumb,
+                data=section.downscale_section(fct)
             )
 
         return None

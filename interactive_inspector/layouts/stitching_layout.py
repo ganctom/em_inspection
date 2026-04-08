@@ -30,7 +30,8 @@ def layout(active_service=None):
 
                             # 1. CONFIGURATION SECTION (Final Tabs Assembly)
                             dbc.Tabs([
-                                UI.TAB_ACQUISITION(active_service)
+                                UI.TAB_ACQUISITION(active_service),
+                                UI.TAB_PPLN_CONFIG(),
                             ], id="stitch_config-tabs", active_tab="tab-acq")
                         ]
                     )

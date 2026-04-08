@@ -149,6 +149,9 @@ class MaskingConfig(BaseModel):
     rim_size: int = 40
 
 
+class PipelineConfig(BaseModel):
+    downscale_factor: float = 0.3
+
 class StitchingConfig(BaseModel):
     output_dir: str = ""
     acquisition_config: AcquisitionConfig = AcquisitionConfig()
@@ -159,6 +162,8 @@ class StitchingConfig(BaseModel):
     mesh_integration_config: MeshIntegrationConfig = MeshIntegrationConfig()
     warp_config: WarpConfigStitching = WarpConfigStitching()
     mask_config: MaskingConfig = MaskingConfig()
+    pipeline_config: PipelineConfig = PipelineConfig()
+
 
 
     @field_validator('output_dir', mode='before')

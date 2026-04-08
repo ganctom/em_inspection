@@ -1,3 +1,5 @@
+import random
+import time
 from dataclasses import dataclass
 
 import matplotlib
@@ -99,6 +101,11 @@ class Section:
         self.tile_map: MaskMap = {}
         self.margin_masks: MaskMap | None = None
 
+        self.path_thumb = self.resolve_path_thumb()
+        self.thumb: np.ndarray | None = None
+        self.height: int | None = None
+        self.width: int | None = None
+
 
     @property
     def section_shape(self) -> tuple[int, int]:
@@ -157,8 +164,8 @@ class Section:
         name_end = "_" + str(self.path.name).split("_")[1]
         zfilled = str(self.section_num).zfill(5)
         new_name = "s" + zfilled + name_end
-        thumb_fn = str(self.path.parent.parent / IS.DIR_INSPECTION / IS.DIR_DOWNSCALED / (new_name + ext))
-        return thumb_fn
+        thumb_fn = self.path.parent.parent / IS.DIR_INSPECTION / IS.DIR_DOWNSCALED / (new_name + ext)
+        return str(thumb_fn)
 
 
     def verify_tile_id_map(self, print_ids: bool = False) -> bool:
@@ -202,19 +209,22 @@ class Section:
         return
 
 
-    def downscale_section(self, fct: float) -> Optional[np.ndarray]:
-        """Rescale section by specified factor"""
-
-        img = self.image
+    def downscale_section(self, factor: float) -> Optional[np.ndarray]:
+        """Downscale the section/image by the specified factor and store as thumbnail."""
         if self.image is None:
-            img = self.load_image()
+            self.image = self.load_image()
 
-        if img is None:
+        if self.image is None:
+            logging.warning("No image available for downscaling.")
             return None
 
-        self.thumb = utils.downscale_image(img, fct)
-        logging.info(f'shape mini: {np.shape(self.thumb)}')
-        return self.thumb
+        try:
+            self.thumb = utils.downscale_image(self.image, factor)
+            logging.debug(f"Thumbnail shape: {self.thumb.shape}")
+            return self.thumb
+        except ValueError as e:
+            logging.error(f"Downscaling failed: {e}")
+            return None
 
 
     def load_image(self) -> Optional[np.ndarray]:
@@ -224,14 +234,14 @@ class Section:
 
         elif self.path.resolve().suffix == '.zarr':
             fp = self.path / '0'
-            logging.info(f'reading: {fp}')
+            logging.info(f'Loading: {fp}')
             data = utils.read_zarr_volume(fp)
         else:
-            logging.info(f'reading: {self.path_stitched}')
+            logging.info(f'Loading: {self.path_stitched}')
             data = utils.read_zarr_volume(self.path_stitched)
 
         if data is None:
-            logging.warning(f'load image: failed to load s{self.section_num}.')
+            logging.warning(f'Load image: failed to load s{self.section_num}.')
             return None
 
         self.image = np.asarray(data['0'])
@@ -242,8 +252,20 @@ class Section:
             logging.warning(f'Loading s{self.section_num} image-data failed: Wrong image dimensionality.')
             return None
 
-        print(f'Image of section s{self.section_num} loaded.')
+        logging.info(f'Image of section s{self.section_num} loaded.')
         return self.image
+
+
+    def close_resource(self):
+        """Explicitly drop references to Zarr arrays to close background threads."""
+        try:
+            if hasattr(self.image, 'store'):
+                self.image.store.close()
+        except:
+            pass
+        self.image = None
+        # Force a small sleep to allow asyncio loop to heartbeat
+        time.sleep(0.1)
 
 
     def get_coarse_mesh_offset(self, tile_id: int, axis: int = 0) -> Optional[Vector]:
@@ -2035,8 +2057,8 @@ def fine_align_section(
 
     # Downscale and store stitched section
     # if not Path(section.path_thumb).exists():
-    # mini = section.downscale_section(fct=rescale_fct)
-    # utils.save_img(section.path_thumb, mini)
+    mini = section.downscale_section(fct=rescale_fct)
+    utils.save_img(section.path_thumb, mini)
 
     # Derotate stitched .zarr sections
     # section.rotate_and_store_stitched(rot_angle, section.path_stitched_custom.parent)
