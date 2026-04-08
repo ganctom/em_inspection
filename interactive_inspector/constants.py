@@ -125,6 +125,7 @@ class UIConstants:
     ID_BTN_BCKP_CO = "init-exp-backup-co"
     ID_TTP_BCKP = "bckp-btn-tooltip"
     ID_BTN_BCKP_WRAPPER = "bckp-btn-wrapper"
+    ID_INP_SEARCH_RAD= "search-radius-input"
 
     # --- Messages ---
     MSG_PARSE_DISABLED = "Add a new experiment or initialize an existing one before parsing acquired data."

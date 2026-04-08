@@ -463,7 +463,8 @@ class DataService:
             z: int,
             overlap_type: str,
             initial_nudge: Tuple[int, int] = (0, 0),
-            override_vector: Optional[Vector] = None
+            override_vector: Optional[Vector] = None,
+            max_ext: int = 25,
     ):
         """
         Calculates a new shift vector.
@@ -473,7 +474,6 @@ class DataService:
 
         # Pyramidal parameters - can be tuned
         levels: int = 1
-        max_ext: int = 20
         stride: int = 5
 
         ctx = self._get_overlap_context(tid_a, z, overlap_type)

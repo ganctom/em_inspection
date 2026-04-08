@@ -108,7 +108,8 @@ def layout():
                         dbc.Popover([
                             dbc.PopoverHeader("Settings"),
                             dbc.PopoverBody([
-                                dbc.Label("Guess Mode:", className="small"),
+                                # Existing Guess Mode Section
+                                dbc.Label("Guess Mode:", className="small mb-0"),
                                 dbc.Select(
                                     id="guess-mode-select",
                                     options=[
@@ -117,14 +118,30 @@ def layout():
                                     ],
                                     value="nudge", size="sm"
                                 ),
+
+                                # Manual Input Container
                                 html.Div([
                                     dbc.Row([
-                                        dbc.Col(dbc.Input(id="manual-dx", type="number", value=0, placeholder="dx",
-                                                          size="sm"), width=6),
-                                        dbc.Col(dbc.Input(id="manual-dy", type="number", value=0, placeholder="dy",
-                                                          size="sm"), width=6),
+                                        dbc.Col(dbc.Input(id="manual-dx", type="number", value=0,
+                                                          placeholder="dx", size="sm"), width=6),
+                                        dbc.Col(dbc.Input(id="manual-dy", type="number", value=0,
+                                                          placeholder="dy", size="sm"), width=6),
                                     ], className="g-1 mt-2")
-                                ], id="manual-input-container", style={"display": "none"})
+                                ], id="manual-input-container", style={"display": "none"}),
+
+                                # --- NEW: Search Radius Section ---
+                                html.Hr(className="my-2"),  # Visual separator
+                                html.Div([
+                                    dbc.Label("Search Radius (px):", className="small mb-0"),
+                                    dbc.Input(
+                                        id="search-radius-input",
+                                        type="number",
+                                        value=25,  # Your default value
+                                        min=1,  # Logic guard: radius must be positive
+                                        step=1,  # Integer increments
+                                        size="sm"
+                                    ),
+                                ]),
                             ])
                         ], target="batch-settings-target", trigger="click", placement="right"),
                     ], className="flex-shrink-0 px-2"),

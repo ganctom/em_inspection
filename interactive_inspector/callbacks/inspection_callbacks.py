@@ -491,11 +491,13 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
     [State('selection-store', 'data'),
      State('guess-mode-select', 'value'),
      State('manual-dx', 'value'),
-     State('manual-dy', 'value')],
+     State('manual-dy', 'value'),
+     State(UIConstants.ID_INP_SEARCH_RAD, "value"),
+     ],
     prevent_initial_call=True
 )
 def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
-                   selection_data, guess_mode, m_dx, m_dy):
+                   selection_data, guess_mode, m_dx, m_dy, search_rad):
     # 1. Boilerplate Safety
     if not selection_data or active_idx is None or active_idx >= len(selection_data):
         return no_update, no_update, "Waiting for selection..."
@@ -520,7 +522,8 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
                 s_item['z'],
                 s_item['overlap'],
                 initial_nudge=nudge if not is_manual else (0, 0),
-                override_vector=manual_ref if is_manual else None
+                override_vector=manual_ref if is_manual else None,
+                max_ext=search_rad,
             )
             results.append((s_item, res))
 
@@ -544,7 +547,7 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
         current_nudge = nudge if btn_idx == active_idx else (0, 0)
 
         result = service.compute_coarse_shift(
-            calc_item['tid'], calc_item['z'], calc_item['overlap'], initial_nudge=current_nudge
+            calc_item['tid'], calc_item['z'], calc_item['overlap'], initial_nudge=current_nudge, max_ext=search_rad,
         )
 
         if isinstance(result, str):
