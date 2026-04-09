@@ -142,6 +142,7 @@ class WarpConfigStitching(BaseModel):
     clip_limit: float = 0.08
     nbins: int = 256
     warp_parallelism: int = 6
+    margin_masking: bool = True
 
 
 class MaskingConfig(BaseModel):

@@ -844,6 +844,13 @@ class DataService:
                 ext=None,
             )
 
+        # WARP SECTION
+        if task_name == Task.WARP_SECTION:
+            section.warp_section(
+                stride=config.fine_flows_config.stride,
+                config=config.warp_config,
+            )
+
         # Downscale stitched .zarr section
         if task_name == Task.DOWNSCALE:
             if section.image is None:
@@ -853,7 +860,6 @@ class DataService:
                     return None
 
             fct = config.pipeline_config.downscale_factor
-            print(f'fct: {fct}')
             save_img(
                 path=section.path_thumb,
                 data=section.downscale_section(fct)

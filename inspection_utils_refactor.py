@@ -1,6 +1,7 @@
 import random
 import re
 import time
+from ast import literal_eval
 from concurrent.futures import ThreadPoolExecutor
 from time import perf_counter_ns
 import subprocess
@@ -9,6 +10,7 @@ from os.path import join
 
 import cv2
 import numpy as np
+from numcodecs import Blosc
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -33,6 +35,10 @@ from tqdm import tqdm
 from scipy.interpolate import CloughTocher2DInterpolator
 from statistics import mean, stdev
 import gc
+from ome_zarr.io import parse_url
+from ome_zarr.scale import Scaler
+from ome_zarr.writer import write_image
+from ome_zarr.format import FormatV04
 
 from schema import InspectionSchema as IS
 
@@ -51,6 +57,22 @@ GridXY = tuple[Any, Any, Any]
 
 class InfrastructureError(Exception):
     """Raised when a section cannot be prepared for computation."""
+    pass
+
+class MeshLoaderError(Exception):
+    """Base exception for all mesh loading operations."""
+    pass
+
+class MeshCorruptionError(MeshLoaderError):
+    """Raised when the NPZ file exists but is not a valid ZIP or is unreadable."""
+    pass
+
+class MeshSchemaError(MeshLoaderError):
+    """Raised when the internal data structure (keys/values) fails validation."""
+    pass
+
+class TileLoadingError(Exception):
+    """Raised when the tile orchestration fails to produce a valid map."""
     pass
 
 # 1. Standardized Data Model (Interface Segregation)
@@ -850,7 +872,7 @@ def get_tile_shape(fp_yaml: UniPath) -> Optional[TileXY]:
         return None
 
 
-def load_mapped_npz(fp: str) -> Optional[MaskMap]:
+def load_mapped_npz_old(fp: str) -> Optional[MaskMap]:
     file_path = Path(fp)
     if not file_path.exists():
         logging.info(f"File '{file_path}' not found.")
@@ -871,6 +893,21 @@ def load_mapped_npz(fp: str) -> Optional[MaskMap]:
         logging.warning(f"An unknown error occurred while loading '{file_path}': {e}")
         return None
 
+
+def load_mapped_npz(fp: str) -> dict:
+    file_path = Path(fp)
+    if not file_path.exists():
+        raise FileNotFoundError(f"Source path not found: {fp}")
+
+    try:
+        with np.load(file_path, allow_pickle=True) as data:
+            return {literal_eval(k): v for k, v in data.items()}
+
+    except BadZipFile as e:
+        raise MeshCorruptionError(f"NPZ at {fp} is corrupted or truncated.") from e
+
+    except (ValueError, SyntaxError) as e:
+        raise MeshSchemaError(f"Failed to parse mesh keys in {fp}. Check key serialization.") from e
 
 
 def pair_is_vertical(
@@ -1825,6 +1862,66 @@ def io_read_tif(path: Path, retries: int = 3) -> np.ndarray | None:
                 time.sleep(delay)
                 continue
             raise
+
+
+def store_section_zarr(
+        img_data: np.ndarray,
+        section_name: str,
+        out_dir: str | Path,
+        chunks: tuple[int, int] = (2048, 2048)
+) -> None:
+    """
+    Writes a 2D image as OME-Zarr with Zarr V2 compatibility and error handling.
+
+    Args:
+        img_data: The 2D numpy array to store.
+        section_name: Output folder name (e.g., 's9001.zarr').
+        out_dir: Parent directory for the output.
+        chunks: Zarr chunk size. Defaults to 2048 for balanced UI/IO performance.
+    """
+    zarr_path = Path(out_dir) / section_name
+    zarr_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        loc = parse_url(str(zarr_path), mode="w")
+        if loc is None:
+            raise IOError(f"Could not initialize Zarr store at {zarr_path}")
+
+        store = loc.store
+
+        storage_options = {
+            "chunks": chunks,
+            "compressor": {
+                "id": "blosc",
+                "cname": "zstd",
+                "clevel": 3,
+                "shuffle": Blosc.SHUFFLE,
+            },
+            "overwrite": True
+        }
+
+        # 4. Initialize V2 Group
+        # Explicitly setting zarr_version=2 is mandatory for OME-Zarr-Py compatibility
+        root_group = zarr.open_group(
+            store=store,
+            mode="w",
+            zarr_version=2
+        )
+
+        write_image(
+            image=img_data,
+            group=root_group,
+            scaler=Scaler(max_layer=0),
+            axes="yx",
+            storage_options=storage_options,
+            fmt=FormatV04()
+        )
+
+        logging.info(f"Successfully stored OME-Zarr: {zarr_path}")
+
+    except Exception as e:
+        logging.error(f"Failed to store Zarr section at {zarr_path}: {e}")
+        raise
 
 
 if __name__ == "__main__":

@@ -184,7 +184,7 @@ class PipelineOrchestrator:
 def section_worker_wrapper(
         sec_path: str,
         task_keys: list,
-        stitch_cfg: StitchingConfig,
+        config: StitchingConfig,
 ):
     """
     Standalone worker. Initializes its own Section instance to ensure
@@ -204,7 +204,7 @@ def section_worker_wrapper(
 
             if task_name == Task.COARSE_MESH:
                 # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
-                cfg_yaml = stitch_cfg.mesh_integration_config
+                cfg_yaml = config.mesh_integration_config
 
                 cfg = IntegrationConfig(
                     dt=cfg_yaml.dt,  # dt=cfg_yaml.dt
@@ -222,20 +222,40 @@ def section_worker_wrapper(
 
             if task_name == Task.MARGIN_MASKS:
                 section.build_margin_masks(
-                    grid_shape=stitch_cfg.acquisition_config.grid_shape,
-                    margin=stitch_cfg.mask_config.mask_margin,
-                    rim_size=stitch_cfg.mask_config.rim_size,
+                    grid_shape=config.acquisition_config.grid_shape,
+                    margin=config.mask_config.mask_margin,
+                    rim_size=config.mask_config.rim_size,
                     overwrite=True
                 )
 
             # Compute flows between overlaps
             if task_name == Task.FINE_FLOWS:
                 section.compute_fine_flows(
-                    ff_config=stitch_cfg.fine_flows_config,
+                    ff_config=config.fine_flows_config,
                     masking=True,
                     store=True,
                     overwrite=True,
                     ext=None,
+                )
+
+
+            if task_name == Task.WARP_SECTION:
+                wconfig = config.warp_config
+
+                clahe_kwargs = dict(
+                    kernel_size=wconfig.kernel_size,
+                    clip_limit=wconfig.clip_limit,
+                    nbins=wconfig.nbins
+                )
+
+                section.warp_section(
+                    stride=config.fine_flows_config.stride,
+                    margin=wconfig.margin,
+                    use_clahe=wconfig.use_clahe,
+                    clahe_kwargs=clahe_kwargs,
+                    parallelism=wconfig.warp_parallelism,
+                    margin_masking=wconfig.margin_masking,
+                    zarr_store=True,
                 )
 
             # Downscale stitched .zarr section
@@ -245,7 +265,7 @@ def section_worker_wrapper(
                     if img is None:
                         return sec_path, False, f"FAILED at {task_name}: Image load failed after retries"
 
-                fct = stitch_cfg.pipeline_config.downscale_factor
+                fct = config.pipeline_config.downscale_factor
                 print(f"fct: {fct}")
                 save_img(
                     path=section.path_thumb,

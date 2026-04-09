@@ -30,3 +30,4 @@ class InspectionSchema:
     FILE_ROI_MASKS = "roi_masks.npz"
     FILE_SMR_MASKS = "smr_masks.npz"
     FILE_TILE_MASKS = "tile_masks.npz"
+    FILE_MESHES = "meshes.npz"

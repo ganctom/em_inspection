@@ -1,3 +1,5 @@
+import concurrent
+import gc
 import random
 import time
 from dataclasses import dataclass
@@ -5,7 +7,7 @@ from dataclasses import dataclass
 import matplotlib
 from tensorflow.python.ops.gen_batch_ops import batch
 
-from parameter_config import FlowFieldEstimationConfig
+from parameter_config import FlowFieldEstimationConfig, WarpConfigStitching
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -18,7 +20,7 @@ import logging
 import numpy as np
 import skimage
 from matplotlib import pyplot as plt
-from sofima import mesh, stitch_rigid, stitch_elastic
+from sofima import mesh, stitch_rigid, stitch_elastic, warp
 from skimage.metrics import structural_similarity as ssim
 from concurrent.futures import ThreadPoolExecutor
 
@@ -81,6 +83,7 @@ class Section:
         self.path_margin_masks = str(self.path / IS.FILE_MARGIN_MASKS)
         self.path_cmesh = str(self.path / IS.FILE_COARSE_MESH)
         self.path_thumb = self.resolve_path_thumb()
+        self.path_fmesh = str(self.path / IS.FILE_MESHES)
 
         self.tile_id_map: Optional[np.ndarray[int]] = None
         self.tile_shape = utils.get_tile_shape(self.path_section_yaml)
@@ -93,19 +96,18 @@ class Section:
         self.fflows: Optional[FineFlows] = None
         self.fflows_clean: Optional[FineFlows] = None
         self.fflows_recon: Optional[FineFlows] = None
-        self.fmesh: Optional[Dict[TileXY, np.ndarray]] = None
+        self.fmesh: Dict[TileXY, np.ndarray] | None = None
 
         self.mask_map: MaskMap | None = None
         self.roi_mask_map: MaskMap = {}
         self.smr_mask_map: MaskMap = {}
-        self.tile_map: MaskMap = {}
+        self.tile_map: MaskMap | None = None
         self.margin_masks: MaskMap | None = None
 
         self.path_thumb = self.resolve_path_thumb()
         self.thumb: np.ndarray | None = None
         self.height: int | None = None
         self.width: int | None = None
-
 
     @property
     def section_shape(self) -> tuple[int, int]:
@@ -1619,49 +1621,86 @@ class Section:
             parallel: bool = False,
             max_workers: Optional[int] = None
     ) -> None:
-        """Orchestrates the loading process."""
-        positions = list(np.ndindex(self.tile_id_map.shape))
+        """
+        Orchestrates tile loading with atomic failure guarantee and coordinate filtering.
+        """
+        self.tile_map = {}
 
-        if parallel:
-            # SMB bottleneck: cap default workers if not specified
-            workers = max_workers or 8
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                results = executor.map(lambda p: self._get_tile_data(p, clahe), positions)
-                self._update_tile_map(results)
-        else:
-            results = (self._get_tile_data(p, clahe) for p in positions)
-            self._update_tile_map(results)
+        # Extract only coordinates where tiles were recorded
+        valid_indices = np.argwhere(self.tile_id_map != -1)
+        positions = [tuple(pos) for pos in valid_indices]
+
+        if not positions:
+            logging.info(f"Section {self.section_num} has no recorded tiles. Skipping load.")
+            return
+
+        logging.info(f"Loading {len(positions)} tiles for s{self.section_num} (parallel={parallel})")
+
+        try:
+            if parallel:
+                workers = max_workers or min(8, len(positions))
+                with ThreadPoolExecutor(max_workers=workers) as executor:
+                    results = list(executor.map(lambda p: self._get_tile_data(p, clahe), positions))
+            else:
+                results = [self._get_tile_data(p, clahe) for p in positions]
+
+            for res in results:
+                self._update_tile_map_single(res)
+
+        except Exception as e:
+            raise utils.TileLoadingError(
+                f"Atomic load failed for section {self.section_num} during "
+                f"{'parallel' if parallel else 'sequential'} ingestion."
+            ) from e
+
+        # Final Integrity Check
+        if len(self.tile_map) != len(positions):
+            raise utils.TileLoadingError(
+                f"Integrity mismatch for s{self.section_num}: "
+                f"Expected {len(positions)} tiles, but map size is {len(self.tile_map)}."
+            )
 
     def _get_tile_data(self, pos: Tuple[int, int], clahe: bool) -> Tuple[Tuple[int, int], Optional[np.ndarray]]:
         """Encapsulates tile lookup, I/O, and post-processing logic."""
         y, x = pos
-        tile_id = int(self.tile_id_map[y, x])
+
+        try:
+            tile_id = int(self.tile_id_map[y, x])
+        except (ValueError, TypeError, IndexError) as e:
+            logging.error(f"Invalid tile_id at {pos}: {e} (raw value: {self.tile_id_map[y, x]})")
+            return (x, y), None
 
         if tile_id == -1:
             return (x, y), None
 
         try:
-            path = Path(self.tile_dicts[tile_id])
+            tile_path = self.tile_dicts[tile_id]   # This can raise KeyError / IndexError
+            path = Path(tile_path)
+
+            if not path.exists():
+                raise FileNotFoundError(f"Tile file not found: {path}")
+
             img = utils.io_read_tif(path)
 
             if clahe:
                 img = utils.apply_clahe(img)
+
             return (x, y), img
 
-        except FileNotFoundError:
-            logging.warning(f"Missing tile: tile_id {tile_id} at {path}")
-        except KeyError:
-            logging.error(f"Mapping error: tile_id {tile_id} not in tile_dicts")
         except Exception as e:
-            logging.error(f"Runtime error loading tile {tile_id} at ({x},{y}): {e}")
+            logging.error(f"Failed to load tile at position {pos} (tile_id={tile_id}): {e}")
+            return (x, y), None
 
-        return (x, y), None
 
-    def _update_tile_map(self, results) -> None:
-        """Internal helper to commit loaded buffers to the state."""
-        for (x, y), img in results:
-            if img is not None:
-                self.tile_map[(x, y)] = img
+    def _update_tile_map_single(self, result: Tuple[Tuple[int, int], Optional[np.ndarray]]) -> None:
+        """Update tile_map with a single result. Safe even if tile_map is None."""
+        if self.tile_map is None:
+            self.tile_map = {}
+
+        (x, y), img = result
+        if img is not None:
+            self.tile_map[(x, y)] = img
+
 
     def ensure_tile_map_ready(
             self,
@@ -1672,7 +1711,6 @@ class Section:
         """Validates state and attempts lazy-load if telemetry is missing."""
         if self.tile_map is not None and len(self.tile_map) > 0:
             return True
-
         try:
             self.load_tile_map(clahe=apply_clahe, parallel=parallel, max_workers=max_workers)
             return True
@@ -1755,6 +1793,109 @@ class Section:
             logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
 
 # ---- EOF FineFlows ----
+
+# ---- WARP SECTION ----
+
+    def warp_section(
+            self,
+            stride: int,
+            config: WarpConfigStitching,
+    ) -> None:
+        """
+        Orchestrates high-memory warping and stitching operations.
+        """
+        start_time = time.perf_counter()
+
+        # 1. Resource Validation
+        try:
+            self._ensure_warping_resources(config)
+        except (FileNotFoundError, ValueError) as e:
+            logging.error(f"[Section {self.section_num}] Resource initialization failed: {e}")
+            raise  # Propagate to pipeline master to record the failure
+
+        # 2. Execution Setup
+        clahe_params = dict(
+            kernel_size=config.kernel_size,
+            clip_limit=config.clip_limit,
+            nbins=config.nbins
+        )
+
+        try:
+            logging.info(
+                f"[Section {self.section_num}] Starting Render: stride={stride}, parallelism={config.warp_parallelism}")
+
+            stitched, _ = warp.render_tiles(
+                tiles=self.tile_map,
+                coord_maps=self.fmesh,
+                stride=(stride, stride),
+                margin=config.margin,
+                use_clahe=config.use_clahe,
+                clahe_kwargs=clahe_params,
+                tile_masks=self.margin_masks if config.margin_masking else None,
+                parallelism=config.warp_parallelism
+            )
+
+            # 3. Persistence
+            self._persist_warped_result(stitched)
+
+            # 4. Mandatory Cleanup
+            del stitched
+            gc.collect()
+
+            elapsed = time.perf_counter() - start_time
+            logging.info(f"[Section {self.section_num}] Warp complete. Duration: {elapsed:.2f}s")
+
+        except Exception as e:
+            logging.error(f"[Section {self.section_num}] Critical failure during warp/store: {e}", exc_info=True)
+            raise
+
+
+    def _ensure_warping_resources(self, config: WarpConfigStitching) -> None:
+        """Hardened dependency loader with integrity checks."""
+
+        # Mesh Validation: Explicitly handle the different failure modes
+        if self.fmesh is None:
+            try:
+                self.fmesh = utils.load_mapped_npz(self.path_fmesh)
+            except FileNotFoundError:
+                raise FileNotFoundError(f"Mesh missing for section {self.section_num}: {self.path_fmesh}")
+            except (utils.MeshCorruptionError, utils.MeshSchemaError) as e:
+                logging.critical(f"Integrity check failed: {e}")
+                raise RuntimeError(f"Section {self.section_num} data is unrecoverable.") from e
+
+        if not self.fmesh:
+            raise ValueError(f"Mesh data for s{self.section_num} is empty.")
+
+        # Metadata Injection
+        if self.tile_dicts is None:
+            self.tile_dicts = utils.get_tile_dicts(self.path)
+            self.read_tile_id_map()
+
+        # Image Buffer Loading
+        if self.tile_map is None:
+            try:
+                self.load_tile_map(clahe=config.use_clahe, parallel=True)
+            except utils.TileLoadingError as e:
+                raise RuntimeError(f"Aborting section {self.section_num} due to missing tile-map data.") from e
+
+        if not self.tile_map:
+            raise RuntimeError(f"Tile map loading returned empty for section {self.section_num}")
+
+        # Optional margin masks
+        if config.margin_masking and self.margin_masks is None:
+            try:
+                self.margin_masks = utils.load_mapped_npz(self.path_margin_masks)
+            except (FileNotFoundError, utils.MeshLoaderError):
+                logging.warning(f"Margin masking skipped for s{self.section_num} - Resource unavailable.")
+
+    def _persist_warped_result(self, data: np.ndarray):
+        """Handles Zarr serialization logic."""
+        path_stitched = self.path_stitched.parent
+        section_name = Path(self.path).name + '.zarr'
+        utils.store_section_zarr(data, section_name, path_stitched)
+
+
+# ---- EOF WARP SECTION ----
 
 
 class FlowFieldOrchestrator:
@@ -1863,6 +2004,7 @@ class FlowFieldOrchestrator:
         """Checks the section for existing data."""
         self.section.load_fflows()
         return self.section.fflows is not None
+
 
 
 #### ---------   FUNCTIONS    ---------
