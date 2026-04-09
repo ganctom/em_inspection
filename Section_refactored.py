@@ -1,34 +1,30 @@
-import concurrent
-import gc
-import random
-import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+import functools as ft
+import gc
+from pickle import UnpicklingError
+from zipfile import BadZipFile
 
-import matplotlib
-from tensorflow.python.ops.gen_batch_ops import batch
-
-from parameter_config import FlowFieldEstimationConfig, WarpConfigStitching
-
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import pickle
-import platform
-from functools import lru_cache
-from pathlib import Path
-from typing import Union, Optional, Any, Dict, Tuple
+import jax
+import jax.numpy as jnp
 import logging
+from matplotlib import pyplot as plt
 import numpy as np
 import skimage
-from matplotlib import pyplot as plt
-from sofima import mesh, stitch_rigid, stitch_elastic, warp
+from pathlib import Path
+import pickle
 from skimage.metrics import structural_similarity as ssim
-from concurrent.futures import ThreadPoolExecutor
+from sofima import mesh, stitch_rigid, stitch_elastic, warp, flow_utils
+import time
+from typing import Union, Optional, Any, Dict, Tuple
 
-import inspection_utils_refactor as utils
 import experiment_configs as cfg
+import inspection_utils_refactor as utils
 import mask_utils as mutils
-from Tile_refactored import Tile
+from parameter_config import WarpConfigStitching, MeshIntegrationConfig, RegistrationConfig
 from schema import InspectionSchema as IS
+from Tile_refactored import Tile
+
 
 ### Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -49,7 +45,7 @@ TileFlowData = Tuple[np.ndarray, TileFlow, TileOffset]
 MarginOverrides = Dict[TileXY, Tuple[int, int, int, int]]
 
 
-@lru_cache(maxsize=32)
+@ft.lru_cache(maxsize=32)
 def cached_read_image(path: str):
     # This ensures that if the same tile is requested twice,
     # it returns the numpy array from RAM instantly.
@@ -1312,7 +1308,6 @@ class Section:
         return best_offset, refine_data
 
 
-
     def eval_ov(
             self,
             tile_pair: tuple[Tile, Tile],
@@ -1769,10 +1764,10 @@ class Section:
 
 # ---- FineFlows ----
 
-    def compute_fine_flows(self, ff_config: FlowFieldEstimationConfig, **kwargs) -> None:
+    def compute_fine_flows(self, config: RegistrationConfig, **kwargs) -> None:
         """Proxy method to the Orchestrator service."""
         orchestrator = FlowFieldOrchestrator(self)
-        orchestrator.compute_fine_flows(ff_config, **kwargs)
+        orchestrator.compute_fine_flows(config, **kwargs)
 
     def load_fflows(self, ext: Optional[str] = None) -> None:
         ext = '' if ext is None else ext
@@ -1793,6 +1788,191 @@ class Section:
             logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
 
 # ---- EOF FineFlows ----
+
+# ----  FINE MESH ----
+
+
+    def compute_fine_mesh(
+            self,
+            reg_config: RegistrationConfig,
+            mesh_config: MeshIntegrationConfig,
+    ) -> None:
+        """
+        Computes a high-resolution elastic mesh using JAX-accelerated relaxation.
+        """
+        start_time = time.perf_counter()
+
+        # 1. Resource Validation & Dependency Loading
+        self._ensure_fine_mesh_resources(reg_config)
+
+        # 2. Computation Block
+        try:
+            logging.info(f"[Section {self.section_num}] Starting Fine Mesh computation")
+
+            # Extract coordinate grids and reconciled flows
+            cx, cy = np.squeeze(self.cxy)
+            ffx, ffxo = self.fflows_recon[0]
+            ffy, ffyo = self.fflows_recon[1]
+
+            data_x: Tuple[np.ndarray, dict, dict] = (cx, ffx, ffxo)
+            data_y: Tuple[np.ndarray, dict, dict] = (cy, ffy, ffyo)
+
+            stride_tuple = (mesh_config.stride, mesh_config.stride)
+
+            # Aggregate tile-wise data into global arrays for relaxation
+            # Accessing first tile's shape to define global grid dimensions
+            sample_tile_shape = next(iter(self.tile_map.values())).shape
+
+            fx, fy, nds, nbors, key_to_idx = stitch_elastic.aggregate_arrays(
+                data_x, data_y,
+                list(self.tile_map.keys()),
+                self.coarse_mesh[:, 0, ...],
+                stride=stride_tuple,
+                tile_shape=sample_tile_shape
+            )
+
+            @jax.jit
+            def prev_fn(nds):
+                target_fn = ft.partial(
+                    stitch_elastic.compute_target_mesh, x=nds, fx=fx, fy=fy, stride=stride_tuple
+                )
+                nds = jax.vmap(target_fn)(nbors)
+                return jnp.transpose(nds, [1, 0, 2, 3])
+
+            # Initialize SOFIMA integration config via attribute mapping
+            config_attrs = {
+                attr: getattr(mesh_config, attr) for attr in [
+                    'dt', 'gamma', 'k0', 'k', 'num_iters',
+                    'max_iters', 'stop_v_max', 'dt_max', 'prefer_orig_order',
+                    'start_cap', 'final_cap', 'remove_drift'
+                ]
+            }
+            config_attrs['stride'] = stride_tuple
+            config_sofima = mesh.IntegrationConfig(**config_attrs)
+
+            logging.info(f"[Section {self.section_num}] Executing JAX mesh relaxation...")
+            res, _, _ = mesh.relax_mesh(nds, None, config_sofima, prev_fn=prev_fn)
+
+            # 3. Inverse Mapping (Index -> Tuple Key)
+            idx_to_key = {v: k for k, v in key_to_idx.items()}
+            self.fmesh = {
+                idx_to_key[i]: np.array(res[:, i:i + 1, :])
+                for i in range(res.shape[1])
+            }
+
+            # 4. Persistence
+            logging.info(f"[Section {self.section_num}] Serializing mesh to {self.path_fmesh}")
+            meshes_to_save = {str(k): v for k, v in self.fmesh.items()}
+            np.savez(self.path_fmesh, **meshes_to_save)
+
+            # 5. Resource Teardown
+            del fx, fy, nds, nbors, res
+            jax.clear_caches()
+            gc.collect()
+
+            elapsed = time.perf_counter() - start_time
+            logging.info(f"[Section {self.section_num}] Fine mesh complete. Duration: {elapsed:.2f}s")
+
+        except Exception as e:
+            logging.error(f"[Section {self.section_num}] Critical failure: {e}", exc_info=True)
+            jax.clear_caches()
+            raise
+
+
+    def _ensure_fine_mesh_resources(self, config: RegistrationConfig) -> None:
+        """Hardened dependency loader with integrity checks."""
+
+        # Metadata Injection
+        if self.tile_dicts is None:
+            self.tile_dicts = utils.get_tile_dicts(self.path)
+            self.read_tile_id_map()
+
+        # Image Buffer Loading
+        if self.tile_map is None:
+            try:
+                self.load_tile_map(clahe=True, parallel=True)
+            except utils.TileLoadingError as e:
+                raise RuntimeError(f"Aborting section {self.section_num} due to missing tile-map data.") from e
+
+        if not self.tile_map:
+            raise RuntimeError(f"Tile map loading returned empty for section {self.section_num}")
+
+        if self.coarse_mesh is None:
+            self.load_coarse_mesh()
+        if not self.coarse_mesh:
+            raise RuntimeError(f'Failed to load coarse mesh for s{self.section_num}')
+
+        if self.fflows is None:
+            self.load_fflows()
+        if not self.fflows:
+            raise RuntimeError(f'Failed to load fine flows for s{self.section_num}')
+
+        try:
+            self.clean_fflows(config)
+            logging.info('FineFlows cleaned')
+        except ValueError as e:
+            logging.error(e)
+
+        try:
+            self.reconcile_fflows(config)
+            logging.info('Flows reconciled')
+        except ValueError as e:
+            logging.error(e)
+
+
+    def clean_fflows(self, config: RegistrationConfig) -> None:
+
+        if self.fflows is None:
+            raise ValueError (f"s{self.section_num} clean_fflows failed: fine flows not available.")
+
+        fine_x, offsets_x = self.fflows[0]
+        fine_y, offsets_y = self.fflows[1]
+
+        kwargs = {
+            "min_peak_ratio": float(config.min_peak_ratio),
+            "min_peak_sharpness": float(config.min_peak_sharpness),
+            "max_deviation": float(config.max_deviation),
+            "max_magnitude": float(config.max_magnitude)
+        }
+
+        fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_x.items()}
+        fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_y.items()}
+
+        ffx = fine_x, offsets_x
+        ffy = fine_y, offsets_y
+        self.fflows_clean = (ffx, ffy)
+
+
+    def reconcile_fflows(self, config: RegistrationConfig) -> None:
+
+        if self.fflows_clean is None:
+            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows are missing")
+
+        if self.fflows_clean[0] is None:
+            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows [0] is missing")
+
+        if self.fflows_clean[1] is None:
+            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows [1] is missing")
+
+        fine_x, offsets_x = self.fflows_clean[0]
+        fine_y, offsets_y = self.fflows_clean[1]
+
+        kwargs = {
+            "min_patch_size": int(config.min_patch_size),
+            "max_gradient": float(config.max_gradient),
+            "max_deviation": float(config.reconcile_flow_max_deviation)
+        }
+
+        fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
+                  fine_x.items()}
+        fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
+                  fine_y.items()}
+
+        ffx = fine_x, offsets_x
+        ffy = fine_y, offsets_y
+        self.fflows_recon = (ffx, ffy)
+
+# ----  EOF FINE MESH ----
 
 # ---- WARP SECTION ----
 
@@ -1853,15 +2033,15 @@ class Section:
     def _ensure_warping_resources(self, config: WarpConfigStitching) -> None:
         """Hardened dependency loader with integrity checks."""
 
-        # Mesh Validation: Explicitly handle the different failure modes
+        # Fine Mesh Validation
         if self.fmesh is None:
             try:
                 self.fmesh = utils.load_mapped_npz(self.path_fmesh)
             except FileNotFoundError:
                 raise FileNotFoundError(f"Mesh missing for section {self.section_num}: {self.path_fmesh}")
-            except (utils.MeshCorruptionError, utils.MeshSchemaError) as e:
+            except BadZipFile as e:
                 logging.critical(f"Integrity check failed: {e}")
-                raise RuntimeError(f"Section {self.section_num} data is unrecoverable.") from e
+                raise RuntimeError(f"Section {self.section_num} fine mesh data is unrecoverable.") from e
 
         if not self.fmesh:
             raise ValueError(f"Mesh data for s{self.section_num} is empty.")
@@ -1885,7 +2065,7 @@ class Section:
         if config.margin_masking and self.margin_masks is None:
             try:
                 self.margin_masks = utils.load_mapped_npz(self.path_margin_masks)
-            except (FileNotFoundError, utils.MeshLoaderError):
+            except (FileNotFoundError, BadZipFile):
                 logging.warning(f"Margin masking skipped for s{self.section_num} - Resource unavailable.")
 
     def _persist_warped_result(self, data: np.ndarray):
@@ -1905,7 +2085,8 @@ class FlowFieldOrchestrator:
 
     def compute_fine_flows(
             self,
-            ff_config: FlowFieldEstimationConfig,
+            config: RegistrationConfig,
+            stride: int,
             masking: bool = False,
             store: bool = True,
             overwrite: bool = False,
@@ -1924,7 +2105,7 @@ class FlowFieldOrchestrator:
 
         # 2. Execution
         try:
-            self.section.fflows = self._run_iterative_flow_estimation(ff_config)
+            self.section.fflows = self._run_iterative_flow_estimation(config, stride)
         except RuntimeError as e:
             logging.error(f"Flow estimation failed: {e}")
             return
@@ -1955,14 +2136,15 @@ class FlowFieldOrchestrator:
 
     def _run_iterative_flow_estimation(
             self,
-            cfg: FlowFieldEstimationConfig,
+            cfg: RegistrationConfig,
+            stride: int,
             max_attempts: int = 5
     ) -> Tuple[Any, Any]:
         """
         Executes the SOFIMA flow estimation with a fallback
         mechanism for negative dimension/ValueError.
         """
-        ps = cfg.patch_size
+        ps = cfg.patch_size[0]
         ps_step = cfg.step_patch_size
 
         for attempt in range(max_attempts):
@@ -1971,8 +2153,8 @@ class FlowFieldOrchestrator:
 
             try:
                 logging.info(f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}")
-                flow_x = self._execute_sofima_call(ps, cfg, axis=0)
-                flow_y = self._execute_sofima_call(ps, cfg, axis=1)
+                flow_x = self._execute_sofima_call(cfg, stride, axis=0)
+                flow_y = self._execute_sofima_call(cfg, stride, axis=1)
                 return flow_x, flow_y
 
             except ValueError:
@@ -1982,14 +2164,14 @@ class FlowFieldOrchestrator:
 
         raise RuntimeError(f"Flow estimation exhausted all attempts for s{self.section.section_num}")
 
-    def _execute_sofima_call(self, ps: int, cfg: FlowFieldEstimationConfig, axis: int):
+    def _execute_sofima_call(self, cfg: RegistrationConfig, stride: int, axis: int):
         """Wrapper for the external library call."""
         return stitch_elastic.compute_flow_map(
             tile_map=self.section.tile_map,
             offset_map=self.section.cxy[axis],
             axis=axis,
-            patch_size=(ps, ps),
-            stride=(cfg.stride, cfg.stride),
+            patch_size=tuple(cfg.patch_size),
+            stride=(stride, stride),
             batch_size=cfg.batch_size,
         )
 
@@ -2151,31 +2333,19 @@ def fine_align_section(
     #         section.create_masks(**kwargs_masks)
 
     # # Computes optimized coarse offset array
-    # cfg = mesh.IntegrationConfig(
-    #     dt=0.001,
-    #     gamma=0.1,
-    #     k0=0.01,
-    #     k=0.05,
-    #     stride=(stride, stride),
-    #     num_iters=1000,
-    #     max_iters=20000,
-    #     stop_v_max=0.001,
-    #     dt_max=100,
-    # )
-    section.compute_coarse_mesh(cfg=cfg, overwrite=overwrite)
+    section.compute_coarse_mesh(conf=None, overwrite=overwrite)
 
     # # Create margin masks for warping
     section.build_margin_masks(grid_shape, margin, rim_size, overwrite=True)
 
     # # Compute flows between overlaps
-    config = FlowFieldEstimationConfig(
-        patch_size=patch_size,
-        stride=stride,
-        batch_size=batch_size
-    )
+    config = RegistrationConfig()
+    config['patch_size'] = [patch_size, patch_size],
+    config['batch_size'] = batch_size
+
     ff_orchestrator = FlowFieldOrchestrator(section)
     ff_orchestrator.compute_fine_flows(
-        ff_config=config, masking=True, store=True, overwrite=overwrite, ext=None
+        config=config, stride=stride, masking=True, store=True, overwrite=overwrite, ext=None
     )
 
 
@@ -2199,7 +2369,7 @@ def fine_align_section(
 
     # Downscale and store stitched section
     # if not Path(section.path_thumb).exists():
-    mini = section.downscale_section(fct=rescale_fct)
+    mini = section.downscale_section(rescale_fct)
     utils.save_img(section.path_thumb, mini)
 
     # Derotate stitched .zarr sections

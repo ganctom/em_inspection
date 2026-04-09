@@ -228,38 +228,33 @@ def section_worker_wrapper(
                     overwrite=True
                 )
 
-            # Compute flows between overlaps
+            # COMPUTE FINE FLOWS
             if task_name == Task.FINE_FLOWS:
                 section.compute_fine_flows(
-                    ff_config=config.fine_flows_config,
+                    config=config.registration_config,
+                    stride=config.mesh_integration_config.stride,
                     masking=True,
                     store=True,
                     overwrite=True,
                     ext=None,
                 )
 
-
-            if task_name == Task.WARP_SECTION:
-                wconfig = config.warp_config
-
-                clahe_kwargs = dict(
-                    kernel_size=wconfig.kernel_size,
-                    clip_limit=wconfig.clip_limit,
-                    nbins=wconfig.nbins
+            # COMPUTE FINE MESH
+            if task_name == Task.FINE_MESH:
+                section.compute_fine_mesh(
+                    reg_config=config.registration_config,
+                    mesh_config=config.mesh_integration_config
                 )
 
+            # WARP SECTION
+            if task_name == Task.WARP_SECTION:
                 section.warp_section(
-                    stride=config.fine_flows_config.stride,
-                    margin=wconfig.margin,
-                    use_clahe=wconfig.use_clahe,
-                    clahe_kwargs=clahe_kwargs,
-                    parallelism=wconfig.warp_parallelism,
-                    margin_masking=wconfig.margin_masking,
-                    zarr_store=True,
+                    stride=config.mesh_integration_config.stride,
+                    config=config.warp_config,
                 )
 
             # Downscale stitched .zarr section
-            if task_name == Task.DOWNSCALE:
+            if task_name == Task.DOWNSCALE_SECTION:
                 if section.image is None:
                     img = section.load_image()
                     if img is None:

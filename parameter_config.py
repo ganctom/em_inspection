@@ -86,39 +86,27 @@ class RegistrationConfig(BaseModel):
     min_range: list[int] = [10, 100, 0]
     min_overlap: int = 20
     filter_size: int = 10
-    patch_size: list[int] = [120, 120]
-    batch_size: int = 8000
-    min_peak_ratio: float = 1.0
-    min_peak_sharpness: float = 1.0
+    patch_size: list[int, int] = [120, 120]
+    batch_size: int = 512
+    min_peak_ratio: float = 1.6
+    min_peak_sharpness: float = 1.6
     max_deviation: int = 6
     max_magnitude: int = 0
     min_patch_size: int = 10
     max_gradient: float = 12.0
     reconcile_flow_max_deviation: float = -1.0
-
-
-class FlowFieldEstimationConfig(BaseModel):
-    patch_size: int = 160
-    stride: int = 40
-    batch_size: int = 256
-    min_peak_ratio: float = 1.6
-    min_peak_sharpness: float = 1.6
-    max_magnitude: float = 80
-    max_deviation: float = 20
-    max_gradient: float = 0
-    min_patch_size: int = 40
-    step_patch_size: int = 5
+    step_patch_size: int = 10
 
 
 class MeshIntegrationConfig(BaseModel):
     dt: float = 0.001
-    gamma: float = 0.0
+    gamma: float = 0.05
     k0: float = 0.01
     k: float = 0.1
-    stride: int = 20
+    stride: int = 40
     num_iters: int = 1000
     max_iters: int = 20000
-    stop_v_max: float = 0.005
+    stop_v_max: float = 0.001
     dt_max: float = 100
     start_cap: float = 0.01
     final_cap: float = 10
@@ -159,12 +147,10 @@ class StitchingConfig(BaseModel):
     start_section: int = 0
     end_section: int = 1
     registration_config: RegistrationConfig = RegistrationConfig()
-    fine_flows_config: FlowFieldEstimationConfig = FlowFieldEstimationConfig()
     mesh_integration_config: MeshIntegrationConfig = MeshIntegrationConfig()
     warp_config: WarpConfigStitching = WarpConfigStitching()
     mask_config: MaskingConfig = MaskingConfig()
     pipeline_config: PipelineConfig = PipelineConfig()
-
 
 
     @field_validator('output_dir', mode='before')

@@ -21,7 +21,7 @@ import parse_sbem_dataset as parse
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig, FlowFieldEstimationConfig, PipelineConfig
+from parameter_config import AcquisitionConfig, StitchingConfig, PipelineConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC, Task
 from constants import UIConstants as UI
@@ -834,25 +834,33 @@ class DataService:
                 overwrite=True
             )
 
-        # Compute flows between overlaps
+        # COMPUTE FINE FLOWS
         if task_name == Task.FINE_FLOWS:
             section.compute_fine_flows(
-                ff_config=config.fine_flows_config,
+                config=config.registration_config,
+                stride=config.mesh_integration_config.stride,
                 masking=True,
                 store=True,
                 overwrite=True,
                 ext=None,
             )
 
+        # COMPUTE FINE MESH
+        if task_name == Task.FINE_MESH:
+            section.compute_fine_mesh(
+                reg_config=config.registration_config,
+                mesh_config=config.mesh_integration_config
+            )
+
         # WARP SECTION
         if task_name == Task.WARP_SECTION:
             section.warp_section(
-                stride=config.fine_flows_config.stride,
+                stride=config.mesh_integration_config.stride,
                 config=config.warp_config,
             )
 
         # Downscale stitched .zarr section
-        if task_name == Task.DOWNSCALE:
+        if task_name == Task.DOWNSCALE_SECTION:
             if section.image is None:
                 img = section.load_image()
                 if img is None:

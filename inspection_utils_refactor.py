@@ -872,7 +872,7 @@ def get_tile_shape(fp_yaml: UniPath) -> Optional[TileXY]:
         return None
 
 
-def load_mapped_npz_old(fp: str) -> Optional[MaskMap]:
+def load_mapped_npz(fp: str) -> Optional[MaskMap]:
     file_path = Path(fp)
     if not file_path.exists():
         logging.info(f"File '{file_path}' not found.")
@@ -880,10 +880,10 @@ def load_mapped_npz_old(fp: str) -> Optional[MaskMap]:
 
     fmt_data = {}
     try:
-        data = np.load(fp, allow_pickle=True)
-        for key in data.keys():
-            fmt_data[eval(key)] = data[key]
-        return fmt_data
+        with np.load(fp, allow_pickle=True) as data:
+            for key in data.keys():
+                fmt_data[eval(key)] = data[key]
+            return fmt_data
 
     except BadZipFile:
         logging.warning(f"File '{file_path}' is not a valid zip file.")
@@ -892,22 +892,6 @@ def load_mapped_npz_old(fp: str) -> Optional[MaskMap]:
     except Exception as e:
         logging.warning(f"An unknown error occurred while loading '{file_path}': {e}")
         return None
-
-
-def load_mapped_npz(fp: str) -> dict:
-    file_path = Path(fp)
-    if not file_path.exists():
-        raise FileNotFoundError(f"Source path not found: {fp}")
-
-    try:
-        with np.load(file_path, allow_pickle=True) as data:
-            return {literal_eval(k): v for k, v in data.items()}
-
-    except BadZipFile as e:
-        raise MeshCorruptionError(f"NPZ at {fp} is corrupted or truncated.") from e
-
-    except (ValueError, SyntaxError) as e:
-        raise MeshSchemaError(f"Failed to parse mesh keys in {fp}. Check key serialization.") from e
 
 
 def pair_is_vertical(

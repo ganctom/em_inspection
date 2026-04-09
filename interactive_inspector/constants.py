@@ -14,13 +14,13 @@ class OverlapType:
 
 class Task:
     # 1. THE KEYS (Internal IDs)
-    COARSE_OFFSETS = "coarse_offsets"
-    COARSE_MESH    = "coarse_mesh"
-    MARGIN_MASKS   = "margin_masks"
-    FINE_FLOWS     = "fine_flows"
-    FINE_MESHES    = "fine_meshes"
-    WARP_SECTION   = "warp_section"
-    DOWNSCALE      = "downscale_warped_section"
+    COARSE_OFFSETS    = "coarse_offsets"
+    COARSE_MESH       = "coarse_mesh"
+    MARGIN_MASKS      = "margin_masks"
+    FINE_FLOWS        = "fine_flows"
+    FINE_MESH         = "fine_mesh"
+    WARP_SECTION      = "warp_section"
+    DOWNSCALE_SECTION = "downscale_warped_section"
 
     @classmethod
     def get_master_order(cls):
@@ -30,9 +30,9 @@ class Task:
             cls.COARSE_MESH,
             cls.MARGIN_MASKS,
             cls.FINE_FLOWS,
-            cls.FINE_MESHES,
+            cls.FINE_MESH,
             cls.WARP_SECTION,
-            cls.DOWNSCALE,
+            cls.DOWNSCALE_SECTION,
         ]
 
     @classmethod
@@ -43,9 +43,9 @@ class Task:
             cls.COARSE_MESH:    "Compute Coarse Meshes",
             cls.MARGIN_MASKS:   "Build Margin Masks",
             cls.FINE_FLOWS:     "Compute Fine Flows",
-            cls.FINE_MESHES:    "Get Fine Meshes",
+            cls.FINE_MESH: "Get Fine Meshes",
             cls.WARP_SECTION:   "Warp Section",
-            cls.DOWNSCALE:      "Downscale Warped Section",
+            cls.DOWNSCALE_SECTION: "Downscale Warped Section",
         }
         return [{"label": labels[t], "value": t} for t in cls.get_master_order()]
 
