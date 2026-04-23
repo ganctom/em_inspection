@@ -3,13 +3,15 @@ import logging
 import multiprocessing
 import os
 from dataclasses import dataclass
+from glob import glob
 from platform import system
 from pathlib import Path
-from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple, List
+from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple, List, Set
 from functools import partial
 
 import jax
 import numpy as np
+from numba.core.imputils import lower_setattr_generic
 from tqdm import tqdm
 
 import experiment_configs as cfg
@@ -538,7 +540,7 @@ def main_scan_missing_section_folders(insp: Inspection):
 
 def main_verify_tile_id_maps(insp: Inspection):
     failed_sec_nums = insp.verify_tile_id_maps()
-    fp = str(exp.root / 'invalid_tile_id_maps.yaml')
+    fp = str(insp.root / 'invalid_tile_id_maps.yaml')
     utils.write_dict_to_yaml(fp, failed_sec_nums)
     return
 
@@ -753,7 +755,7 @@ def main_fix_outliers_and_infinities(insp: Inspection):
         dir_ov = dir_overlaps / ('t' + str_a + '_t' + str_b)
         return utils.get_ov_sec_nums(dir_ov)
 
-    dir_overlaps = exp.dir_outliers
+    dir_overlaps = insp.dir_outliers
     # dir_overlaps = exp.dir_inspect / 'inf_overlaps'
 
     # tid_pairs = [(260, 261)]
@@ -863,7 +865,7 @@ def align_tile_pair(
         if offset is None or any(np.isinf(offset)):
             offset = (0, 0)
             print('Offset not determined')
-        my_sec.plot_ov(tid_a, tid_b, offset, dir_out, show_plot=False,clahe=clahe, blur=1.0)
+        my_sec.plot_ov(tid_a, tid_b, offset, dir_out, show_plot=False, clahe=clahe, blur=1.0)
 
     return seam_score
 
@@ -1016,7 +1018,7 @@ def main_plot_ovs_all_tilepairs(inspection: Inspection) -> None:
     if not sec_nums:
         return
 
-    exp.plot_all_ovs_par(sec_nums, num_proc)
+    inspection.plot_all_ovs_par(sec_nums, num_proc)
     return None
 
 
@@ -1068,7 +1070,7 @@ def main_postprocess_coarse_shifts(
     return
 
 
-def plot_ovs_from_out_or_inf_file(inspection: Inspection):
+def plot_ovs_from_out_or_inf_file(exp: Inspection):
     # Plot overlaps from file 'coarse_offset_outliers.txt' or 'all_inf.txt'
 
     path_outliers = exp.dir_inspect / 'coarse_offset_outliers.txt'
@@ -1085,7 +1087,7 @@ def plot_ovs_from_out_or_inf_file(inspection: Inspection):
 
     # Initialize sections
     sec_nums = tuple(ov_dict.keys())
-    init_specific_section_dirs(inspection, sec_nums)
+    init_specific_section_dirs(exp, sec_nums)
 
     # Plot overlaps
     exp.plot_specific_ovs_refactored(ov_dict, dir_name_out)
@@ -1171,23 +1173,21 @@ def parse_acquisition(
     validator.validate_tile_id_maps()
 
 
-    return
-
 
 if __name__ == "__main__":
 
     ### Accessing individual alignment experiments
     configs = cfg.get_experiment_configurations()
     # exp_config = configs.get("ROLI_F1")
-    exp_config = configs.get("ROLI_F1_s1200_s1249")
+    exp_config = configs.get("ROLI_F1_run-12801_15000")
 
     ### Initialize experiment
-    exp = Inspection(exp_config)
+    # exp = Inspection(exp_config)
     # exp.init_experiment()
     # print(exp)
 
     ### PARSE SBEM ACQUISITION  ###
-    parse_acquisition(exp_config, sec_range=(1200, 1249))
+    # parse_acquisition(exp_config, sec_range=(1200, 1249))
 
     ### PRE- & POST-PROCESS ROUTINES
     # main_scan_missing_section_folders(exp)
@@ -1202,14 +1202,14 @@ if __name__ == "__main__":
 
 
     ### POSTPROCESS COARSE SHIFTS
-    main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
+    # main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
 
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT
-    main_par_multiproc(exp)
+    # main_par_multiproc(exp)
 
 
-    ### DETECT BEAD COARSE OFFSETS
+    ### DETECT BAD COARSE OFFSETS
     # main_get_cxyz_outliers(stitch_config=exp_config)
 
 
@@ -1221,6 +1221,14 @@ if __name__ == "__main__":
 
     # FIX COARSE OFFSETS
     # main_fix_outliers_and_infinities(exp)
+
+    # FIND MISSING STITCHED SECTIONS
+    exp = Inspection(exp_config)
+    dir_stitched = exp.dir_stitched
+    sec_nums_to_check = list(range(12801, 15000))
+    missing_sec_nums = utils.get_missing_stitched_sections(dir_stitched, sec_nums_to_check)
+    print(missing_sec_nums)
+
 
 
 

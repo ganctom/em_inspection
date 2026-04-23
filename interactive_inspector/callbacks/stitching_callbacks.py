@@ -1,5 +1,5 @@
 import threading
-from dash import Input, Output, State, callback
+from dash import Input, Output, State, callback, no_update
 from dash.exceptions import PreventUpdate
 
 from constants import UI, MSG
@@ -120,3 +120,23 @@ def sync_pipeline_progress(n, current_logs):
 
     # 4. Standard Running State
     return updated_logs, progress, True, True, False, f"⏳ {msg}"
+
+
+@callback(
+    Output(UI.ID_STITCH_PPLN_CONSOLE, "children", allow_duplicate=True),
+    Input(UI.ID_STITCH_UTILS_MISSING, "n_clicks"),
+    State(UI.ID_STITCH_CONFIG_PATH, "value"),
+    prevent_initial_call=True
+)
+def handle_find_missing(n_clicks, config_path):
+    if not n_clicks:
+        return no_update
+
+    # Logic: Scan output directory for missing .zarr or .tif indices
+    missing_indices = service.get_missing_stitched_sections()
+
+    if not missing_indices:
+        return [UI.log_row("✨ No missing sections found. Dataset is complete.", type="success")]
+
+    msg = f"Found {len(missing_indices)} missing sections: {missing_indices[:10]}..."
+    return [UI.log_row(msg, type="warning")]

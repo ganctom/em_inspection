@@ -14,6 +14,7 @@ import numpy as np
 import gc
 import threading
 import yaml
+from babel.util import missing
 
 from sofima.mesh import IntegrationConfig
 import parse_sbem_dataset as parse
@@ -25,7 +26,7 @@ from parameter_config import AcquisitionConfig, StitchingConfig, PipelineConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC, Task
 from constants import UIConstants as UI
-from inspection_utils_refactor import save_img
+from inspection_utils_refactor import save_img, get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
@@ -75,6 +76,11 @@ class DataService:
         self.stitch_status = {"active": False, "pending_messages": []}
         self.message_queue = deque()
         self.service_initialized = False
+
+    def get_missing_stitched_sections(self) -> list[int]:
+        dir_stitched = self.inspection.dir_stitched
+        sec_nums_to_check = list(range(self.inspection.first_sec, self.inspection.last_sec))
+        return get_missing_stitched_sections(dir_stitched, sec_nums_to_check)
 
 
     def create_and_save_new_experiment(

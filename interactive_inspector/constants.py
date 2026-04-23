@@ -781,6 +781,7 @@ class UIConstants:
 
     ID_STITCH_PPLN_ABORT = "stitch-ppln-abort-btn"
     NAME_STITCH_PPLN_ABORT = "Abort"
+    ID_STITCH_UTILS_MISSING = "btn-stitch-utils-missing"
 
 
     # --- HEADER ---
@@ -814,6 +815,7 @@ class UIConstants:
                 className="small custom-checklist"
             ),
         ], width=5)
+
 
     # Pipeline execution buttons
     @property

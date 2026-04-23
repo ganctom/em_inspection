@@ -1,12 +1,9 @@
 import random
 import re
 import time
-from ast import literal_eval
 from concurrent.futures import ThreadPoolExecutor
-from time import perf_counter_ns
 import subprocess
 from collections import OrderedDict
-from os.path import join
 
 import cv2
 import numpy as np
@@ -16,9 +13,10 @@ import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
 from dataclasses import dataclass
-from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable
+from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable, Set
 from platform import system
 from re import compile
+
 from glob import glob
 import os
 from zipfile import BadZipFile
@@ -31,16 +29,15 @@ import matplotlib
 matplotlib.use('Agg')  # Must be called before importing pyplot
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
-from tqdm import tqdm
 from scipy.interpolate import CloughTocher2DInterpolator
-from statistics import mean, stdev
-import gc
 from ome_zarr.io import parse_url
 from ome_zarr.scale import Scaler
 from ome_zarr.writer import write_image
 from ome_zarr.format import FormatV04
 
 from schema import InspectionSchema as IS
+
+SECTION_PATTERN = re.compile(r's(?P<num>\d+)_')
 
 UniPath = Union[str, Path]
 TileXY = tuple[int, int]
@@ -272,6 +269,11 @@ def get_section_num(section_path: UniPath) -> Optional[int]:
         return num
     except (ValueError, IndexError):
         return None
+
+
+def apply_clahe(image, clip_limit=2., grid_size=(8, 8)):
+    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid_size)
+    return clahe.apply(image)
 
 
 def filter_and_sort_sections(sections_dir: str) -> Optional[list[str]]:
@@ -939,12 +941,6 @@ def pair_is_vertical(
             return False
         else:
             return None
-
-
-def apply_clahe(image, clip_limit=2., grid_size=(8, 8)):
-    clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid_size)
-    return clahe.apply(image)
-
 
 
 def get_shift(cx_cy: np.ndarray[float],
@@ -1906,6 +1902,43 @@ def store_section_zarr(
     except Exception as e:
         logging.error(f"Failed to store Zarr section at {zarr_path}: {e}")
         raise
+
+
+def parse_sec_num(filename: str) -> Optional[int]:
+    """
+    Accepts a filename string and extracts the ID.
+    Example input: 's12801_g0.zarr'
+    """
+    match = SECTION_PATTERN.search(filename)
+    if match:
+        return int(match.group('num'))
+    return None
+
+def identify_missing_ids(
+        expected_ids: Sequence[int],
+        actual_ids: Set[int]
+) -> List[int]:
+    return sorted(list(set(expected_ids) - actual_ids))
+
+def get_existing_ids(path_stitched: str) -> Set[int]:
+    with os.scandir(path_stitched) as entries:
+        zarr_dirs = (e.name for e in entries if e.is_dir() and e.name.endswith('.zarr'))
+        extr_nums = (parse_sec_num(name) for name in zarr_dirs)
+        return {n for n in extr_nums if n is not None}
+
+def get_missing_stitched_sections(
+        target_path: Path | str,
+        expected_ids: Sequence[int]
+) -> List[int]:
+    """I/O Orchestration Layer."""
+    if not os.path.exists(target_path):
+        logging.error(f"Target path not found: {target_path}")
+        return sorted(list(expected_ids))
+
+    actual_ids = get_existing_ids(target_path)
+    missing = identify_missing_ids(expected_ids, actual_ids)
+    logging.info(f"Scan complete: {len(missing)} missing.")
+    return missing
 
 
 if __name__ == "__main__":

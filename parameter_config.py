@@ -9,6 +9,7 @@ DEF_PX_SIZE = 10.
 DEF_CT = 25.
 
 FN_STITCHING_CFG = "tile_stitching_config.yaml"
+EXP_YAML_PATH = "/Users/ganctoma/SW/_projects/em_inspection/src/em_inspection/interactive_inspector/app_data/user_experiments.yaml"
 
 
 def save_to_disk(cfg_obj: BaseModel, path_out: str):
@@ -76,7 +77,7 @@ class ExpConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
-    exp_yaml_path: str = "app_data/user_experiments.yaml"
+    exp_yaml_path: str = EXP_YAML_PATH
     projects: Dict[str, ExpConfig] = {}
 
 

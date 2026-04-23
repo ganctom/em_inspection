@@ -48,12 +48,12 @@ class ExperimentRegistry:
 
     def load_from_disk(self):
         """Loads previously saved experiments."""
-        p = Path(self.app_cfg.exp_yaml_path)
-        if Path(p).exists():
-            with open(p, 'r') as f:
-                data = yaml.safe_load(f) or {}
-                for name, fields in data.items():
-                    self.app_cfg.projects[name] = ExpConfig.model_validate(fields)
+        p = self.app_cfg.exp_yaml_path
+        with open(p, 'r') as f:
+            data = yaml.safe_load(f) or {}
+            for name, fields in data.items():
+                self.app_cfg.projects[name] = ExpConfig.model_validate(fields)
+
 
     def get_all(self) -> Dict[str, ExpConfig]:
         return self.app_cfg.projects

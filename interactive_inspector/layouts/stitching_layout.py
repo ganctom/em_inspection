@@ -71,15 +71,32 @@ def layout(active_service=None):
             ], width=12)
         ]),
 
-        # 3. CONSOLE & PROGRESS (Refined)
+        # 3. CONSOLE & PROGRESS
         dbc.Row([
             dbc.Col([
+                # --- UTILITY BAR ---
+                html.Div([
+
+                    dbc.Button([
+                        html.I(className="bi bi-search me-2"), "Missing Stitched Sections"
+                    ], id=UI.ID_STITCH_UTILS_MISSING, color="info", size="sm", className="me-2")
+
+                    # # Placeholder for future utils
+                    # dbc.Button([
+                    #     html.I(className="bi bi-trash me-2"), "Cleanup Temp Files"
+                    # ], id="stitch-utils-cleanup", color="secondary", outline=True, size="sm", className="me-2",
+                    #     disabled=True),
+
+                ], className="mb-2 d-flex justify-content-start"),
+
                 # Status Bar (Dynamic Text)
                 html.Div(id="pipeline-status-bar", className="mt-3 fw-bold small text-secondary"),
-                UI.STITCH_PPLN_CONSOLE,  # The Main Console Output
-                UI.STITCH_PPLN_PROGRESS_BAR   # The Progress Indicator
+                UI.STITCH_PPLN_CONSOLE,
+                UI.STITCH_PPLN_PROGRESS_BAR
             ], width=12)
         ], className="px-3"),
+
+
 
 
 

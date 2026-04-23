@@ -1587,6 +1587,7 @@ class Section:
             #     min_overlap=min_overlap,
             #     filter_size=filter_size
             # )
+            logging.debug(cx, cy)
 
             # Get final shift vector
             cx, cy = map(np.squeeze, (cx, cy))
