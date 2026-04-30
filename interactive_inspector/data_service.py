@@ -30,7 +30,7 @@ from inspection_utils_refactor import save_img, get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
-    store_cxyz_to_offset_files, cached_read_image,
+    store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
 
 
@@ -430,10 +430,7 @@ class DataService:
             logging.warning(f"Section {sec_num} path not found in configuration.")
             return None
 
-        section = Section(sec_path)
-        section.tile_dicts = utils.get_tile_dicts(section.path)
-        section.read_tile_id_map()
-        return section
+        return Section(sec_path)
 
     def _get_initialized_section(self, z: int) -> Optional[Section]:
         """Manages Section lifecycle and data injection."""
@@ -725,10 +722,13 @@ class DataService:
         }
 
         total = len(section_numbers)
-        failed_sections = []  # ← Track which sections failed
+        failed_sections = []
         successful = 0
 
         try:
+            # Initialize sections
+            init_specific_section_dirs(self.inspection, section_numbers)
+
             for i, sec_num in enumerate(section_numbers):
                 if self.abort_requested:
                     self.coarse_align_status["pending_messages"].append(
@@ -795,44 +795,33 @@ class DataService:
                     UI.log_row("🏁 Coarse Alignment Complete", type="success")
                 )
 
-
     def execute_fine_alignment_step(
             self,
-            section_num: int,
+            section: Section,
             task_name: str,
             config: StitchingConfig
     ) -> None:
         """
         The low-level worker that maps a Pipeline Task to a Section method.
+        The 'section' object's state is preserved across sequential calls.
         """
-        # 1. Initialize Section Object
-        try:
-            section = self._init_section(section_num)
-            section.feed_section_data()
-        except NotADirectoryError as _:
-            logging.error(f'failed to load section s{section_num}')
-            return None
 
-        # 2. Dispatch based on Task
         if task_name == Task.COARSE_MESH:
-            # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
             cfg_yaml = config.mesh_integration_config
-
             cfg = IntegrationConfig(
-                dt=cfg_yaml.dt,  # dt=cfg_yaml.dt
+                dt=cfg_yaml.dt,
                 gamma=cfg_yaml.gamma,
-                k0=0.0,  # unused
+                k0=0.0,
                 k=cfg_yaml.k,
-                stride=(1,1),  # unused
+                stride=(1, 1),
                 num_iters=cfg_yaml.num_iters,
                 max_iters=cfg_yaml.max_iters,
                 stop_v_max=cfg_yaml.stop_v_max,
                 dt_max=cfg_yaml.dt_max,
             )
-
             section.compute_coarse_mesh(conf=cfg, overwrite=True)
 
-        if task_name == Task.MARGIN_MASKS:
+        elif task_name == Task.MARGIN_MASKS:
             section.build_margin_masks(
                 grid_shape=self.acq_config.grid_shape,
                 margin=config.mask_config.mask_margin,
@@ -840,8 +829,7 @@ class DataService:
                 overwrite=True
             )
 
-        # COMPUTE FINE FLOWS
-        if task_name == Task.FINE_FLOWS:
+        elif task_name == Task.FINE_FLOWS:
             section.compute_fine_flows(
                 config=config.registration_config,
                 stride=config.mesh_integration_config.stride,
@@ -851,26 +839,23 @@ class DataService:
                 ext=None,
             )
 
-        # COMPUTE FINE MESH
-        if task_name == Task.FINE_MESH:
+        elif task_name == Task.FINE_MESH:
             section.compute_fine_mesh(
                 reg_config=config.registration_config,
                 mesh_config=config.mesh_integration_config
             )
 
-        # WARP SECTION
-        if task_name == Task.WARP_SECTION:
+        elif task_name == Task.WARP_SECTION:
             section.warp_section(
                 stride=config.mesh_integration_config.stride,
                 config=config.warp_config,
             )
 
-        # Downscale stitched .zarr section
-        if task_name == Task.DOWNSCALE_SECTION:
+        elif task_name == Task.DOWNSCALE_SECTION:
             if section.image is None:
                 img = section.load_image()
                 if img is None:
-                    logging.error(f"FAILED at {task_name}: Image load failed after retries")
+                    logging.error(f"FAILED at {task_name}: Image load failed")
                     return None
 
             fct = config.pipeline_config.downscale_factor
@@ -880,8 +865,6 @@ class DataService:
             )
 
         return None
-
-
 
 
 # Initialize single instances

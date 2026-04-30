@@ -72,6 +72,11 @@ class TileLoadingError(Exception):
     """Raised when the tile orchestration fails to produce a valid map."""
     pass
 
+class MeshResourceError(RuntimeError):
+    """Raised when critical mesh/tile resources cannot be loaded or validated."""
+    pass
+
+
 # 1. Standardized Data Model (Interface Segregation)
 @dataclass(frozen=True)
 class CoarseData:

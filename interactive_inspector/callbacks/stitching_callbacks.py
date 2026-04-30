@@ -4,7 +4,7 @@ from dash.exceptions import PreventUpdate
 
 from constants import UI, MSG
 from data_service import service, orchestrator
-
+from inspection_refactored import init_specific_section_dirs
 
 @callback(
     [Output(UI.ID_STITCH_PPLN_CONSOLE, "children", allow_duplicate=True),
@@ -33,10 +33,10 @@ def start_stitching_pipeline(
     if not selected_steps:
         return [UI.log_row(MSG.NO_STEPS_ERROR, type="error")], 0, True
 
-    # 1. Resolve parallel state
+    # Resolve parallel state
     is_par = bool(parallel_value) if not isinstance(parallel_value, list) else 'parallel' in parallel_value
 
-    # 2. Validation & Config Prep
+    # Validation & Config Prep
     try:
         sec_nums, final_config = orchestrator.validate_and_prepare(
             range_str,
@@ -46,7 +46,10 @@ def start_stitching_pipeline(
     except Exception as e:
         return [UI.log_row(MSG.SETUP_ERROR.format(error=e), type="error")], 0, True
 
-    # 3. Thread Dispatch
+    # Initialize sections data
+    init_specific_section_dirs(service.inspection, sec_nums)
+
+    # Thread Dispatch
     target_method = (orchestrator.run_parallel_pipeline if is_par
                      else orchestrator.run_sequential_pipeline)
 
@@ -56,7 +59,7 @@ def start_stitching_pipeline(
         daemon=True
     ).start()
 
-    # 4. Generate Log using MSG Constants
+    # Generate Log using MSG Constants
     mode_str = MSG.MODE_PARALLEL if is_par else MSG.MODE_SEQUENTIAL
     tsk_lbl = MSG.format_tasks(selected_steps)
 

@@ -684,8 +684,13 @@ def main_par_multiproc(insp: Inspection):
     start = 1870  # insp.first_sec
     end = insp.last_sec
     # start, end = 1869, 1869
+
     sec_nums = tuple(range(start, end+1))
-    init_specific_section_dirs(insp, sec_nums)
+    valid_nums = utils.validate_section_numbers(
+        insp.first_sec, insp.last_sec, sec_nums
+    )
+
+    init_specific_section_dirs(insp, valid_nums)
     end = None
 
     num_processes = 10
@@ -960,19 +965,18 @@ def init_specific_section_dirs(exp: Inspection, sec_nums: Sequence[int]) -> None
     """
     Initializes section directories based on a provided list of section numbers.
     """
-    valid_nums = utils.validate_section_numbers(exp.first_sec, exp.last_sec, sec_nums)
 
     # ─── Build properties for valid sections ────────────────────────
     grid = exp.grid_nr
     base = Path(exp.dir_sections)
 
-    names = [f"s{n}_g{grid}" for n in valid_nums]
+    names = [f"s{n}_g{grid}" for n in sec_nums]
     dirs_ = [base / name for name in names]
 
-    exp.section_nums   = valid_nums
+    exp.section_nums   = list(sec_nums)
     exp.section_names  = names
     exp.section_dirs   = dirs_
-    exp.section_dicts  = {n: str(p) for n, p in zip(valid_nums, dirs_)}
+    exp.section_dicts  = {n: str(p) for n, p in zip(sec_nums, dirs_)}
     return None
 
 
@@ -984,8 +988,11 @@ def _prepare_sections(
     """Helper to handle the repetitive range creation and initialization."""
     try:
         sec_nums = list(range(start, end+1))
-        init_specific_section_dirs(inspection, sec_nums)
-        return sec_nums
+        valid_nums = utils.validate_section_numbers(
+            inspection.first_sec, inspection.last_sec, sec_nums
+        )
+        init_specific_section_dirs(inspection, valid_nums)
+        return valid_nums
     except ValueError as e:
         logging.error(f"{e}")
         return None
@@ -1057,8 +1064,11 @@ def main_postprocess_coarse_shifts(
 ) -> None:
 
     if exp.section_nums is None:
-        all_sec_nums = tuple(range(exp.first_sec, exp.last_sec+1))
-        init_specific_section_dirs(exp, all_sec_nums)
+        sec_nums = tuple(range(exp.first_sec, exp.last_sec+1))
+        valid_nums = utils.validate_section_numbers(
+            exp.first_sec, exp.last_sec, sec_nums
+        )
+        init_specific_section_dirs(exp, valid_nums)
 
     postprocess_cxcy(
         exp=exp,
@@ -1087,7 +1097,10 @@ def plot_ovs_from_out_or_inf_file(exp: Inspection):
 
     # Initialize sections
     sec_nums = tuple(ov_dict.keys())
-    init_specific_section_dirs(exp, sec_nums)
+    valid_nums = utils.validate_section_numbers(
+        exp.first_sec, exp.last_sec, sec_nums
+    )
+    init_specific_section_dirs(exp, valid_nums)
 
     # Plot overlaps
     exp.plot_specific_ovs_refactored(ov_dict, dir_name_out)

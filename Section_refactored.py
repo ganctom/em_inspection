@@ -72,7 +72,7 @@ class Section:
         self.path: Path = path
         self.path_stitched: Path = self.resolve_dir_stitched()
         self.section_num = int(str(self.path.name).split("_g")[0][1:])
-        self.image: Optional[np.ndarray] = None
+        self.image: np.ndarray | None = None
 
         self.path_cxy = str(self.path / IS.FILE_COARSE_OFFSETS)
         self.path_section_yaml = str(self.path / IS.FILE_SECTION_CONFIG)
@@ -132,8 +132,7 @@ class Section:
         path = Path(self.path_cxy)
 
         if not path.is_file():
-            logging.warning(f"Coarse matrix file does not exist: {path}")
-            return None
+            raise FileNotFoundError(f"Coarse matrix file does not exist: {path}")
 
         try:
             data = utils.read_coarse_mat(path)
@@ -454,6 +453,8 @@ class Section:
 
         if self.tile_id_map is None:
             self.feed_section_data()
+
+        if self.coarse_mesh is None:
             self.load_coarse_mesh()
 
         if self.mesh_offsets is None:
@@ -1767,6 +1768,7 @@ class Section:
 
     def compute_fine_flows(self, config: RegistrationConfig, **kwargs) -> None:
         """Proxy method to the Orchestrator service."""
+        logging.debug(f'flow config: ps={config.patch_size}, stride={kwargs.get('stride')}')
         orchestrator = FlowFieldOrchestrator(self)
         orchestrator.compute_fine_flows(config, **kwargs)
 
@@ -1792,7 +1794,6 @@ class Section:
 
 # ----  FINE MESH ----
 
-
     def compute_fine_mesh(
             self,
             reg_config: RegistrationConfig,
@@ -1804,7 +1805,9 @@ class Section:
         start_time = time.perf_counter()
 
         # 1. Resource Validation & Dependency Loading
-        self._ensure_fine_mesh_resources(reg_config)
+        self._ensure_fine_mesh_resources()
+        self.clean_fflows(reg_config)
+        self.reconcile_fflows(reg_config)
 
         # 2. Computation Block
         try:
@@ -1880,45 +1883,82 @@ class Section:
             raise
 
 
-    def _ensure_fine_mesh_resources(self, config: RegistrationConfig) -> None:
-        """Hardened dependency loader with integrity checks."""
+    def _ensure_fine_mesh_resources(self) -> None:
+        """Ensure all required resources for fine mesh processing are loaded and ready.
 
-        # Metadata Injection
-        if self.tile_dicts is None:
-            self.tile_dicts = utils.get_tile_dicts(self.path)
-            self.read_tile_id_map()
+        This is a hardened dependency loader. It fails fast on critical missing data
+        but is idempotent (safe to call multiple times).
 
-        # Image Buffer Loading
-        if self.tile_map is None:
-            try:
-                self.load_tile_map(clahe=True, parallel=True)
-            except utils.TileLoadingError as e:
-                raise RuntimeError(f"Aborting section {self.section_num} due to missing tile-map data.") from e
+        Raises:
+            MeshResourceError: If any critical resource is missing or invalid.
+        """
+        self._ensure_tile_dicts()
+        self._ensure_coarse_offsets()
+        self._ensure_tile_map()
+        self._ensure_coarse_mesh()
+        self._ensure_fflows()
+
+    def _ensure_tile_dicts(self) -> None:
+        if self.tile_dicts is not None:
+            return
+
+        logging.info("Tile dicts not loaded. Loading now for section %s", self.section_num)
+        self.tile_dicts = utils.get_tile_dicts(self.path)
+        self.read_tile_id_map()
+
+
+    def _ensure_coarse_offsets(self) -> None:
+        if self.cxy is not None:
+            return
+
+        try:
+            _ = self.get_coarse_mat()
+        except (FileNotFoundError, ValueError) as exc:
+            raise utils.MeshResourceError(
+                f"Coarse offset array (cxy) missing or corrupted for section {self.section_num}"
+            ) from exc
+
+    def _ensure_tile_map(self) -> None:
+        if self.tile_map is not None:
+            return
+
+        logging.info("Loading tile map for section %s (CLAHE + parallel)", self.section_num)
+        try:
+            self.load_tile_map(clahe=True, parallel=True)
+        except utils.TileLoadingError as e:
+            raise utils.MeshResourceError(
+                f"Aborting section {self.section_num}: missing tile-map data"
+            ) from e
 
         if not self.tile_map:
-            raise RuntimeError(f"Tile map loading returned empty for section {self.section_num}")
+            raise utils.MeshResourceError(
+                f"Tile map loading returned empty for section {self.section_num}"
+            )
 
-        if self.coarse_mesh is None:
+    def _ensure_coarse_mesh(self) -> None:
+        if self.coarse_mesh is not None:
+            return
+
+        try:
             self.load_coarse_mesh()
-        if not self.coarse_mesh:
-            raise RuntimeError(f'Failed to load coarse mesh for s{self.section_num}')
+        except (EOFError, FileNotFoundError) as e:
+            raise utils.MeshResourceError(
+                f"Failed to load coarse mesh for section {self.section_num}"
+            ) from e
+        except Exception as e:  # fallback for unexpected errors
+            raise utils.MeshResourceError(
+                f"Unexpected error loading coarse mesh for section {self.section_num}"
+            ) from e
 
-        if self.fflows is None:
-            self.load_fflows()
+    def _ensure_fflows(self) -> None:
+        if self.fflows is not None:
+            return
+
+        self.load_fflows()
         if not self.fflows:
-            raise RuntimeError(f'Failed to load fine flows for s{self.section_num}')
-
-        try:
-            self.clean_fflows(config)
-            logging.info('FineFlows cleaned')
-        except ValueError as e:
-            logging.error(e)
-
-        try:
-            self.reconcile_fflows(config)
-            logging.info('Flows reconciled')
-        except ValueError as e:
-            logging.error(e)
+            raise utils.MeshResourceError(
+                f"Failed to load fine flows for section {self.section_num}"
+            )
 
 
     def clean_fflows(self, config: RegistrationConfig) -> None:
@@ -2050,6 +2090,8 @@ class Section:
         # Metadata Injection
         if self.tile_dicts is None:
             self.tile_dicts = utils.get_tile_dicts(self.path)
+
+        if self.tile_id_map is None:
             self.read_tile_id_map()
 
         # Image Buffer Loading
@@ -2074,6 +2116,7 @@ class Section:
         path_stitched = self.path_stitched.parent
         section_name = Path(self.path).name + '.zarr'
         utils.store_section_zarr(data, section_name, path_stitched)
+        self.image = data
 
 
 # ---- EOF WARP SECTION ----
@@ -2106,6 +2149,7 @@ class FlowFieldOrchestrator:
 
         # 2. Execution
         try:
+            logging.info(f'computing fine-flows with stride: {stride}')
             self.section.fflows = self._run_iterative_flow_estimation(config, stride)
         except RuntimeError as e:
             logging.error(f"Flow estimation failed: {e}")
@@ -2118,7 +2162,7 @@ class FlowFieldOrchestrator:
     def _prepare_infrastructure(self, masking: bool) -> bool:
         """Ensures all buffers and remote data are ready for computation."""
         if self.section.cxy is None:
-            self.section.feed_section_data()
+            _ = self.section.get_coarse_mat()
 
         if self.section.cxy is None:
             logging.warning(f"Coarse offset array missing for s{self.section.section_num}")
