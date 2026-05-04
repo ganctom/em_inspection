@@ -66,7 +66,7 @@ class Section:
 
         path = Path(utils.cross_platform_path(str(path)))
         if not path.is_dir():
-            m = f"Section init failed: input path is not a directory or does not exist {path}."
+            m = f"Section init failed: input path is not a directory or does not exist: \n {path}"
             raise NotADirectoryError(m)
 
         self.path: Path = path

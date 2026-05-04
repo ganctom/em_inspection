@@ -1,3 +1,5 @@
+import gc
+from abc import ABC, abstractmethod
 import logging
 import threading
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -10,6 +12,101 @@ from Section_refactored import CoarseStitchConfig, Section
 from constants import Task, UI
 from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img, get_tile_dicts
 from parameter_config import StitchingConfig, RegistrationConfig
+
+
+class TaskHandler(ABC):
+    @abstractmethod
+    def run(self, section: Section, config: StitchingConfig) -> None:
+        """Standard execution interface for all pipeline steps."""
+        pass
+
+class TaskRegistry:
+    _registry: dict[Task, TaskHandler] = {}
+
+    @classmethod
+    def register(cls, task_key: Task):
+        def decorator(handler_cls: type[TaskHandler]):
+            # Instantiate the handler once during registration
+            cls._registry[task_key] = handler_cls()
+            return handler_cls
+        return decorator
+
+    @classmethod
+    def execute(cls, task_key: Task, section: Section, config: StitchingConfig):
+        if handler := cls._registry.get(task_key):
+            handler.run(section, config)
+        else:
+            raise NotImplementedError(f"No handler registered for {task_key}")
+
+
+@TaskRegistry.register(Task.COARSE_MESH)
+class CoarseMeshHandler(TaskHandler):
+    def run(self, section: Section, config: StitchingConfig) -> None:
+        # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
+        yaml_config = config.mesh_integration_config
+
+        cfg = IntegrationConfig(
+            dt=yaml_config.dt,
+            gamma=yaml_config.gamma,
+            k0=0.0,  # unused
+            k=yaml_config.k,
+            stride=(1, 1),  # unused
+            num_iters=yaml_config.num_iters,
+            max_iters=yaml_config.max_iters,
+            stop_v_max=yaml_config.stop_v_max,
+            dt_max=yaml_config.dt_max,
+        )
+        section.compute_coarse_mesh(conf=cfg, overwrite=True)
+
+@TaskRegistry.register(Task.MARGIN_MASKS)
+class MarginMasksHandler(TaskHandler):
+    def run(self, section: Section, config: StitchingConfig):
+        section.build_margin_masks(
+            grid_shape=config.acquisition_config.grid_shape,
+            margin=config.mask_config.mask_margin,
+            rim_size=config.mask_config.rim_size,
+            overwrite=True
+        )
+
+@TaskRegistry.register(Task.FINE_FLOWS)
+class FineFlowsHandler(TaskHandler):
+    def run(self, section: Section, config: StitchingConfig):
+        section.compute_fine_flows(
+            config=config.registration_config,
+            stride=config.mesh_integration_config.stride,
+            masking=True,
+            store=True,
+            overwrite=True,
+            ext=None,
+        )
+
+@TaskRegistry.register(Task.FINE_MESH)
+class FineMeshHandler(TaskHandler):
+    def run(self, section: Section, config: StitchingConfig):
+        section.compute_fine_mesh(
+            reg_config=config.registration_config,
+            mesh_config=config.mesh_integration_config
+        )
+
+@TaskRegistry.register(Task.WARP_SECTION)
+class WarpSectionHandler(TaskHandler):
+    def run(self, section: Section, config: StitchingConfig):
+        section.warp_section(
+            stride=config.mesh_integration_config.stride,
+            config=config.warp_config,
+        )
+
+@TaskRegistry.register(Task.DOWNSCALE_SECTION)
+class DownscaleHandler(TaskHandler):
+    def run(self, section, config):
+        self._ensure_image_loaded(section)
+        fct = config.pipeline_config.downscale_factor
+        save_img(path=section.path_thumb, data=section.downscale_section(fct))
+
+    @staticmethod
+    def _ensure_image_loaded(section: Section):
+        if section.image is None:
+            section.load_image()
 
 
 class PipelineOrchestrator:
@@ -51,14 +148,12 @@ class PipelineOrchestrator:
 
                 self.ppln_service.stitch_status["message"] = f"s{sec_num}: Processing all tasks..."
 
-                # Call wrapper once per section (it handles all tasks internally)
                 section_worker_wrapper(
                     section_path=section_path,
                     task_keys=ordered_tasks,
                     config=config
                 )
 
-                # Update progress after whole section is done
                 current_work += len(ordered_tasks)
                 progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
                 self.ppln_service.stitch_status["progress"] = progress_pct
@@ -209,96 +304,43 @@ def load_section(path: str | Path) -> Section:
 
 def section_worker_wrapper(
         section_path: str,
-        task_keys: list,
+        task_keys: list[Task],
         config: StitchingConfig,
-):
-    """
-    Standalone worker. Initializes its own Section instance to ensure
-    memory isolation between processes.
-    """
+) -> tuple[str, bool, str]:
 
-    # Initialize the section object
-    section = load_section(section_path)
+    section = None
+    state = "RESOURCE_INIT"
 
     try:
-        # 2. Dispatch based on Task
-        for task_name in task_keys:
+        logging.debug(f"[{section_path}] Initializing section")
+        section = load_section(section_path)
 
-            if task_name == Task.COARSE_MESH:
-                # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
-                yaml_config = config.mesh_integration_config
+        if section is None:
+            return section_path, False, "CRITICAL: load_section returned None"
 
-                cfg = IntegrationConfig(
-                    dt=yaml_config.dt,
-                    gamma=yaml_config.gamma,
-                    k0=0.0,  # unused
-                    k=yaml_config.k,
-                    stride=(1, 1),  # unused
-                    num_iters=yaml_config.num_iters,
-                    max_iters=yaml_config.max_iters,
-                    stop_v_max=yaml_config.stop_v_max,
-                    dt_max=yaml_config.dt_max,
-                )
+        for task in task_keys:
+            state = task.name if hasattr(task, 'name') else str(task)
+            logging.info(f"[{section_path}] Starting {state}")
 
-                section.compute_coarse_mesh(conf=cfg, overwrite=True)
+            TaskRegistry.execute(task, section, config)
 
-            if task_name == Task.MARGIN_MASKS:
-                section.build_margin_masks(
-                    grid_shape=config.acquisition_config.grid_shape,
-                    margin=config.mask_config.mask_margin,
-                    rim_size=config.mask_config.rim_size,
-                    overwrite=True
-                )
+            logging.debug(f"[{section_path}] Completed {state}")
 
-            # COMPUTE FINE FLOWS
-            if task_name == Task.FINE_FLOWS:
-                section.compute_fine_flows(
-                    config=config.registration_config,
-                    stride=config.mesh_integration_config.stride,
-                    masking=True,
-                    store=True,
-                    overwrite=True,
-                    ext=None,
-                )
-
-            # COMPUTE FINE MESH
-            if task_name == Task.FINE_MESH:
-                section.compute_fine_mesh(
-                    reg_config=config.registration_config,
-                    mesh_config=config.mesh_integration_config
-                )
-
-            # WARP SECTION
-            if task_name == Task.WARP_SECTION:
-                section.warp_section(
-                    stride=config.mesh_integration_config.stride,
-                    config=config.warp_config,
-                )
-
-            # Downscale stitched .zarr section
-            if task_name == Task.DOWNSCALE_SECTION:
-                if section.image is None:
-                    img = section.load_image()
-                    if img is None:
-                        return section.path, False, f"FAILED at {task_name}: Image load failed after retries"
-
-                fct = config.pipeline_config.downscale_factor
-                save_img(
-                    path=section.path_thumb,
-                    data=section.downscale_section(fct)
-                )
-
-        return section.path, True, "Success"
+        return section_path, True, "Success"
 
     except Exception as e:
-        logging.error(f"Worker process crash on {section.path}: {e}")
-        return section.path, False, f"CRITICAL: {str(e)}"
+        # Capture full traceback in logs, but return concise string to parent
+        error_msg = f"Failure @ {state}: {str(e)}"
+        logging.exception(f"[{section_path}] {error_msg}")
+        return section_path, False, error_msg
 
     finally:
         if section is not None:
             try:
                 section.close_resource()
-                logging.info(f"Resources closed for {section.path}")
+                del section
             except Exception as cleanup_err:
-                logging.warning(f"Cleanup failed for {section.path}: {cleanup_err}")
+                logging.error(f"[{section_path}] Cleanup leaked: {cleanup_err}")
 
+        gc.collect()
+        return section_path, True, "Pipeline finished"
