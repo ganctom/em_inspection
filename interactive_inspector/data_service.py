@@ -14,18 +14,17 @@ import numpy as np
 import gc
 import threading
 import yaml
-from babel.util import missing
 
-from sofima.mesh import IntegrationConfig
 import parse_sbem_dataset as parse
 
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig, PipelineConfig
+from parameter_config import AcquisitionConfig, StitchingConfig
 from Tile_refactored import Tile
-from constants import DataConstants as DC, Task
+from constants import DataConstants as DC
 from constants import UIConstants as UI
+from schema import InspectionSchema as IS
 from inspection_utils_refactor import save_img, get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
@@ -106,7 +105,7 @@ class DataService:
 
 
     def get_sec_path(self, sec_num: int) -> str:
-        sec_dir = Path(self.exp_config.proc_dir, 'sections')
+        sec_dir = Path(self.exp_config.proc_dir, IS.DIR_SECTIONS)
         grid_num = self.exp_config.grid_num
         sec_name = f"s{sec_num}_g{grid_num}"
         return str(sec_dir / sec_name)
@@ -794,77 +793,6 @@ class DataService:
                 self.coarse_align_status["pending_messages"].append(
                     UI.log_row("🏁 Coarse Alignment Complete", type="success")
                 )
-
-    def execute_fine_alignment_step(
-            self,
-            section: Section,
-            task_name: str,
-            config: StitchingConfig
-    ) -> None:
-        """
-        The low-level worker that maps a Pipeline Task to a Section method.
-        The 'section' object's state is preserved across sequential calls.
-        """
-
-        if task_name == Task.COARSE_MESH:
-            cfg_yaml = config.mesh_integration_config
-            cfg = IntegrationConfig(
-                dt=cfg_yaml.dt,
-                gamma=cfg_yaml.gamma,
-                k0=0.0,
-                k=cfg_yaml.k,
-                stride=(1, 1),
-                num_iters=cfg_yaml.num_iters,
-                max_iters=cfg_yaml.max_iters,
-                stop_v_max=cfg_yaml.stop_v_max,
-                dt_max=cfg_yaml.dt_max,
-            )
-            section.compute_coarse_mesh(conf=cfg, overwrite=True)
-
-        elif task_name == Task.MARGIN_MASKS:
-            section.build_margin_masks(
-                grid_shape=self.acq_config.grid_shape,
-                margin=config.mask_config.mask_margin,
-                rim_size=config.mask_config.rim_size,
-                overwrite=True
-            )
-
-        elif task_name == Task.FINE_FLOWS:
-            section.compute_fine_flows(
-                config=config.registration_config,
-                stride=config.mesh_integration_config.stride,
-                masking=True,
-                store=True,
-                overwrite=True,
-                ext=None,
-            )
-
-        elif task_name == Task.FINE_MESH:
-            section.compute_fine_mesh(
-                reg_config=config.registration_config,
-                mesh_config=config.mesh_integration_config
-            )
-
-        elif task_name == Task.WARP_SECTION:
-            section.warp_section(
-                stride=config.mesh_integration_config.stride,
-                config=config.warp_config,
-            )
-
-        elif task_name == Task.DOWNSCALE_SECTION:
-            if section.image is None:
-                img = section.load_image()
-                if img is None:
-                    logging.error(f"FAILED at {task_name}: Image load failed")
-                    return None
-
-            fct = config.pipeline_config.downscale_factor
-            save_img(
-                path=section.path_thumb,
-                data=section.downscale_section(fct)
-            )
-
-        return None
 
 
 # Initialize single instances

@@ -1,6 +1,7 @@
 import logging
 import threading
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from pathlib import Path
 from typing import List
 
 from sofima.mesh import IntegrationConfig
@@ -17,14 +18,13 @@ class PipelineOrchestrator:
 
     def run_sequential_pipeline(
             self,
-            section_numbers: List[int],
-            selected_tasks,
+            section_numbers: list[int],
+            selected_tasks: list[Task],
             config: StitchingConfig,
     ):
         """
-        Refactored to maintain Section object state across tasks.
+        Sequential execution - Section loading happens inside the wrapper.
         """
-        # 1. Initialize State
         self.ppln_service.stitch_status.update({
             "active": True,
             "progress": 0,
@@ -35,43 +35,35 @@ class PipelineOrchestrator:
 
         # Determine ordered tasks based on master pipeline logic
         ordered_tasks = [t for t in Task.get_master_order() if t in selected_tasks]
-
         total_work = len(section_numbers) * len(ordered_tasks)
         current_work = 0
         sec_num = section_numbers[0]
+
         try:
             for sec_num in section_numbers:
                 if self.ppln_service.abort_requested:
                     self._handle_abort()
                     return
 
-                # Initialize the section object
-                sec_path = self.ppln_service.inspection.section_dicts.get(sec_num)
-                section = Section(sec_path)
-                section.tile_dicts = get_tile_dicts(section.path)
-                section.read_tile_id_map()
+                section_path = self.ppln_service.get_sec_path(sec_num)
+                if not section_path:
+                    continue
 
-                # INNER LOOP: Tasks (The Operations)
-                for task_key in ordered_tasks:
-                    if self.ppln_service.abort_requested:
-                        self._handle_abort()
-                        return
+                self.ppln_service.stitch_status["message"] = f"s{sec_num}: Processing all tasks..."
 
-                    self.ppln_service.stitch_status["message"] = f"s{sec_num}: {task_key.upper()}"
+                # Call wrapper once per section (it handles all tasks internally)
+                section_worker_wrapper(
+                    section_path=section_path,
+                    task_keys=ordered_tasks,
+                    config=config
+                )
 
-                    # 2. Execute worker logic passing the LIVE section object
-                    self.ppln_service.execute_fine_alignment_step(
-                        section=section,
-                        task_name=task_key,
-                        config=config
-                    )
+                # Update progress after whole section is done
+                current_work += len(ordered_tasks)
+                progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
+                self.ppln_service.stitch_status["progress"] = progress_pct
 
-                    # 3. Update Progress
-                    current_work += 1
-                    progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
-                    self.ppln_service.stitch_status["progress"] = progress_pct
-
-            # 4. Final Success State
+            # Final Success State
             self.ppln_service.stitch_status.update({
                 "progress": 100,
                 "message": "Pipeline Finished Successfully."
@@ -85,7 +77,7 @@ class PipelineOrchestrator:
 
         finally:
             self.ppln_service.stitch_status["active"] = False
-            del section
+
 
     def _handle_abort(self):
         self.ppln_service.stitch_status["message"] = "Pipeline Aborted by User"
@@ -208,8 +200,15 @@ class PipelineOrchestrator:
         self.ppln_service.stitch_status["active"] = False
 
 
+def load_section(path: str | Path) -> Section:
+    section = Section(Path(path))
+    section.tile_dicts = get_tile_dicts(section.path)
+    section.read_tile_id_map()
+    return section
+
+
 def section_worker_wrapper(
-        sec_path: str,
+        section_path: str,
         task_keys: list,
         config: StitchingConfig,
 ):
@@ -217,14 +216,9 @@ def section_worker_wrapper(
     Standalone worker. Initializes its own Section instance to ensure
     memory isolation between processes.
     """
-    try:
-        # 1. Initialize a clean Section instance for this process
-        section = Section(sec_path)
-        section.tile_dicts = get_tile_dicts(section.path)
-        section.read_tile_id_map()
-    except NotADirectoryError as _:
-        logging.error(f'Failed to load section at path: {sec_path}')
-        return None
+
+    # Initialize the section object
+    section = load_section(section_path)
 
     try:
         # 2. Dispatch based on Task
@@ -232,18 +226,18 @@ def section_worker_wrapper(
 
             if task_name == Task.COARSE_MESH:
                 # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
-                cfg_yaml = config.mesh_integration_config
+                yaml_config = config.mesh_integration_config
 
                 cfg = IntegrationConfig(
-                    dt=cfg_yaml.dt,  # dt=cfg_yaml.dt
-                    gamma=cfg_yaml.gamma,
+                    dt=yaml_config.dt,
+                    gamma=yaml_config.gamma,
                     k0=0.0,  # unused
-                    k=cfg_yaml.k,
+                    k=yaml_config.k,
                     stride=(1, 1),  # unused
-                    num_iters=cfg_yaml.num_iters,
-                    max_iters=cfg_yaml.max_iters,
-                    stop_v_max=cfg_yaml.stop_v_max,
-                    dt_max=cfg_yaml.dt_max,
+                    num_iters=yaml_config.num_iters,
+                    max_iters=yaml_config.max_iters,
+                    stop_v_max=yaml_config.stop_v_max,
+                    dt_max=yaml_config.dt_max,
                 )
 
                 section.compute_coarse_mesh(conf=cfg, overwrite=True)
@@ -286,26 +280,25 @@ def section_worker_wrapper(
                 if section.image is None:
                     img = section.load_image()
                     if img is None:
-                        return sec_path, False, f"FAILED at {task_name}: Image load failed after retries"
+                        return section.path, False, f"FAILED at {task_name}: Image load failed after retries"
 
                 fct = config.pipeline_config.downscale_factor
-                print(f"fct: {fct}")
                 save_img(
                     path=section.path_thumb,
                     data=section.downscale_section(fct)
                 )
 
-        return sec_path, True, "Success"
+        return section.path, True, "Success"
 
     except Exception as e:
-        logging.error(f"Worker process crash on {sec_path}: {e}")
-        return sec_path, False, f"CRITICAL: {str(e)}"
+        logging.error(f"Worker process crash on {section.path}: {e}")
+        return section.path, False, f"CRITICAL: {str(e)}"
 
     finally:
         if section is not None:
             try:
                 section.close_resource()
-                logging.info(f"Resources closed for {sec_path}")
+                logging.info(f"Resources closed for {section.path}")
             except Exception as cleanup_err:
-                logging.warning(f"Cleanup failed for {sec_path}: {cleanup_err}")
+                logging.warning(f"Cleanup failed for {section.path}: {cleanup_err}")
 
