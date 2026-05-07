@@ -8,6 +8,8 @@ from zipfile import BadZipFile
 import jax
 import jax.numpy as jnp
 import logging
+
+import scipy
 from matplotlib import pyplot as plt
 import numpy as np
 import skimage
@@ -18,7 +20,7 @@ from scipy import ndimage
 from skimage.metrics import structural_similarity as ssim
 from sofima import mesh, stitch_rigid, stitch_elastic, warp, flow_utils
 import time
-from typing import Union, Optional, Any, Dict, Tuple
+from typing import Union, Optional, Any, Dict, Tuple, Iterable
 
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
@@ -1776,8 +1778,9 @@ class Section:
 
     def compute_fine_flows(self, config: RegistrationConfig, **kwargs) -> None:
         """Proxy method to the Orchestrator service."""
-        logging.debug(f'flow config: ps={config.patch_size}, stride={kwargs.get('stride')}')
+        logging.info(f'flow config: ps={config.patch_size}, stride={kwargs.get('stride')}')
         orchestrator = FlowFieldOrchestrator(self)
+        logging.info('ff_orchestrator OK')
         orchestrator.compute_fine_flows(config, **kwargs)
 
     def load_fflows(self, ext: Optional[str] = None) -> None:
@@ -1790,7 +1793,7 @@ class Section:
                 self.fflows = pickle.load(f)
 
         except FileNotFoundError:
-            logging.warning(f's{self.section_num}: fine flows file {fp_fflows} not found!')
+            logging.warning(f's{self.section_num} fine flows file not found: {fp_fflows}')
         except EOFError:
             logging.warning(f's{self.section_num}: EOFError - Ran out of input while reading {fp_fflows}.')
         except pickle.UnpicklingError as e:
@@ -1904,7 +1907,7 @@ class Section:
         self._ensure_coarse_offsets()
         self._ensure_tile_map()
         self._ensure_coarse_mesh()
-        self._ensure_fflows()
+        self.ensure_fflows()
 
     def ensure_tile_dicts(self) -> None:
         if self.tile_dicts is not None:
@@ -1958,7 +1961,7 @@ class Section:
                 f"Unexpected error loading coarse mesh for section {self.section_num}"
             ) from e
 
-    def _ensure_fflows(self) -> None:
+    def ensure_fflows(self) -> None:
         if self.fflows is not None:
             return
 
@@ -2178,7 +2181,7 @@ class FlowFieldOrchestrator:
 
         try:
             # Reusing your hardened SMB-aware loader
-            self.section.ensure_tile_map_ready(apply_clahe=False, max_workers=8)
+            self.section.ensure_tile_map_ready(apply_clahe=False)
         except Exception:
             return False
 

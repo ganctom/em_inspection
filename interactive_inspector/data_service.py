@@ -10,6 +10,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple, Any
 import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
 import gc
 import threading
@@ -19,8 +20,9 @@ import parse_sbem_dataset as parse
 
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
+from coarse_offset_processor import SectionIndex
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig
+from parameter_config import AcquisitionConfig, StitchingConfig, RegistrationConfig
 from Tile_refactored import Tile
 from constants import DataConstants as DC
 from constants import UIConstants as UI
@@ -59,6 +61,7 @@ class DataService:
         self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
         self.acq_config: AcquisitionConfig | None = None
         self.exp_config: ExpConfig | None = None
+        self.reg_config: RegistrationConfig | None = None
         self.stitch_config = None
         self.inspection = None
         self.processor = None
@@ -214,6 +217,13 @@ class DataService:
         return cfg
 
 
+    @staticmethod
+    def _prepare_registration_config(config) -> RegistrationConfig:
+        """Encapsulates the mapping logic."""
+        cfg = RegistrationConfig()
+        logging.debug(f'RegistrationConfig:\n{cfg}')
+        return cfg
+
     def load_experiment(self, config):
         """
         Loads inspector, coarse offsets tensor & UI data using specified stitch_config file
@@ -344,7 +354,7 @@ class DataService:
         else:
             shift_vec = tuple(map(int, np.round(raw_vec)))
 
-        logging.info(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
+        logging.debug(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
 
         return OverlapContext(
             section=section,
@@ -355,6 +365,43 @@ class DataService:
             x=x,
             shift_vec=shift_vec
         )
+
+    def get_flow_figure(
+            self,
+            section_num: int,
+            tile_id: str,
+    ) -> Optional[go.Figure]:
+
+        section = self._get_initialized_section(section_num)
+        if not section:
+            return None
+
+        try:
+            # Load flows
+            section.ensure_fflows()
+            fine_x, _ = section.fflows[0]
+            fine_y, _ = section.fflows[1]
+
+            # section.clean_fflows(self.reg_config)
+            # section.reconcile_fflows(self.reg_config)
+            # logging.warning(self.reg_config)
+            # # Extracting reconstructed flow components
+            # fine_x, _ = section.fflows_recon[0]
+            # fine_y, _ = section.fflows_recon[1]
+
+            # Resolving spatial context for key access
+            sec_lookup: SectionIndex = self.processor.get_section_lookup(str(section_num))
+            y, x = sec_lookup[int(tile_id)]
+
+            # Delegate to the Plotly utility
+            return utils.plot_all_flow_components_plotly(fine_x, fine_y, xy=(x, y))
+
+        except Exception as e:
+            err_msg = f"Flow figure failure t{tile_id} s{section_num}: {e}"
+            self.message_queue.append(err_msg)
+            logging.warning(err_msg)
+            return None
+
 
     def get_overlap_figure(
             self,
@@ -670,6 +717,20 @@ class DataService:
                 reg["overlaps_y"] = [int(x.strip()) for x in str(ui_params_dict["overlaps_y"]).split(",") if x.strip()]
             if "min_overlap" in ui_params_dict:
                 reg["min_overlap"] = int(ui_params_dict["min_overlap"])
+            if "min_peak_ratio" in ui_params_dict:
+                reg["min_peak_ratio"] = int(ui_params_dict["min_peak_ratio"])
+            if "min_peak_sharpness" in ui_params_dict:
+                reg["min_peak_sharpness"] = int(ui_params_dict["min_peak_sharpness"])
+            if "max_deviation" in ui_params_dict:
+                reg["max_deviation"] = int(ui_params_dict["max_deviation"])
+            if "max_magnitude" in ui_params_dict:
+                reg["max_magnitude"] = int(ui_params_dict["max_magnitude"])
+            if "min_patch_size" in ui_params_dict:
+                reg["min_patch_size"] = int(ui_params_dict["min_patch_size"])
+            if "max_gradient" in ui_params_dict:
+                reg["max_gradient"] = int(ui_params_dict["max_gradient"])
+            if "reconcile_flow_max_deviation" in ui_params_dict:
+                reg["reconcile_flow_max_deviation"] = int(ui_params_dict["reconcile_flow_max_deviation"])
 
             # Warp Config
             if "warp_config" not in target_dict:
@@ -678,7 +739,7 @@ class DataService:
             if "clahe" in ui_params_dict:
                 target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["clahe"])
 
-            # 3. Pipeline Config
+            # Pipeline Config
             if "pipeline_config" not in target_dict:
                 target_dict["pipeline_config"] = {}
 
@@ -686,6 +747,7 @@ class DataService:
                 val = ui_params_dict[UI.ID_RESCALE_FCT]
                 if val is not None:
                     target_dict["pipeline_config"]["downscale_factor"] = float(val)
+
 
         _apply_overrides(raw_dict)
 
@@ -795,4 +857,5 @@ class DataService:
 
 # Initialize single instances
 service = DataService()
+service.prepare_stitching_params()
 orchestrator = PipelineOrchestrator(service)

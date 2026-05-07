@@ -1,11 +1,14 @@
 import logging
 import numpy as np
 import plotly.graph_objects as go
+from dash.exceptions import PreventUpdate
 from plotly.subplots import make_subplots
 from dash import html, Input, Output, State, ctx, no_update, ALL
 
 from app import app
-from data_service import service
+from data_service import service, orchestrator
+from constants import UI
+from inspection_utils_refactor import make_hashable_params
 from interactive_inspector.layouts.components_layouts import selection_card, create_grid_navigator
 from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
 
@@ -16,7 +19,8 @@ from interactive_inspector.constants import UIConstants, OverlapType, KeyboardSh
      Input('clear-selection', 'n_clicks'),
      Input('import-inf-btn', 'n_clicks'),
      Input({'type': 'remove-btn', 'index': ALL}, 'n_clicks')],
-    [State('selection-store', 'data'), State('master-grid', 'clickData')],
+    [State('selection-store', 'data'),
+     State('master-grid', 'clickData')],
     prevent_initial_call=True
 )
 def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store, grid_click):
@@ -482,68 +486,111 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 
 @app.callback(
     [Output('registration-log', 'children'),
-     Output('integrated-overlap-graph', 'figure'),
+     Output('integrated-overlap-graph', 'figure'),  # Target the common graph ID
      Output('integrated-ov-status', 'children')],
     [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
      Input('run-batch-btn', 'n_clicks'),
-     Input('active-item-index', 'data')],
+     Input('active-item-index', 'data'),
+     Input({'type': UI.ID_BTN_FLOW, 'index': ALL}, 'n_clicks')],
     [State('selection-store', 'data'),
      State('guess-mode-select', 'value'),
      State('manual-dx', 'value'),
      State('manual-dy', 'value'),
      State(UIConstants.ID_INP_SEARCH_RAD, "value"),
+     # State(UI.ID_CONF_MIN_PKR, "value"),
+     # State(UI.ID_CONF_MIN_PKS, "value"),
+     # State(UI.ID_CONF_MAX_DEV, "value"),
+     # State(UI.ID_CONF_MAX_MAG, "value"),
+     # State(UI.ID_CONF_MIN_PATCH, "value"),
+     # State(UI.ID_CONF_MAX_GRAD, "value"),
+     # State(UI.ID_CONF_REC_FLOW_MAX_GRAD, "value")
      ],
     prevent_initial_call=True
 )
-def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
-                   selection_data, guess_mode, m_dx, m_dy, search_rad):
+def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx, flow_clicks,
+                   selection_data, guess_mode, m_dx, m_dy, search_rad, *ui_vals):
     # 1. Boilerplate Safety
     if not selection_data or active_idx is None or active_idx >= len(selection_data):
         return no_update, no_update, "Waiting for selection..."
 
     trig = ctx.triggered_id
     trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
+    item = selection_data[active_idx]
 
-    # Standardize Nudge
+    # --- CASE A: FLOW VISUALIZATION ---
+    if isinstance(trig, dict) and trig.get('type') == UI.ID_BTN_FLOW and (trig_val or 0) > 0:
+        clicked_idx = trig.get('index')
+        item = selection_data[clicked_idx]
+        item_tid, item_z = item['tid'], item['z']
+
+        fig = service.get_flow_figure(item_z, item_tid)
+        flow_descr = f"t{item_tid} | z{item_z}"
+        if fig is None:
+            return (html.Div(service.message_queue.pop(), className="text-danger"),
+                    no_update, "Flow Error")
+
+        status = f"Inspecting flow: {flow_descr}"
+        return no_update, fig, status
+
+    # # --- CASE A: FLOW VISUALIZATION ---
+    # if isinstance(trig, dict) and trig.get('type') == UI.ID_BTN_FLOW and (trig_val or 0) > 0:
+    #     print(trig)
+    #     print(f'flow item: {item}')
+    #     fig = service.get_flow_figure(item['z'], item['tid'])
+    #
+    #     # ui_keys = ["min_peak_ratio", "min_peak_sharpness", "max_deviation",
+    #     #            "max_magnitude", "min_patch_size", "max_gradient", "reconcile_flow_max_deviation"]
+    #     # ui_params = dict(zip(ui_keys, ui_vals))
+    #
+    #     # stitching_config = service.prepare_stitching_params(
+    #     #     config_path=config_path,
+    #     #     ui_params=make_hashable_params(ui_params)
+    #     # )
+    #     #
+    #     # fig = service.get_flow_figure(
+    #     #     cfg=service.registration_config,
+    #     #     tid_a=item['tid'],
+    #     #     z=item['z']
+    #     # )
+    #
+    #     if fig is None:
+    #         return (html.Div("Flow visualization failed", className="text-danger"),
+    #                 no_update, "Flow Error")
+    #
+    #     status = f"INSPECTING FLOW: T{item['tid']} | Z{item['z']}"
+    #     return no_update, fig, status
+
+    # --- CASE B: BATCH (THE LOOPED VERSION) ---
+    # Standardize Nudge variables for overlap cases
     safe_nudge = nudge_trigger if isinstance(nudge_trigger, dict) else {'dx': 0, 'dy': 0}
     nudge = (safe_nudge.get('dx', 0), safe_nudge.get('dy', 0))
     manual_ref = (m_dx or 0, m_dy or 0)
-    item = selection_data[active_idx]
 
-    # --- CASE A: BATCH (THE LOOPED VERSION) ---
     if trig == 'run-batch-btn' and (trig_val or 0) > 0:
         results = []
         is_manual = (guess_mode == "manual")
-
         for s_item in selection_data:
             res = service.compute_coarse_shift(
-                s_item['tid'],
-                s_item['z'],
-                s_item['overlap'],
+                s_item['tid'], s_item['z'], s_item['overlap'],
                 initial_nudge=nudge if not is_manual else (0, 0),
                 override_vector=manual_ref if is_manual else None,
                 max_ext=search_rad,
             )
             results.append((s_item, res))
 
-        # Format Log
-        log_entries = []
-        for s_item, res in results:
-            if isinstance(res, dict):
-                log_entries.append(html.Div(f"T{s_item['tid']}: {res['refined']}", className="text-success small"))
-            else:
-                log_entries.append(html.Div(f"T{s_item['tid']}: FAILED", className="text-danger small"))
-
+        log_entries = [
+            html.Div(f"T{s[0]['tid']}: {s[1]['refined']}" if isinstance(s[1], dict) else f"T{s[0]['tid']}: FAILED",
+                     className="text-success small" if isinstance(s[1], dict) else "text-danger small")
+            for s in results
+        ]
         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
         return html.Div(log_entries), fig, "Batch Complete"
 
-    # --- CASE B: SINGLE CALCULATION ---
+    # --- CASE C: SINGLE CALCULATION ---
     elif isinstance(trig, dict) and trig.get('type') == 'compute-single-btn' and (trig_val or 0) > 0:
         btn_idx = trig.get('index')
         calc_item = selection_data[btn_idx]
-
-        # Use nudge only if it's the item we're looking at
         current_nudge = nudge if btn_idx == active_idx else (0, 0)
 
         result = service.compute_coarse_shift(
@@ -553,20 +600,15 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
         if isinstance(result, str):
             return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
 
-        log_msg = html.Div([
-            html.P(f"Refinement Successful (T{calc_item['tid']})", className="text-success mb-0"),
-            html.Small(f"Final Vector: {result['refined']}", className="text-white-50")
-        ])
         fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
-        return log_msg, fig, "Refinement Applied"
+        return html.P(f"T{calc_item['tid']} Refined: {result['refined']}",
+                      className="text-success small"), fig, "Refinement Applied"
 
-    # --- CASE C: RE-PLOT ---
-    if active_idx is not None:
-        fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
-        status = f"INSPECTING: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
-        return no_update, fig, status
-
-    return no_update, no_update, no_update
+    # --- CASE D: RE-PLOT (Default) ---
+    # Triggered by 'active-item-index' or manual nudges
+    fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'], manual_nudge=nudge)
+    status = f"INSPECTING OVERLAP: T{item['tid']} | Z{item['z']} | Nudge: {nudge}"
+    return no_update, fig, status
 
 
 @app.callback(

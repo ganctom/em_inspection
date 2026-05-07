@@ -157,6 +157,7 @@ class UIConstants:
     ID_TAB_PPLN = "stitch_config-ppln-cfg"
     ID_TAB_PPLN_CFG = "tab-ppln-cfg"
     ID_RESCALE_FCT = "resize-fct"
+    ID_BTN_FLOW = "flow-ov-btn"
 
 
     # --- Messages ---

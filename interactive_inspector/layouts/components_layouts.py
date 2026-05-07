@@ -134,6 +134,14 @@ def selection_card(index: int, item: dict) -> html.Div:
 
         # Action Buttons Group with gaps
         dbc.ButtonGroup([
+
+            dbc.Button("Flow",
+                       id={'type': UI.ID_BTN_FLOW, 'index': index},
+                       size="sm",
+                       color="secondary",
+                       outline=True,
+                       style={'padding': '1px 6px', 'fontSize': '10px'}),
+
             dbc.Button("OV",
                        id={'type': 'plot-ov-btn', 'index': index},
                        size="sm",

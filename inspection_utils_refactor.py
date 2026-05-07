@@ -1,39 +1,39 @@
+from abc import ABC, abstractmethod
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass
+from glob import glob
+import logging
+import numpy as np
+import os
+from pathlib import Path
+from platform import system
 import random
 import re
-import time
-from concurrent.futures import ThreadPoolExecutor
 import subprocess
-from collections import OrderedDict
+import time
+from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable, Set
 
 import cv2
-import numpy as np
-from numcodecs import Blosc
 import json
-import logging
-from abc import ABC, abstractmethod
-from pathlib import Path
-from dataclasses import dataclass
-from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable, Set
-from platform import system
-from re import compile
-
-from glob import glob
-import os
-from zipfile import BadZipFile
-
-import pandas as pd
-import skimage
-import yaml
-import zarr
 import matplotlib
-matplotlib.use('Agg')  # Must be called before importing pyplot
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+from numcodecs import Blosc
 from scipy.interpolate import CloughTocher2DInterpolator
 from ome_zarr.io import parse_url
 from ome_zarr.scale import Scaler
 from ome_zarr.writer import write_image
 from ome_zarr.format import FormatV04
+import pandas as pd
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import skimage
+import yaml
+import zarr
+from zipfile import BadZipFile
 
 from schema import InspectionSchema as IS
 
@@ -43,9 +43,10 @@ UniPath = Union[str, Path]
 TileXY = tuple[int, int]
 TileCoord = Union[tuple[int, int, int, int], tuple[int, int]]  # (c, z, y, x)
 TileMap = Mapping[TileXY, np.ndarray]
-MaskMap = Dict[TileXY, Optional[np.ndarray]]
+MaskMap = dict[TileXY, Optional[np.ndarray]]
 Vector = Union[tuple[int, int], tuple[int, int, int]]  # [z]yx order
 GridXY = tuple[Any, Any, Any]
+TileFlow = dict[TileXY, np.ndarray]
 
 ### Set up logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -293,7 +294,7 @@ def filter_and_sort_sections(sections_dir: str) -> Optional[list[str]]:
 
     # Define a regex pattern to filter section directory names
     pattern = r's\d+_g\d+'
-    regex_pattern = compile(pattern)
+    regex_pattern = re.compile(pattern)
 
     # Use glob to filter the section directory names
     dirs = glob(str(Path(sections_dir) / "*"))
@@ -326,7 +327,7 @@ def process_dirs_unix(directory_path: str) -> Optional[tuple[list[Path], list[st
         return None
 
     dirs = [Path(d) for d in dirs]
-    pattern = compile(r's\d+_g\d+(\.zarr)?$')
+    pattern = re.compile(r's\d+_g\d+(\.zarr)?$')
     sections_with_paths = [(get_section_num(d.name), d) for d in dirs
                            if pattern.search(d.name)]
 
@@ -1272,7 +1273,7 @@ def get_ov_tid_pairs(directory: UniPath) -> list[tuple[int, int]]:
     Returns:
     - List[Tuple[int, int]]: A list of tuples, each containing a pair of tile IDs.
     """
-    pattern = compile(r'^t(\d{4})_t(\d{4})$')  # Exact match for 'tXXXX_tYYYY'
+    pattern = re.compile(r'^t(\d{4})_t(\d{4})$')  # Exact match for 'tXXXX_tYYYY'
     matches: list[tuple[int, int]] = []
 
     dir_path = Path(directory)
@@ -1293,7 +1294,7 @@ def get_ov_tid_pairs(directory: UniPath) -> list[tuple[int, int]]:
 
 def get_ov_sec_nums(directory: UniPath) -> list[int]:
     # Regular expression pattern to match "s0510_t0754_t0786_ov.jpg"
-    pattern = compile(r's(\d+)_t\d+_t\d+_ov\.jpg')
+    pattern = re.compile(r's(\d+)_t\d+_t\d+_ov\.jpg')
     numbers = []
 
     # Create a Path object for the directory
@@ -1944,6 +1945,75 @@ def get_missing_stitched_sections(
     missing = identify_missing_ids(expected_ids, actual_ids)
     logging.info(f"Scan complete: {len(missing)} missing.")
     return missing
+
+
+def plot_all_flow_components_plotly(
+        fine_x: TileFlow,
+        fine_y: TileFlow,
+        xy: tuple[int, int],
+) -> go.Figure:
+    """
+    Reconstructs the 2x2 grid using Plotly for interactive flow visualization.
+    """
+    # Initialize 2x2 grid with shared axes for consistent spatial alignment
+    fig = make_subplots(
+        rows=2, cols=2,
+        subplot_titles=(
+            'Horizontal neighbor (X)', 'Horizontal neighbor (Y)',
+            'Vertical neighbor (X)', 'Vertical neighbor (Y)'
+        ),
+        horizontal_spacing=0.05,
+        vertical_spacing=0.1
+    )
+
+    # Data mapping configuration
+    # (Row, Col, Source Dict, Component Index)
+    mapping = [
+        (1, 1, fine_x, 0), (1, 2, fine_x, 1),
+        (2, 1, fine_y, 0), (2, 2, fine_y, 1)
+    ]
+
+    for row, col, source, comp_idx in mapping:
+        if xy not in source:
+            continue
+
+        # Extract and handle spatial orientation
+        data = source[xy][comp_idx, ...]
+        if row == 1:
+            data = data.T
+
+        # Add Heatmap trace
+        fig.add_trace(
+            go.Heatmap(
+                z=data,
+                colorscale='Viridis',
+                showscale=(row == 1 and col == 1),  # Shared colorbar logic
+                colorbar=dict(thickness=15, x=1.02) if (row == 1 and col == 1) else None
+            ),
+            row=row, col=col
+        )
+
+    fig.update_layout(
+        title=dict(
+            text=f"<b>FLOW ANALYSIS</b>",
+            x=0.5, y=0.98, xanchor='center',
+            font=dict(family="Monospace", size=14, color="#00FFCC")
+        ),
+        template="plotly_dark",
+        paper_bgcolor='black',
+        plot_bgcolor='black',
+        margin=dict(l=0, r=0, b=0, t=50),
+        height=300,
+        dragmode='pan',
+        autosize=True
+    )
+
+    # Invert Y-axis to match matshow/imshow 'upper' origin
+    fig.update_yaxes(autorange='reversed')
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+
+    return fig
 
 
 if __name__ == "__main__":

@@ -61,7 +61,7 @@ class CoarseOffsetProcessor:
         self._all_unique_ids: Optional[set[int]] = None
         self._inf_registry: Dict[str, List[Dict[str, Any]]] = {}
 
-    def get_section_lookup(self, sec_key: str):
+    def get_section_lookup(self, sec_key: str) -> SectionIndex:
         """Public accessor for the section lookup table."""
         return self._get_section_lookup(sec_key)
 
