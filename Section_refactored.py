@@ -13,6 +13,8 @@ import numpy as np
 import skimage
 from pathlib import Path
 import pickle
+
+from scipy import ndimage
 from skimage.metrics import structural_similarity as ssim
 from sofima import mesh, stitch_rigid, stitch_elastic, warp, flow_utils
 import time
@@ -203,7 +205,7 @@ class Section:
     def read_tile_id_map(self) -> None:
         fp = self.path / IS.FILE_TILE_ID_MAP
         self.tile_id_map = utils.get_tile_id_map(fp) if fp.exists() else None
-        return
+        return None
 
 
     def downscale_section(self, factor: float) -> Optional[np.ndarray]:
@@ -1614,6 +1616,7 @@ class Section:
 
     def load_tile_map(
             self,
+            gauss: bool = False,
             clahe: bool = False,
             parallel: bool = False,
             max_workers: Optional[int] = None
@@ -1623,31 +1626,37 @@ class Section:
         """
         self.tile_map = {}
 
+        # Handle potential scalar or malformed tile-id map
+        if self.tile_id_map is None:
+            raise ValueError(
+                f"Section {self.section_num}: tile_id_map is not valid."
+            )
+
         # Extract only coordinates where tiles were recorded
         valid_indices = np.argwhere(self.tile_id_map != -1)
         positions = [tuple(pos) for pos in valid_indices]
 
-        if not positions:
-            logging.info(f"Section {self.section_num} has no recorded tiles. Skipping load.")
-            return
+        if valid_indices.size == 0:
+            raise ValueError(f"Section {self.section_num} has no recorded tiles!")
 
         logging.info(f"Loading {len(positions)} tiles for s{self.section_num} (parallel={parallel})")
-
         try:
             if parallel:
                 workers = max_workers or min(8, len(positions))
                 with ThreadPoolExecutor(max_workers=workers) as executor:
-                    results = list(executor.map(lambda p: self._get_tile_data(p, clahe), positions))
+                    results = list(
+                        executor.map(lambda p: self._get_tile_data(p, clahe, gauss), positions))
             else:
-                results = [self._get_tile_data(p, clahe) for p in positions]
+                results = [self._get_tile_data(p, clahe, gauss) for p in positions]
 
-            for res in results:
-                self._update_tile_map_single(res)
+            for pos_tuple, img_data in results:
+                if img_data is not None:
+                    self._update_tile_map_single((pos_tuple, img_data))
 
         except Exception as e:
             raise utils.TileLoadingError(
                 f"Atomic load failed for section {self.section_num} during "
-                f"{'parallel' if parallel else 'sequential'} ingestion."
+                f"{'parallel' if parallel else 'sequential'} ingestion: {e}"
             ) from e
 
         # Final Integrity Check
@@ -1657,7 +1666,12 @@ class Section:
                 f"Expected {len(positions)} tiles, but map size is {len(self.tile_map)}."
             )
 
-    def _get_tile_data(self, pos: Tuple[int, int], clahe: bool) -> Tuple[Tuple[int, int], Optional[np.ndarray]]:
+    def _get_tile_data(
+            self,
+            pos: tuple[int, int],
+            clahe: bool,
+            gauss: bool = False,
+    ) -> tuple[tuple[int, int], Optional[np.ndarray]]:
         """Encapsulates tile lookup, I/O, and post-processing logic."""
         y, x = pos
 
@@ -1670,14 +1684,24 @@ class Section:
         if tile_id == -1:
             return (x, y), None
 
+        # === Tile dictionary lookup ===
         try:
-            tile_path = self.tile_dicts[tile_id]   # This can raise KeyError / IndexError
+            tile_path = self.tile_dicts[tile_id]
+        except (KeyError, IndexError, ValueError) as e:
+            logging.error(f"Critical Mapping Error: ID {tile_id} not in tile_dicts.")
+            raise  # Re-raising is correct here to trigger the 'Atomic Failure'
+
+        # === Normal processing (these errors can be swallowed) ===
+        try:
             path = Path(tile_path)
 
             if not path.exists():
                 raise FileNotFoundError(f"Tile file not found: {path}")
 
             img = utils.io_read_tif(path)
+
+            if gauss:
+                img = ndimage.gaussian_filter(img, sigma=0.7)
 
             if clahe:
                 img = utils.apply_clahe(img)
@@ -1699,21 +1723,22 @@ class Section:
             self.tile_map[(x, y)] = img
 
 
-    def ensure_tile_map_ready(
-            self,
-            apply_clahe: bool,
-            parallel: bool = True,
-            max_workers: int = 8
-    ) -> bool:
-        """Validates state and attempts lazy-load if telemetry is missing."""
+    def ensure_tile_map_ready(self, apply_clahe: bool = False) -> None:
+        """Ensure tile map is loaded. Raises if loading fails."""
         if self.tile_map is not None and len(self.tile_map) > 0:
-            return True
+            return
+
         try:
-            self.load_tile_map(clahe=apply_clahe, parallel=parallel, max_workers=max_workers)
-            return True
-        except RuntimeError as e:
-            logging.error(f"Indeterminate state: Tile map load failed for S{self.section_num}: {e}")
-            return False
+            self.load_tile_map(clahe=apply_clahe, parallel=True, max_workers=8)
+
+        except ValueError as e:
+            logging.error(e)
+
+        except Exception as e:
+            logging.error(e)
+
+        # if not self.tile_map:
+        #     raise RuntimeError(f"Tile map loaded but is empty for section {self.section_num}")
 
 # ---- EOF LOADING TILE-MAP ----
 
@@ -1723,7 +1748,7 @@ class Section:
     def _is_cache_valid(self, overwrite: bool) -> bool:
         return Path(self.path_cxy).exists() and not overwrite
 
-    def _compute_and_persist_offsets(self, config: CoarseStitchConfig) -> Optional[np.ndarray]:
+    def compute_coarse_offsets_section(self, config: CoarseStitchConfig) -> Optional[np.ndarray]:
         """Pure computational bridge to the stitch_rigid backend."""
         try:
             cx, cy = stitch_rigid.compute_coarse_offsets(
@@ -1744,23 +1769,6 @@ class Section:
             logging.error(f"Algorithmic failure in S{self.section_num}: {e}")
             return None
 
-    def compute_coarse_offsets_section(
-            self,
-            config: CoarseStitchConfig,
-            overwrite: bool = False
-    ) -> Optional[np.ndarray]:
-        """
-        Orchestrates coarse offset retrieval, prioritizing cache hits before
-        triggering heavy compute.
-        """
-        if self._is_cache_valid(overwrite):
-            logging.info(f"Section {self.section_num} cx_cy.json exists. Skipping coarse offsets computation.")
-            return self.cxy
-
-        if not self.ensure_tile_map_ready(config.apply_clahe):
-            return None
-
-        return self._compute_and_persist_offsets(config)
 
 # ---- EOFCoarse offsets ----
 
@@ -1892,17 +1900,17 @@ class Section:
         Raises:
             MeshResourceError: If any critical resource is missing or invalid.
         """
-        self._ensure_tile_dicts()
+        self.ensure_tile_dicts()
         self._ensure_coarse_offsets()
         self._ensure_tile_map()
         self._ensure_coarse_mesh()
         self._ensure_fflows()
 
-    def _ensure_tile_dicts(self) -> None:
+    def ensure_tile_dicts(self) -> None:
         if self.tile_dicts is not None:
             return
 
-        logging.info("Tile dicts not loaded. Loading now for section %s", self.section_num)
+        logging.warning("Tile dicts not loaded. Loading now for section %s", self.section_num)
         self.tile_dicts = utils.get_tile_dicts(self.path)
         self.read_tile_id_map()
 

@@ -417,19 +417,6 @@ class DataService:
             logging.warning(f"Boundary hit: Tile {tid_a} has no {ov_type} neighbor.")
             return None
 
-    def _init_section(self, sec_num: int) -> Optional[Section]:
-        ret_val = _prepare_sections(self.inspection, start=sec_num, end=sec_num)
-
-        if ret_val is None:
-            logging.warning(f'Section number {sec_num} not in experiment section range!')
-            return None
-
-        sec_path = self.inspection.section_dicts.get(sec_num)
-        if not sec_path:
-            logging.warning(f"Section {sec_num} path not found in configuration.")
-            return None
-
-        return Section(sec_path)
 
     def _get_initialized_section(self, z: int) -> Optional[Section]:
         """Manages Section lifecycle and data injection."""
@@ -740,33 +727,36 @@ class DataService:
                 self.coarse_align_status["pending_messages"].append(UI.log_row(msg, type="info"))
 
                 try:
-                    # === Core per-section logic with error handling ===
-                    section = self._init_section(sec_num)
-                    coarse_offsets = section.compute_coarse_offsets_section(
-                        config=reg_params, overwrite=True
+                    # 1. Component Instantiation
+                    section_data = self.inspection.section_dicts.get(sec_num)
+                    if not section_data:
+                        raise ValueError(f"Section metadata missing for ID {sec_num}")
+
+                    section = Section(section_data)
+                    section.read_tile_id_map()
+                    section.ensure_tile_dicts()
+                    section.load_tile_map(gauss=True, clahe=reg_params.apply_clahe,
+                                          parallel=True, max_workers=8)
+                    coarse_offsets = section.compute_coarse_offsets_section(reg_params)
+                    utils.save_coarse_mat(coarse_offsets, section.path)
+
+                    successful += 1
+
+                except (ValueError, TypeError) as e:
+                    self._handle_section_failure(
+                        sec_num, f"Data Error: {e}", failed_sections, level="warning"
                     )
 
-                    if coarse_offsets is not None:
-                        utils.save_coarse_mat(coarse_offsets, section.path)
-                        successful += 1
-                        self.coarse_align_status["message"] = f"✓ Section {sec_num} completed successfully"
-
-                    else:
-                        # compute_coarse_offset_section returned None (skipped or early return)
-                        msg = f"⚠️ Section {sec_num} skipped (already done or failed to load tiles)"
-                        self.coarse_align_status["message"] = msg
-
+                except (utils.TileLoadingError, FileNotFoundError) as e:
+                    self._handle_section_failure(
+                        sec_num, f"IO/Logic Error: {e}", failed_sections, level="error"
+                    )
 
                 except Exception as e:
-                    error_msg = f"Failed to process section {sec_num}: {e}"
-                    logging.error(error_msg)
-                    failed_sections.append(sec_num)
-
-                    self.coarse_align_status["pending_messages"].append(
-                        UI.log_row(f"❌ Section {sec_num} failed: {e}", type="error")
+                    self._handle_section_failure(
+                        sec_num, f"Unexpected Crash: {e}", failed_sections, level="critical"
                     )
 
-                # Update progress even if section failed
                 self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
 
         except Exception as e:
@@ -794,6 +784,14 @@ class DataService:
                     UI.log_row("🏁 Coarse Alignment Complete", type="success")
                 )
 
+    # Helper methods to reduce boilerplate
+    def _log_status(self, msg, msg_type):
+        self.coarse_align_status["pending_messages"].append(UI.log_row(msg, type=msg_type))
+
+    def _handle_section_failure(self, sec_num, error_msg, failed_list, level="error"):
+        logging.log(getattr(logging, level.upper()), f"Section {sec_num}: {error_msg}")
+        failed_list.append(sec_num)
+        self._log_status(f"❌ {sec_num}: {error_msg}", level)
 
 # Initialize single instances
 service = DataService()
