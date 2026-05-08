@@ -7,7 +7,7 @@ from dash import html, Input, Output, State, ctx, no_update, ALL
 
 from app import app
 from data_service import service, orchestrator
-from constants import UI
+# from constants import UI
 from inspection_utils_refactor import make_hashable_params
 from interactive_inspector.layouts.components_layouts import selection_card, create_grid_navigator
 from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
@@ -486,80 +486,80 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 
 @app.callback(
     [Output('registration-log', 'children'),
-     Output('integrated-overlap-graph', 'figure'),  # Target the common graph ID
+     Output('integrated-overlap-graph', 'figure'),
      Output('integrated-ov-status', 'children')],
     [Input('manual-nudge-store', 'data'),
      Input({'type': 'compute-single-btn', 'index': ALL}, 'n_clicks'),
      Input('run-batch-btn', 'n_clicks'),
      Input('active-item-index', 'data'),
-     Input({'type': UI.ID_BTN_FLOW, 'index': ALL}, 'n_clicks')],
+     Input({'type': UIConstants.ID_BTN_FLOW, 'index': ALL}, 'n_clicks'),
+     Input({'type': UIConstants.ID_BTN_CLEAN_FLOW, 'index': ALL}, 'n_clicks')],
+    # Added explicit input for Clean Flow
     [State('selection-store', 'data'),
      State('guess-mode-select', 'value'),
      State('manual-dx', 'value'),
      State('manual-dy', 'value'),
      State(UIConstants.ID_INP_SEARCH_RAD, "value"),
-     # State(UI.ID_CONF_MIN_PKR, "value"),
-     # State(UI.ID_CONF_MIN_PKS, "value"),
-     # State(UI.ID_CONF_MAX_DEV, "value"),
-     # State(UI.ID_CONF_MAX_MAG, "value"),
-     # State(UI.ID_CONF_MIN_PATCH, "value"),
-     # State(UI.ID_CONF_MAX_GRAD, "value"),
-     # State(UI.ID_CONF_REC_FLOW_MAX_GRAD, "value")
+     State('global-settings-store', 'data')
      ],
     prevent_initial_call=True
 )
-def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx, flow_clicks,
-                   selection_data, guess_mode, m_dx, m_dy, search_rad, *ui_vals):
+def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
+                   flow_clicks, clean_clicks, selection_data, guess_mode,
+                   m_dx, m_dy, search_rad, settings_data):
+
     # 1. Boilerplate Safety
     if not selection_data or active_idx is None or active_idx >= len(selection_data):
         return no_update, no_update, "Waiting for selection..."
 
     trig = ctx.triggered_id
     trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
+
+    # Default to the global active index, but we'll override for pattern-matching buttons
     item = selection_data[active_idx]
 
-    # --- CASE A: FLOW VISUALIZATION ---
-    if isinstance(trig, dict) and trig.get('type') == UI.ID_BTN_FLOW and (trig_val or 0) > 0:
+    # --- CASE A: FLOWS VISUALIZATION ---
+    trig_type = trig.get('type') if isinstance(trig, dict) else trig
+    flow_variants = [UIConstants.ID_BTN_FLOW, UIConstants.ID_BTN_CLEAN_FLOW]
+
+    if trig_type in flow_variants and (trig_val or 0) > 0:
+        # Use the specific index from the clicked button
         clicked_idx = trig.get('index')
         item = selection_data[clicked_idx]
         item_tid, item_z = item['tid'], item['z']
 
-        fig = service.get_flow_figure(item_z, item_tid)
-        flow_descr = f"t{item_tid} | z{item_z}"
-        if fig is None:
-            return (html.Div(service.message_queue.pop(), className="text-danger"),
-                    no_update, "Flow Error")
+        if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
+            s = settings_data or {}
 
-        status = f"Inspecting flow: {flow_descr}"
+            clean_params = {
+                "min_peak_ratio": s.get("min_peak_ratio"),
+                "min_peak_sharpness": s.get("min_peak_sharpness"),
+                "max_magnitude": s.get("max_magnitude"),
+                "max_deviation": s.get("max_deviation"),
+            }
+
+            recon_params = {
+                "max_gradient": s.get("max_gradient"),
+                "max_deviation": s.get("max_deviation"),
+                "min_patch_size": s.get("min_patch_size"),
+            }
+        else:
+            clean_params = None
+            recon_params = None
+
+        fig = service.get_flow_fig(item_z, item_tid, clean_params, recon_params)
+
+        if fig is None:
+            # Robust error extraction
+            error_msg = service.message_queue.pop() if service.message_queue else "Unknown Error"
+            return html.Div(error_msg, className="text-danger"), no_update, "Flow Error"
+
+        # Force Plotly to respect the container and reset axis quirks
+        fig.update_layout(autosize=True, uirevision=True)
+
+        status = f"Inspecting flow: t{item_tid} | z{item_z}"
         return no_update, fig, status
 
-    # # --- CASE A: FLOW VISUALIZATION ---
-    # if isinstance(trig, dict) and trig.get('type') == UI.ID_BTN_FLOW and (trig_val or 0) > 0:
-    #     print(trig)
-    #     print(f'flow item: {item}')
-    #     fig = service.get_flow_figure(item['z'], item['tid'])
-    #
-    #     # ui_keys = ["min_peak_ratio", "min_peak_sharpness", "max_deviation",
-    #     #            "max_magnitude", "min_patch_size", "max_gradient", "reconcile_flow_max_deviation"]
-    #     # ui_params = dict(zip(ui_keys, ui_vals))
-    #
-    #     # stitching_config = service.prepare_stitching_params(
-    #     #     config_path=config_path,
-    #     #     ui_params=make_hashable_params(ui_params)
-    #     # )
-    #     #
-    #     # fig = service.get_flow_figure(
-    #     #     cfg=service.registration_config,
-    #     #     tid_a=item['tid'],
-    #     #     z=item['z']
-    #     # )
-    #
-    #     if fig is None:
-    #         return (html.Div("Flow visualization failed", className="text-danger"),
-    #                 no_update, "Flow Error")
-    #
-    #     status = f"INSPECTING FLOW: T{item['tid']} | Z{item['z']}"
-    #     return no_update, fig, status
 
     # --- CASE B: BATCH (THE LOOPED VERSION) ---
     # Standardize Nudge variables for overlap cases

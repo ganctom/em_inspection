@@ -142,6 +142,13 @@ def selection_card(index: int, item: dict) -> html.Div:
                        outline=True,
                        style={'padding': '1px 6px', 'fontSize': '10px'}),
 
+            dbc.Button("CleanFlow",
+                       id={'type': UI.ID_BTN_CLEAN_FLOW, 'index': index},
+                       size="sm",
+                       color="secondary",
+                       outline=True,
+                       style={'padding': '1px 6px', 'fontSize': '10px'}),
+
             dbc.Button("OV",
                        id={'type': 'plot-ov-btn', 'index': index},
                        size="sm",

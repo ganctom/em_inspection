@@ -1,6 +1,6 @@
 import logging
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, callback, no_update
+from dash import html, dcc, Input, Output, callback, no_update, Dash
 from dash_extensions import EventListener
 
 # 1. Setup logging
@@ -31,6 +31,7 @@ app.layout = html.Div([
     dcc.Store(id='selection-store', data=[], storage_type='session'),
     dcc.Store(id='active-item-index', data=None, storage_type='session'),
     dcc.Store(id='manual-nudge-store', data={'dx': 0, 'dy': 0}),
+    dcc.Store(id='global-settings-store', storage_type='session'),
 
     EventListener(
         id="keyboard-listener",

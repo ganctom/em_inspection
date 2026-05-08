@@ -158,6 +158,7 @@ class UIConstants:
     ID_TAB_PPLN_CFG = "tab-ppln-cfg"
     ID_RESCALE_FCT = "resize-fct"
     ID_BTN_FLOW = "flow-ov-btn"
+    ID_BTN_CLEAN_FLOW = "clean-flow-ov-btn"
 
 
     # --- Messages ---

@@ -22,7 +22,8 @@ import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from coarse_offset_processor import SectionIndex
 from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import AcquisitionConfig, StitchingConfig, RegistrationConfig
+from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
+                              MaskingConfig, WarpConfig)
 from Tile_refactored import Tile
 from constants import DataConstants as DC
 from constants import UIConstants as UI
@@ -34,7 +35,7 @@ from inspection_refactored import (
     store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
 
-
+from sofima import flow_utils
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -59,10 +60,15 @@ class OverlapContext:
 class DataService:
     def __init__(self):
         self.registry = ExperimentRegistry()  # Loads existing user_experiments.yaml
+
         self.acq_config: AcquisitionConfig | None = None
         self.exp_config: ExpConfig | None = None
+        self.stitch_config: StitchingConfig |None = None
         self.reg_config: RegistrationConfig | None = None
-        self.stitch_config = None
+        # self.mesh_config: MeshIntegrationConfig| None = None
+        # self.mask_config: MaskingConfig | None = None
+        # self.warp_config: WarpConfig | None = None
+
         self.inspection = None
         self.processor = None
         self.tile_ids = []
@@ -224,20 +230,47 @@ class DataService:
         logging.debug(f'RegistrationConfig:\n{cfg}')
         return cfg
 
-    def load_experiment(self, config):
+
+    def get_stitch_config_path(self):
+        if self.exp_config is None:
+            raise (ValueError, "Failed to load tile_stitching_config.yaml. Experiment is not initialized.")
+        return str(Path(self.exp_config.proc_dir) / UI.FN_CFG_TILE_STITCHING)
+
+
+    def load_stitching_config(self, config_path: str) -> StitchingConfig:
+        with open(config_path, 'r') as f:
+            data = yaml.safe_load(f)
+
+        logging.info(f'loading {config_path}')
+
+        cfg = StitchingConfig(**data)
+        self.stitch_config = cfg
+        return cfg
+
+
+    def load_experiment(self, config: ExpConfig):
         """
         Loads inspector, coarse offsets tensor & UI data using specified stitch_config file
         """
         self.initialize_experiment_from_config(config)
+
+        # LOAD STITCHING CONFIG
+        self.load_stitching_config(config_path=self.get_stitch_config_path())
+
+        # ASSIGN REG. CONFIG
+        self.reg_config = self.stitch_config.registration_config
+
+        # LOAD COARSE OFFSETS TENSOR
         try:
             self.processor.load_all_offsets_and_tile_id_maps_from_npz()
             self.tile_ids = self.processor.get_largest_tile_id_map()
         except FileNotFoundError as _:
-            # print(f"DataService: Loaded {stitch_config.name}. Coarse offsets not loaded.")
-            logging.info(f"DataService: Loaded {config.name}. Coarse offsets not loaded.")
+            msg = f"DataService: Loaded {config.name}. Coarse offsets not loaded."
+            logging.info(msg)
 
         self.clear_cache()
-        logging.info(f"DataService: Loaded {config.name} successfully.")
+        msg = f"DataService: Loaded {config.name} successfully."
+        logging.info(msg)
 
 
     def initialize_experiment(
@@ -366,11 +399,24 @@ class DataService:
             shift_vec=shift_vec
         )
 
-    def get_flow_figure(
+    def get_flow_fig(
             self,
             section_num: int,
             tile_id: str,
+            clean_params: dict[str, float] | None = None,
+            recon_params: dict[str, int | float] | None = None,
     ) -> Optional[go.Figure]:
+
+        # Silently update attributes if overrides are provided
+        if clean_params:
+            for key, val in clean_params.items():
+                if val is not None:
+                    setattr(self.reg_config, key, val)
+
+        if recon_params:
+            for key, val in recon_params.items():
+                if val is not None:
+                    setattr(self.reg_config, key, val)
 
         section = self._get_initialized_section(section_num)
         if not section:
@@ -382,12 +428,75 @@ class DataService:
             fine_x, _ = section.fflows[0]
             fine_y, _ = section.fflows[1]
 
-            # section.clean_fflows(self.reg_config)
-            # section.reconcile_fflows(self.reg_config)
-            # logging.warning(self.reg_config)
-            # # Extracting reconstructed flow components
-            # fine_x, _ = section.fflows_recon[0]
-            # fine_y, _ = section.fflows_recon[1]
+            if clean_params is not None and recon_params is not None:
+
+                # CLEAN FLOWS
+                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                          for k, v in fine_x.items()}
+                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                          for k, v in fine_y.items()}
+
+                # RECONCILE FLOWS
+                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                          for k, v in fine_x.items()}
+                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                          for k, v in fine_y.items()}
+
+            # Resolving spatial context for key access
+            sec_lookup: SectionIndex = self.processor.get_section_lookup(str(section_num))
+            y, x = sec_lookup[int(tile_id)]
+
+            # Delegate to the Plotly utility
+            return utils.plot_all_flow_components_plotly(fine_x, fine_y, xy=(x, y))
+
+        except Exception as e:
+            err_msg = f"Flow figure failure t{tile_id} s{section_num}: {e}"
+            self.message_queue.append(err_msg)
+            logging.warning(err_msg)
+            return None
+
+    def get_flow_fig(
+            self,
+            section_num: int,
+            tile_id: str,
+            clean_params: dict[str, float] | None = None,
+            recon_params: dict[str, int | float] | None = None,
+    ) -> Optional[go.Figure]:
+
+        # Silently update attributes if overrides are provided
+        if clean_params:
+            for key, val in clean_params.items():
+                if val is not None:
+                    setattr(self.reg_config, key, val)
+
+        if recon_params:
+            for key, val in recon_params.items():
+                if val is not None:
+                    setattr(self.reg_config, key, val)
+
+        section = self._get_initialized_section(section_num)
+        if not section:
+            return None
+
+        try:
+            # Load flows
+            section.ensure_fflows()
+            fine_x, _ = section.fflows[0]
+            fine_y, _ = section.fflows[1]
+
+            if clean_params is not None and recon_params is not None:
+
+                # CLEAN FLOWS
+                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                          for k, v in fine_x.items()}
+                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                          for k, v in fine_y.items()}
+
+                # RECONCILE FLOWS
+                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                          for k, v in fine_x.items()}
+                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                          for k, v in fine_y.items()}
 
             # Resolving spatial context for key access
             sec_lookup: SectionIndex = self.processor.get_section_lookup(str(section_num))

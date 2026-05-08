@@ -98,6 +98,9 @@ class RegistrationConfig(BaseModel):
     reconcile_flow_max_deviation: float = -1.0
     step_patch_size: int = 10
 
+    def to_dict(self):
+        return self.model_dump()
+
 
 class MeshIntegrationConfig(BaseModel):
     dt: float = 0.001
@@ -142,6 +145,7 @@ class MaskingConfig(BaseModel):
 class PipelineConfig(BaseModel):
     downscale_factor: float = 0.3
 
+
 class StitchingConfig(BaseModel):
     output_dir: str = ""
     acquisition_config: AcquisitionConfig = AcquisitionConfig()
@@ -158,4 +162,6 @@ class StitchingConfig(BaseModel):
     @classmethod
     def normalize_output_path(cls, v):
         return cross_platform_path(v) if v else v
+
+
 

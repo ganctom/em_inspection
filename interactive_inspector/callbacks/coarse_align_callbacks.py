@@ -76,8 +76,7 @@ def handle_config_load(n_clicks, file_path):
 
         cfg = pcfg.StitchingConfig(**data)
 
-        reg, mesh, warp, mask = (cfg.registration_config,
-                                 cfg.mesh_integration_config, cfg.warp_config, cfg.mask_config)
+        reg, mesh, warp, mask = (cfg.registration_config, cfg.mesh_integration_config, cfg.warp_config, cfg.mask_config)
 
         service.stitch_config = cfg
         service.reg_config = reg

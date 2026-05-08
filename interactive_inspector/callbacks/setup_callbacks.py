@@ -2,7 +2,7 @@ import logging
 import threading
 import dash
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback, html, ctx
+from dash import Input, Output, State, callback, html, ctx, no_update
 from data_service import service
 from experiment_configs import get_experiment_configurations
 from constants import UI
@@ -10,8 +10,10 @@ from constants import UI
 
 # --- 1. INITIALIZATION CALLBACK ---
 @callback(
-    # ADDED allow_duplicate=True HERE
-    Output("setup-feedback", "children", allow_duplicate=True),
+    [
+        Output("setup-feedback", "children", allow_duplicate=True),
+        Output('global-settings-store', 'data', allow_duplicate=True)
+    ],
     [Input(UI.BTN_INIT['id'], "n_clicks"),
      Input(UI.BTN_ADD_EXP['id'], "n_clicks")],
     [State(UI.ID_SEL_EXPERIMENT, "value"),
@@ -27,34 +29,102 @@ from constants import UI
      State(UI.ID_INP_CT, "value")],
     prevent_initial_call=True
 )
+# def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
+#                                   n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
+#     trigger = ctx.triggered_id
+#     try:
+#         if trigger == UI.ID_BTN_INIT:
+#             configs = get_experiment_configurations()
+#             cfg = configs.get(sel_name)
+#
+#             service.load_experiment(cfg)
+#             print(f"DEBUG: Loading experiment: {store_data}")  # Check this in your terminal
+#
+#
+#             store_data = no_update
+#             print(f"DEBUG: Reg. cfg loaded: {service.reg_config}")  # Check this in your terminal
+#             if service.reg_config:
+#                 store_data = service.reg_config.to_dict()
+#                 print(f"DEBUG: Syncing to store: {store_data}")  # Check this in your terminal
+#                 return alert, store_data
+#
+#             alert = dbc.Alert([
+#                 html.H5("Success!", className="alert-heading"),
+#                 html.P(f"Experiment '{cfg.name}' loaded successfully."),
+#             ], color="success", className="mt-3")
+#
+#             return alert, store_data
+#
+#         elif trigger == UI.ID_BTN_ADD_EXP:
+#             if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
+#                 return dbc.Alert("Please fill in all required fields.", color="warning"), no_update
+#
+#             grid_shape = tuple([n_sx, n_sy])
+#             service.create_and_save_new_experiment(
+#                 n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
+#             )
+#             alert = dbc.Alert([
+#                 html.H5("Success!", className="alert-heading"),
+#                 html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
+#             ], color="success", className="mt-3")
+#             return alert, no_update
+#
+#     except Exception as e:
+#         return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3")
 def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
                                   n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
+
+    # 1. Immediate Guard: Exit if no actual button was clicked
+    if not ctx.triggered_id or (not n_load and not n_add):
+        return no_update, no_update
+
     trigger = ctx.triggered_id
+
+    # 2. Initialize store_data at function scope to prevent UnboundLocalError
+    store_data = no_update
+
     try:
+        # --- CASE A: LOAD EXISTING ---
         if trigger == UI.ID_BTN_INIT:
             configs = get_experiment_configurations()
             cfg = configs.get(sel_name)
+
+            if not cfg:
+                return dbc.Alert("Invalid experiment selection.", color="danger"), no_update
+
             service.load_experiment(cfg)
-            return dbc.Alert([
+
+            if service.reg_config:
+                store_data = service.reg_config.to_dict()
+
+            alert = dbc.Alert([
                 html.H5("Success!", className="alert-heading"),
                 html.P(f"Experiment '{cfg.name}' loaded successfully."),
             ], color="success", className="mt-3")
 
+            return alert, store_data
+
+        # --- CASE B: CREATE NEW ---
         elif trigger == UI.ID_BTN_ADD_EXP:
             if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
-                return dbc.Alert("Please fill in all required fields.", color="warning")
+                return dbc.Alert("Missing required fields.", color="warning"), no_update
 
-            grid_shape = tuple([n_sx, n_sy])
+            grid_shape = (int(n_sx), int(n_sy))
             service.create_and_save_new_experiment(
                 n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
             )
-            return dbc.Alert([
-                html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
-            ], color="success", className="mt-3")
-    except Exception as e:
-        return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3")
 
+            alert = dbc.Alert([
+                html.H5("Success!", className="alert-heading"),
+                html.P(f"Experiment '{n_name}' created."),
+            ], color="success", className="mt-3")
+
+            return alert, no_update
+
+    except Exception as e:
+        return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3"), store_data
+
+    return no_update, no_update
 
 @callback(
     [Output("experiment-details-card", "children"),
@@ -257,3 +327,32 @@ def master_ui_poller(n):
         True,  # Disable interval
         dash.no_update, dash.no_update, dash.no_update, dash.no_update
     )
+
+@callback(
+    Output('global-settings-store', 'data'),
+    Input(UI.ID_BTN_INIT, 'n_clicks'),  # Triggered when project is initialized
+    State(UI.ID_SEL_EXPERIMENT, 'value'),
+    prevent_initial_call=True
+)
+def sync_config_to_store(n_clicks, selected_exp):
+    if not n_clicks or not selected_exp:
+        return no_update
+
+    # At this point, service.load_experiment() has been called
+    # (likely in another callback or as part of the init process)
+    if service.stitch_config:
+        cfg = service.stitch_config.registration_config
+
+        # Flatten the object into a dictionary for JSON serialization in dcc.Store
+        config_dict = {
+            "min_peak_ratio": cfg.min_peak_ratio,
+            "min_peak_sharpness": cfg.min_peak_sharpness,
+            "max_deviation": cfg.max_deviation,
+            "max_magnitude": cfg.max_magnitude,
+            "min_patch_size": cfg.min_patch_size,
+            "max_gradient": cfg.max_gradient,
+            "reconcile_flow_max_deviation": cfg.reconcile_flow_max_deviation
+        }
+        return config_dict
+
+    return no_update

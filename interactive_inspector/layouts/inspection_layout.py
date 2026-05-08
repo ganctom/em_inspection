@@ -11,6 +11,8 @@ def layout():
 
     return dbc.Container([
 
+        # dcc.Store(id='global-settings-store', storage_type='session'),
+
         # --- MAIN UI STRUCTURE ---
         dbc.Row([
 

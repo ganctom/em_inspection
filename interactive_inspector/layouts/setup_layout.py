@@ -16,6 +16,9 @@ def layout():
 
     return dbc.Container([
 
+        # # 0. The Global Settings Store
+        # dcc.Store(id='global-settings-store', storage_type='session'),
+
         # 1. ADD THE MISSING INTERVAL HERE
         dcc.Interval(
             id="progress-interval",
