@@ -31,7 +31,7 @@ import parameter_config as pcfg
         Output(UI.ID_CONF_MAX_MAG, "value"),
         Output(UI.ID_CONF_MIN_PATCH, "value"),
         Output(UI.ID_CONF_MAX_GRAD, "value"),
-        Output(UI.ID_CONF_REC_FLOW_MAX_GRAD, "value"),
+        Output(UI.ID_CONF_RECON_FLOW_MAX_DEV, "value"),
         # Mesh (13 outputs)
         Output(UI.ID_CONF_MESH_DT, "value"),
         Output(UI.ID_CONF_MESH_GAMMA, "value"),
@@ -126,7 +126,7 @@ def handle_config_load(n_clicks, file_path):
         State(UI.ID_CONF_BATCH, "value"), State(UI.ID_CONF_MIN_PKR, "value"),
         State(UI.ID_CONF_MIN_PKS, "value"), State(UI.ID_CONF_MAX_DEV, "value"),
         State(UI.ID_CONF_MAX_MAG, "value"), State(UI.ID_CONF_MIN_PATCH, "value"),
-        State(UI.ID_CONF_MAX_GRAD, "value"), State(UI.ID_CONF_REC_FLOW_MAX_GRAD, "value"),
+        State(UI.ID_CONF_MAX_GRAD, "value"), State(UI.ID_CONF_RECON_FLOW_MAX_DEV, "value"),
         # Mesh States
         State(UI.ID_CONF_MESH_DT, "value"), State(UI.ID_CONF_MESH_GAMMA, "value"),
         State(UI.ID_CONF_MESH_K0, "value"), State(UI.ID_CONF_MESH_K, "value"),
@@ -157,7 +157,7 @@ def handle_config_save(n_clicks, path, *args):
     try:
         # Unpack exactly as listed in the States above
         (out_dir, start, end,
-         ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_g,
+         ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_dev,
          m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
          w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe,
          mask_margin, mask_rim_size
@@ -168,7 +168,7 @@ def handle_config_save(n_clicks, path, *args):
             "min_range": parse_csv(m_rng), "filter_size": fs, "patch_size": parse_csv(patch),
             "batch_size": batch, "min_peak_ratio": pkr, "min_peak_sharpness": pks,
             "max_deviation": max_dev, "max_magnitude": max_mag, "min_patch_size": min_p,
-            "max_gradient": max_g, "reconcile_flow_max_deviation": rec_g
+            "max_gradient": max_g, "reconcile_flow_max_deviation": rec_dev
         }))
 
         mesh_cfg = pcfg.MeshIntegrationConfig(**clean_dict({
@@ -294,6 +294,10 @@ def handle_coarse_offset_backup(n_clicks):
         UI.log_row("💾 Initializing Coarse Offset Backup...", type="info"),
         UI.log_row("Exporting all cx_cy.json files to .npz container.")
     ]
+
+    # Re-load coarse offsets database and largest tile-id map
+    service.processor.load_all_offsets_and_tile_id_maps_from_npz()
+    service.tile_ids = service.processor.get_largest_tile_id_map()
 
     return init_log, False, {"display": "block", "height": "10px"}
 

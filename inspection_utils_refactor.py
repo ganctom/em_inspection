@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from glob import glob
 import logging
 import numpy as np
+import numpy.typing as npt
 import os
 from pathlib import Path
 from platform import system
@@ -747,7 +748,7 @@ def get_tid_idx(tile_id_map: np.ndarray, tile_id: int) -> Optional[tuple[int, in
 def compute_tile_id_map(
         grid_shape: tuple[int, int],
         tile_ids: Sequence[int]
-) -> np.ndarray[int]:
+) -> npt.NDArray[np.int_]:
     """
     Build a 2D grid of shape `grid_shape` where each cell contains its linear tile index
     if that index is in `tile_ids`, or -1 otherwise. Finally, trim any full-(-1) border

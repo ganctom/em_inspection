@@ -1,14 +1,13 @@
-from typing import Dict, Any
-
 from dash import html
 import dash_bootstrap_components as dbc
 import numpy as np
+import numpy.typing as npt
 import plotly.graph_objects as go
 from interactive_inspector.constants import UIConstants as UI
 
 
 def create_grid_navigator(
-        tile_ids: np.ndarray,
+        tile_ids: npt.NDArray[np.int_],
         active_tid: str = None,
         dirty_tids: set = None,
         available_tids: set = None

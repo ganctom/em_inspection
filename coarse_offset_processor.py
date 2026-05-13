@@ -88,7 +88,7 @@ class CoarseOffsetProcessor:
         z_key = str(z)
         return self.cxyz_obj[z_key][:, :, y, x].ravel()
 
-    def load_all_offsets_and_tile_id_maps_from_npz(self):
+    def load_all_offsets_and_tile_id_maps_from_npz(self) -> None:
         """Modified to index errors immediately upon loading."""
         if not self.path_cxyz.exists():
             raise FileNotFoundError(f"Files missing: {self.path_cxyz}")
@@ -201,28 +201,13 @@ class CoarseOffsetProcessor:
             self.process_tile_id_outliers(tile_id, n_before, n_after, n_sigmas)
 
 
-    def get_largest_tile_id_map(self) -> np.ndarray:
-        """
-        Computes tile-id map with the largest extent in all tile-grid directions.
-        Uses cached unique IDs to avoid redundant disk or memory scans.
-        """
-        # 1. Get IDs from cache (O(1) if already called, or O(N) once)
+    def get_largest_tile_id_map(self) -> npt.NDArray[np.int_]:
         unique_ids = self.get_unique_tile_ids()
 
         if not unique_ids:
-            logging.warning("No unique tile IDs found. Returning empty grid.")
-            # Return an empty grid of the configured shape if no data exists
-            return np.zeros(self.config.grid_shape, dtype=int)
+            return np.zeros(self.config.grid_shape, dtype=np.int_)
 
-        # 2. Sort for deterministic map generation
-        sorted_ids = sorted(unique_ids)
-
-        # 3. Delegate to utility
-        # We assume utils.compute_tile_id_map handles the spatial placement
-        return utils.compute_tile_id_map(
-            self.config.grid_shape,
-            sorted_ids
-        )
+        return utils.compute_tile_id_map(self.config.grid_shape, sorted(unique_ids))
 
 
     def get_unique_tile_ids(self) -> set[int]:

@@ -29,48 +29,6 @@ from constants import UI
      State(UI.ID_INP_CT, "value")],
     prevent_initial_call=True
 )
-# def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
-#                                   n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
-#     trigger = ctx.triggered_id
-#     try:
-#         if trigger == UI.ID_BTN_INIT:
-#             configs = get_experiment_configurations()
-#             cfg = configs.get(sel_name)
-#
-#             service.load_experiment(cfg)
-#             print(f"DEBUG: Loading experiment: {store_data}")  # Check this in your terminal
-#
-#
-#             store_data = no_update
-#             print(f"DEBUG: Reg. cfg loaded: {service.reg_config}")  # Check this in your terminal
-#             if service.reg_config:
-#                 store_data = service.reg_config.to_dict()
-#                 print(f"DEBUG: Syncing to store: {store_data}")  # Check this in your terminal
-#                 return alert, store_data
-#
-#             alert = dbc.Alert([
-#                 html.H5("Success!", className="alert-heading"),
-#                 html.P(f"Experiment '{cfg.name}' loaded successfully."),
-#             ], color="success", className="mt-3")
-#
-#             return alert, store_data
-#
-#         elif trigger == UI.ID_BTN_ADD_EXP:
-#             if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
-#                 return dbc.Alert("Please fill in all required fields.", color="warning"), no_update
-#
-#             grid_shape = tuple([n_sx, n_sy])
-#             service.create_and_save_new_experiment(
-#                 n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
-#             )
-#             alert = dbc.Alert([
-#                 html.H5("Success!", className="alert-heading"),
-#                 html.P(f"Experiment '{n_name}' created. Continue with 'Parse Section Data'."),
-#             ], color="success", className="mt-3")
-#             return alert, no_update
-#
-#     except Exception as e:
-#         return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3")
 def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
                                   n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
 
@@ -209,71 +167,6 @@ def toggle_parse_button(exp_name, feedback, n_init):
 
     return button_disabled, tooltip_msg
 
-
-# # Callback for storing all cx_cy.json files into a .npz container
-# @callback(
-#     [Output("setup-feedback", "children", allow_duplicate=True),
-#      Output("progress-interval", "disabled", allow_duplicate=True)],
-#     Input(UI.ID_BTN_BCKP_CO, "n_clicks"),
-#     State(UI.ID_SEL_EXPERIMENT, "value"),
-#     prevent_initial_call=True
-# )
-# def handle_coarse_offset_backup(n_clicks, sel_name):
-#     if not n_clicks or not sel_name:
-#         return dash.no_update, dash.no_update
-#
-#     try:
-#         # Start the thread
-#         thread = threading.Thread(target=ppln_service.run_offsets_backup_thread, daemon=True)
-#         thread.start()
-#
-#         # UI initialization
-#         initial_ui = dbc.Alert([
-#             html.Div("Initializing backup...", className="small fw-bold mb-1"),
-#             dbc.Progress(value=0, striped=True, animated=True, style={"height": "25px"}),
-#         ], color="info", className="mt-3")
-#
-#         return initial_ui, False # Enable interval
-#
-#     except Exception as e:
-#         return dbc.Alert(f"Error: {str(e)}", color="danger", className="mt-3"), True
-#
-#
-# @callback(
-#     [Output(UI.ID_BTN_BCKP_CO, "disabled"),
-#      Output(UI.ID_TTP_BCKP, "children")],
-#     [Input(UI.ID_SEL_EXPERIMENT, "value"),
-#      Input("setup-feedback", "children"),
-#      Input(UI.ID_BTN_INIT, "n_clicks")],
-#     State(UI.ID_TTP_BCKP, "children"),
-#     prevent_initial_call=False
-# )
-# def toggle_backup_button(sel_name, feedback, n_init, current_ttp_text):
-#     # 1. Backend Match Check:
-#     has_matching_config = (
-#         ppln_service.exp_config is not None and
-#         ppln_service.exp_config.name == sel_name
-#     )
-#
-#     # 2. Frontend Check: Is an experiment actually selected?
-#     has_selection = bool(sel_name and sel_name.strip())
-#
-#     # 3. Validation Check: Did the last initialization fail?
-#     is_error = False
-#     if isinstance(feedback, dict) and 'props' in feedback:
-#         is_error = feedback.get('props', {}).get('color') == 'danger'
-#
-#     # The "Green Light" condition
-#     is_ready = has_matching_config and has_selection and not is_error
-#
-#     # Final States
-#     button_disabled = not is_ready
-#     new_msg = UI.MSG_BCKP_CO_READY if is_ready else UI.MSG_BCKP_CO_DISABLED
-#
-#     # Only update tooltip text if it changed (prevents tab-switch flickering)
-#     tooltip_output = new_msg if new_msg != current_ttp_text else dash.no_update
-#
-#     return button_disabled, tooltip_output
 
 @callback(
     [Output("parsing-progress-bar", "value"),

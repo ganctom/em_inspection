@@ -1,6 +1,6 @@
 import yaml
 from dataclasses import dataclass
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, field_validator, model_validator, computed_field
 from typing import Tuple, Dict
 
 from inspection_utils_refactor import cross_platform_path
@@ -100,6 +100,25 @@ class RegistrationConfig(BaseModel):
 
     def to_dict(self):
         return self.model_dump()
+
+    @property
+    def clean_params(self) -> dict:
+        """Returns a subset of parameters for flow_utils.clean_flow."""
+        return {
+            "min_peak_ratio": float(self.min_peak_ratio),
+            "min_peak_sharpness": float(self.min_peak_sharpness),
+            "max_magnitude": float(self.max_magnitude),
+            "max_deviation": float(self.max_deviation,)
+        }
+
+    @property
+    def recon_params(self) -> dict:
+        """Returns a subset of parameters for flow_utils.reconcile_flows."""
+        return {
+            "max_gradient": float(self.max_gradient),
+            "max_deviation": float(self.max_deviation),
+            "min_patch_size": int(self.min_patch_size),
+        }
 
 
 class MeshIntegrationConfig(BaseModel):

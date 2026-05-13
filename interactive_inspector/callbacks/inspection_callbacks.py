@@ -11,6 +11,7 @@ from data_service import service, orchestrator
 from inspection_utils_refactor import make_hashable_params
 from interactive_inspector.layouts.components_layouts import selection_card, create_grid_navigator
 from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts
+from parameter_config import RegistrationConfig
 
 
 @app.callback(
@@ -485,6 +486,39 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 
 
 @app.callback(
+    Output('global-settings-store', 'data', allow_duplicate=True),
+    [
+        # Add all your manual UI inputs here as Inputs
+        Input(UIConstants.ID_CONF_MIN_PKR, 'value'),
+        Input(UIConstants.ID_CONF_MIN_PKS, 'value'),
+        Input(UIConstants.ID_CONF_MAX_DEV, 'value'),
+        Input(UIConstants.ID_CONF_MAX_MAG, 'value'),
+        Input(UIConstants.ID_CONF_MIN_PATCH, 'value'),
+        Input(UIConstants.ID_CONF_MAX_GRAD, 'value'),
+        Input(UIConstants.ID_CONF_RECON_FLOW_MAX_DEV, 'value'),
+    ],
+    State('global-settings-store', 'data'),
+    prevent_initial_call=True
+)
+def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data):
+    # If the store is empty, initialize it
+    data = current_data or {}
+
+    # Update the dictionary with the current UI values
+    data.update({
+        "min_peak_ratio": pkr,
+        "min_peak_sharpness": pks,
+        "max_deviation": max_dev,
+        "max_magnitude": max_mag,
+        "min_patch_size": min_ps,
+        "max_gradient": max_grad,
+        "reconcile_flow_max_deviation": rf_grad
+    })
+
+    return data
+
+
+@app.callback(
     [Output('registration-log', 'children'),
      Output('integrated-overlap-graph', 'figure'),
      Output('integrated-ov-status', 'children')],
@@ -523,34 +557,19 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
     flow_variants = [UIConstants.ID_BTN_FLOW, UIConstants.ID_BTN_CLEAN_FLOW]
 
     if trig_type in flow_variants and (trig_val or 0) > 0:
-        # Use the specific index from the clicked button
         clicked_idx = trig.get('index')
         item = selection_data[clicked_idx]
         item_tid, item_z = item['tid'], item['z']
 
+        ui_config = None
+        clean_flow = False
         if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
-            s = settings_data or {}
+            ui_config = RegistrationConfig(**settings_data)
+            clean_flow = True
 
-            clean_params = {
-                "min_peak_ratio": s.get("min_peak_ratio"),
-                "min_peak_sharpness": s.get("min_peak_sharpness"),
-                "max_magnitude": s.get("max_magnitude"),
-                "max_deviation": s.get("max_deviation"),
-            }
-
-            recon_params = {
-                "max_gradient": s.get("max_gradient"),
-                "max_deviation": s.get("max_deviation"),
-                "min_patch_size": s.get("min_patch_size"),
-            }
-        else:
-            clean_params = None
-            recon_params = None
-
-        fig = service.get_flow_fig(item_z, item_tid, clean_params, recon_params)
+        fig = service.get_flow_fig(item_z, item_tid, ui_config, clean_flow)
 
         if fig is None:
-            # Robust error extraction
             error_msg = service.message_queue.pop() if service.message_queue else "Unknown Error"
             return html.Div(error_msg, className="text-danger"), no_update, "Flow Error"
 

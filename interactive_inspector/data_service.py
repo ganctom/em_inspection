@@ -12,6 +12,7 @@ from typing import Optional, Tuple, Any
 import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
+import numpy.typing as npt
 import gc
 import threading
 import yaml
@@ -34,8 +35,42 @@ from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
+from Section_refactored import TileFlow, TileXY
 
 from sofima import flow_utils
+
+
+@dataclass
+class FlowParams:
+    min_peak_ratio: float
+    min_peak_sharpness: float
+    max_magnitude: float
+    max_deviation: float
+    max_gradient: float
+    min_patch_size: int
+    recon_flow_max_dev: float
+
+    @property
+    def as_dict(self) -> dict[str, float]:
+        # Merges both dictionaries; reconcile_params takes precedence on key collisions
+        return self.clean_params | self.reconcile_params
+
+    @property
+    def clean_params(self) -> dict[str, float]:
+        return {
+            "min_peak_ratio": self.min_peak_ratio,
+            "min_peak_sharpness": self.min_peak_sharpness,
+            "max_magnitude": self.max_magnitude,
+            "max_deviation": self.max_deviation,
+        }
+
+    @property
+    def reconcile_params(self) -> dict[str, float]:
+        return {
+            "max_gradient": self.max_gradient,
+            "reconcile_flow_max_deviation": self.recon_flow_max_dev,
+            "min_patch_size": self.min_patch_size,
+        }
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -71,7 +106,7 @@ class DataService:
 
         self.inspection = None
         self.processor = None
-        self.tile_ids = []
+        self.tile_ids: npt.NDArray[np.int_] = np.array([], dtype=np.int_)
         self._section_cache = {}
         self._lock = threading.Lock()
         self._worker = None
@@ -399,103 +434,53 @@ class DataService:
             shift_vec=shift_vec
         )
 
-    def get_flow_fig(
-            self,
-            section_num: int,
-            tile_id: str,
-            clean_params: dict[str, float] | None = None,
-            recon_params: dict[str, int | float] | None = None,
-    ) -> Optional[go.Figure]:
 
-        # Silently update attributes if overrides are provided
-        if clean_params:
-            for key, val in clean_params.items():
-                if val is not None:
-                    setattr(self.reg_config, key, val)
-
-        if recon_params:
-            for key, val in recon_params.items():
-                if val is not None:
-                    setattr(self.reg_config, key, val)
-
+    def ensure_flow_fig_resources(self, section_num: int) -> None:
         section = self._get_initialized_section(section_num)
         if not section:
             return None
 
+        section.ensure_fflows()
+        return None
+
+
+    def get_flow_fig(
+            self,
+            section_num: int,
+            tile_id: str,
+            reg_config: RegistrationConfig | None = None,
+            clean_flow: bool = False
+    ) -> Optional[go.Figure]:
+
+        # 1. Parameter Initialization
+        # If reg_config is passed, we use it, otherwise fallback to instance default
+        cfg = reg_config or self.reg_config
+
+        section = self._get_initialized_section(section_num)
+        if not section:
+            return None
+        print(cfg)
         try:
             # Load flows
             section.ensure_fflows()
             fine_x, _ = section.fflows[0]
             fine_y, _ = section.fflows[1]
 
-            if clean_params is not None and recon_params is not None:
+            if clean_flow:
+                c_params = cfg.clean_params
+                r_params = cfg.recon_params
+                logging.info(f"Cleaning with: {c_params}")
 
                 # CLEAN FLOWS
-                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **c_params)[:, 0, :, :]
                           for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
+                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **c_params)[:, 0, :, :]
                           for k, v in fine_y.items()}
 
                 # RECONCILE FLOWS
-                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **r_params)[:, 0, :, :]
                           for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
-                          for k, v in fine_y.items()}
-
-            # Resolving spatial context for key access
-            sec_lookup: SectionIndex = self.processor.get_section_lookup(str(section_num))
-            y, x = sec_lookup[int(tile_id)]
-
-            # Delegate to the Plotly utility
-            return utils.plot_all_flow_components_plotly(fine_x, fine_y, xy=(x, y))
-
-        except Exception as e:
-            err_msg = f"Flow figure failure t{tile_id} s{section_num}: {e}"
-            self.message_queue.append(err_msg)
-            logging.warning(err_msg)
-            return None
-
-    def get_flow_fig(
-            self,
-            section_num: int,
-            tile_id: str,
-            clean_params: dict[str, float] | None = None,
-            recon_params: dict[str, int | float] | None = None,
-    ) -> Optional[go.Figure]:
-
-        # Silently update attributes if overrides are provided
-        if clean_params:
-            for key, val in clean_params.items():
-                if val is not None:
-                    setattr(self.reg_config, key, val)
-
-        if recon_params:
-            for key, val in recon_params.items():
-                if val is not None:
-                    setattr(self.reg_config, key, val)
-
-        section = self._get_initialized_section(section_num)
-        if not section:
-            return None
-
-        try:
-            # Load flows
-            section.ensure_fflows()
-            fine_x, _ = section.fflows[0]
-            fine_y, _ = section.fflows[1]
-
-            if clean_params is not None and recon_params is not None:
-
-                # CLEAN FLOWS
-                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
-                          for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **clean_params)[:, 0, :, :]
-                          for k, v in fine_y.items()}
-
-                # RECONCILE FLOWS
-                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
-                          for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **recon_params)[:, 0, :, :]
+                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **r_params)[:, 0, :, :]
                           for k, v in fine_y.items()}
 
             # Resolving spatial context for key access

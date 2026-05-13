@@ -58,3 +58,15 @@ ROLI_F1_run-12801_15000:
   last_sec: 15000
   pixel_size: 10.0
   cut_thickness: 25.0
+ROLI_F1_run-06:
+  name: ROLI_F1_run-06
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-06
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1270
+  pixel_size: 10.0
+  cut_thickness: 25.0

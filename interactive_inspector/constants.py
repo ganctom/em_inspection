@@ -508,7 +508,7 @@ class UIConstants:
                          dbc.Input(**cls.numeric_factory(cls.ID_CONF_MAX_GRAD, value=defaults.max_gradient))], width=6),
                 # Row 5
                 dbc.Col([cls.label_factory("Rec. Flow Max Dev"), dbc.Input(
-                    **cls.numeric_factory(cls.ID_CONF_REC_FLOW_MAX_GRAD, value=defaults.reconcile_flow_max_deviation))],
+                    **cls.numeric_factory(cls.ID_CONF_RECON_FLOW_MAX_DEV, value=defaults.reconcile_flow_max_deviation))],
                         width=12),
             ], className="g-2")
         ]
@@ -737,7 +737,7 @@ class UIConstants:
     ID_CONF_MAX_MAG = "conf-max-mag"
     ID_CONF_MIN_PATCH = "conf-min-patch"
     ID_CONF_MAX_GRAD = "conf-max-grad"
-    ID_CONF_REC_FLOW_MAX_GRAD = "conf-rec-flow-max-grad"
+    ID_CONF_RECON_FLOW_MAX_DEV = "conf-recon-flow-max-dev"
 
     # Masking IDs
     ID_CONF_MASK_MARGIN = "conf-mask-margin"
