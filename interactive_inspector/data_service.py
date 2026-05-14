@@ -452,7 +452,6 @@ class DataService:
 
         return section
 
-
     def get_flow_fig(
             self,
             section_num: int,
@@ -460,31 +459,59 @@ class DataService:
             reg_config: RegistrationConfig | None = None,
             do_clean_flow: bool = False
     ) -> Optional[go.Figure]:
+        """
+            Retrieves and processes flow data for a specific tile to generate a Plotly figure.
+
+            This method ensures the necessary resources are loaded, determines the spatial
+            coordinates for the tile, and optionally performs flow cleaning and reconciliation.
+            The colormap range is locked to the raw data values to ensure visual consistency
+            between raw and cleaned states.
+
+            Args:
+                section_num: The index of the section to visualize.
+                tile_id: The string identifier for the specific tile.
+                reg_config: Configuration for cleaning; defaults to self.reg_config if None.
+                do_clean_flow: If True, applies cleaning and reconciliation to the flow fields.
+
+            Returns:
+                A 2x2 Plotly Figure if data exists, otherwise None.
+            """
 
         # If reg_config is passed, we use it, otherwise fallback to instance default
         cfg = reg_config or self.reg_config
 
         section = self.ensure_flow_fig_resources(section_num)
-        if section is None:
-            return None
+        if section is None: return None
 
         try:
-            fine_x = section.fflows[0][0]  # ndim flow array = (4, y, x)
-            fine_y = section.fflows[1][0]  # ndim flow array = (4, y, x)
+            # Grab raw data first to establish the baseline colormap range
+            fine_x_raw = section.fflows[0][0]
+            fine_y_raw = section.fflows[1][0]
 
+            # Resolving spatial context for tile-key access
+            sec_lookup = self.processor.get_section_lookup(str(section_num))
+            tile_row_idx, tile_col_idx = sec_lookup[int(tile_id)]
+            xy = (tile_col_idx, tile_row_idx)
+
+            # Establish fixed colormap range based on raw data for visual consistency
+            z_lims = None
+            if xy in fine_x_raw and xy in fine_y_raw:
+                all_vals = np.concatenate([fine_x_raw[xy][:2].flatten(),
+                                           fine_y_raw[xy][:2].flatten()])
+                z_lims = (np.nanmin(all_vals), np.nanmax(all_vals))
+
+            # Switch to reconstructed data if cleaning is requested
+            fine_x, fine_y = fine_x_raw, fine_y_raw
+
+            # Perform cleaning if requested
             if do_clean_flow:
                 section.clean_fflows(cfg)
                 section.reconcile_fflows(cfg)
-                fine_x = section.fflows_recon[0][0]  # ndim flow array = (2, y, x)
-                fine_y = section.fflows_recon[1][0]  # ndim flow array = (2, y, x)
+                fine_x = section.fflows_recon[0][0]
+                fine_y = section.fflows_recon[1][0]
 
-            # Resolving spatial context for key access
-            sec_lookup = self.processor.get_section_lookup(str(section_num))
-            tile_row_idx, tile_col_idx = sec_lookup[int(tile_id)]
-
-            # Delegate to the Plotly utility
             return self.plot_all_flow_components_plotly(
-                fine_x, fine_y, xy=(tile_col_idx, tile_row_idx)
+                fine_x, fine_y, xy=xy, z_range=z_lims
             )
 
         except Exception as e:
@@ -499,7 +526,8 @@ class DataService:
             fine_x: TileFlow,
             fine_y: TileFlow,
             xy: tuple[int, int],
-            transpose: bool = False
+            transpose: bool = False,
+            z_range: tuple[float, float] | None = None
     ) -> go.Figure:
         """
         Generates a 2x2 Plotly grid of flow components with specific spatial alignments.
@@ -507,13 +535,15 @@ class DataService:
         Fine Flow X (Row 1): Transposed by default, then rotated 180 degrees.
         Fine Flow Y (Row 2): Standard orientation (transposed only if requested).
         """
+
         if xy not in fine_x and xy not in fine_y:
             return go.Figure()
 
         fig: go.Figure = make_subplots(
             rows=2, cols=2,
             subplot_titles=(
-                UI.LBL_FLOW_XH, UI.LBL_FLOW_XV, UI.LBL_FLOW_YH, UI.LBL_FLOW_YV
+                UI.LBL_FLOW_XH, UI.LBL_FLOW_XV,
+                UI.LBL_FLOW_YH, UI.LBL_FLOW_YV
             ),
             horizontal_spacing=0.1,
             vertical_spacing=0.3
@@ -524,6 +554,9 @@ class DataService:
                 go.Heatmap(
                     z=data,
                     colorscale='Viridis',
+                    # Explicitly set bounds to prevent colormap shifting
+                    zmin=z_range[0] if z_range else None,
+                    zmax=z_range[1] if z_range else None,
                     colorbar=dict(
                         thickness=15, len=0.45, yanchor='top',
                         y=1.0 if row == 1 else 0.45,
@@ -535,6 +568,7 @@ class DataService:
 
         # --- Data Processing & Plotting ---
         spatial_ndim = 2  # for removing non-spatial channels in fine-flow arrays
+
         if xy in fine_x:
             # X Row: Logic requires a 180-degree flip (inverted indexing)
             d_x: np.ndarray = fine_x[xy][:spatial_ndim, :]
@@ -543,7 +577,6 @@ class DataService:
             _add_trace(1, 2, (d_x[1].T if do_T_x else d_x[1])[::-1, ::-1])
 
         if xy in fine_y:
-            # Y Row: Standard spatial mapping
             d_y: np.ndarray = fine_y[xy][:spatial_ndim, :]
             do_T_y: bool = transpose
             _add_trace(2, 1, d_y[0].T if do_T_y else d_y[0])
