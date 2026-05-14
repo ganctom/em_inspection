@@ -1,5 +1,8 @@
-import yaml
+from __future__ import annotations
+
 from dataclasses import dataclass
+
+import yaml
 from pydantic import BaseModel, field_validator, model_validator, computed_field
 from typing import Tuple, Dict
 
@@ -52,6 +55,16 @@ class AcquisitionConfig(BaseModel):
     def normalize_paths(cls, v):
         return cross_platform_path(v) if v else v
 
+    @classmethod
+    def from_experiment(cls, exp: ExpConfig) -> AcquisitionConfig:
+        return cls(
+                sbem_root_dir=exp.acq_dir,
+                tile_grid=f"g{exp.grid_num:04d}",
+                grid_shape = exp.grid_shape,
+                thickness = exp.cut_thickness,
+                resolution_xy = exp.pixel_size,
+            )
+
 
 class ExpConfig(BaseModel):
     name: str
@@ -81,6 +94,29 @@ class AppConfig(BaseModel):
     projects: Dict[str, ExpConfig] = {}
 
 
+@dataclass(frozen=False)
+class CoarseParams:
+    overlaps_x: list[int]
+    overlaps_y: list[int]
+    min_range: list[int]
+    min_overlap: int
+    filter_size: int
+
+
+@dataclass(frozen=False)
+class StitchParams:
+    patch_size: list[int, int]
+    batch_size: int
+    min_peak_ratio: float
+    min_peak_sharpness: float
+    max_deviation: int
+    max_magnitude: int
+    min_patch_size: int
+    max_gradient: float
+    reconcile_flow_max_deviation: float
+    step_patch_size: int
+
+
 class RegistrationConfig(BaseModel):
     overlaps_x: list[int] = [200, 300, 400]
     overlaps_y: list[int] = [200, 300, 400]
@@ -108,7 +144,7 @@ class RegistrationConfig(BaseModel):
             "min_peak_ratio": float(self.min_peak_ratio),
             "min_peak_sharpness": float(self.min_peak_sharpness),
             "max_magnitude": float(self.max_magnitude),
-            "max_deviation": float(self.max_deviation,)
+            "max_deviation": float(self.max_deviation),
         }
 
     @property
@@ -119,6 +155,33 @@ class RegistrationConfig(BaseModel):
             "max_deviation": float(self.max_deviation),
             "min_patch_size": int(self.min_patch_size),
         }
+
+    @property
+    def coarse_params(self) -> CoarseParams:
+        """Returns a subset of parameters as a structured dataclass object."""
+        return CoarseParams(
+            overlaps_x=self.overlaps_x,
+            overlaps_y=self.overlaps_y,
+            min_range=self.min_range,
+            min_overlap=self.min_overlap,
+            filter_size=self.filter_size,
+        )
+
+    @property
+    def stitch_params(self) -> StitchParams:
+        """Returns parameters for fine-grained patch-based stitching."""
+        return StitchParams(
+            patch_size=self.patch_size,
+            batch_size=self.batch_size,
+            min_peak_ratio=self.min_peak_ratio,
+            min_peak_sharpness=self.min_peak_sharpness,
+            max_deviation=self.max_deviation,
+            max_magnitude=self.max_magnitude,
+            min_patch_size=self.min_patch_size,
+            max_gradient=self.max_gradient,
+            reconcile_flow_max_deviation=self.reconcile_flow_max_deviation,
+            step_patch_size=self.step_patch_size,
+        )
 
 
 class MeshIntegrationConfig(BaseModel):
@@ -177,10 +240,20 @@ class StitchingConfig(BaseModel):
     pipeline_config: PipelineConfig = PipelineConfig()
 
 
+
     @field_validator('output_dir', mode='before')
     @classmethod
     def normalize_output_path(cls, v):
         return cross_platform_path(v) if v else v
 
+    @classmethod
+    def from_experiment(cls, exp: ExpConfig) -> StitchingConfig:
+        """Factory method using idiomatic type hinting."""
+        return cls(
+            output_dir=exp.proc_dir,
+            start_section=exp.first_sec,
+            end_section=exp.last_sec,
+            acquisition_config=AcquisitionConfig().from_experiment(exp)
+        )
 
 

@@ -75,8 +75,10 @@ app.layout = html.Div([
 # --- ROUTING CALLBACK ---
 @callback(
     [Output('page-content', 'children'),
-     Output('url', 'pathname')],  # Added URL Output for clean redirection
-    Input('url', 'pathname')
+     Output('url', 'pathname'),
+     Output(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True)],
+    Input('url', 'pathname'),
+    prevent_initial_call='initial_duplicate'
 )
 def display_page(pathname):
     """
@@ -87,46 +89,52 @@ def display_page(pathname):
     # 0. Handle Cold Start / Root Redirect
     # If the user hits '/' or None, push them to the setup URL formally
     if pathname == "/" or pathname is None:
-        return setup_layout.layout(), UIConstants.TAB_1_URL
+        return setup_layout.layout(), UIConstants.TAB_1_URL, no_update
 
     # 1. Setup Page
     if pathname == UIConstants.TAB_1_URL:
-        return setup_layout.layout(), no_update
+        return setup_layout.layout(), no_update, no_update
 
     # 2. Coarse Align Page
     elif pathname == UIConstants.TAB_2_URL:
+        layout = coarse_align_layout.layout(service)
+
         # Check if project is initialized
-        if service.exp_config and service.acq_config:
-            return coarse_align_layout.layout(active_service=service), no_update
+        if service.exp_config and service.acq_config and service.stitch_config:
+            settings_store = service.stitch_config.model_dump()
+            return layout, no_update, settings_store
 
         # Fallback if Step 1 is incomplete
-        return coarse_align_layout.layout(), no_update
+        return layout, no_update, no_update
 
     # 3. Inspection Page
     elif pathname == UIConstants.TAB_3_URL:
+        settings_store = service.stitch_config.model_dump()
         if service.processor is None:
             return dbc.Container([
                 dbc.Alert(UIConstants.TAB_3_ALERT, color="warning", className="mt-5")
-            ]), no_update
-        return inspection_layout.layout(), no_update
+            ]), no_update, no_update, settings_store
+
+        return inspection_layout.layout(), no_update, settings_store
 
     # 4. Stitching Page
     elif pathname == UIConstants.TAB_4_URL:
+        layout = stitching_layout.layout(service)
         if service.exp_config and service.acq_config:
-            return stitching_layout.layout(active_service=service), no_update
+            settings_store = service.stitch_config.model_dump()
+            return layout, no_update, settings_store
 
         # Fallback if Step 1 is incomplete
         return dbc.Container([
             dbc.Alert(UIConstants.TAB_4_ALERT, color="warning", className="mt-5")
-        ], className="p-5"), no_update
-
+        ], className="p-5"), no_update, no_update
 
     # 5. 404 Fallback
     else:
         return html.Div([
             html.H1("404", className="text-danger"),
             html.P(f"Path '{pathname}' not found.")
-        ], className="p-5 text-center"), no_update
+        ], className="p-5 text-center"), no_update, no_update
 
 
 

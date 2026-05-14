@@ -18,6 +18,7 @@ import gc
 import threading
 import yaml
 
+import parameter_config
 import parse_sbem_dataset as parse
 
 import inspection_refactored
@@ -101,9 +102,9 @@ class DataService:
         self.exp_config: ExpConfig | None = None
         self.stitch_config: StitchingConfig |None = None
         self.reg_config: RegistrationConfig | None = None
-        # self.mesh_config: MeshIntegrationConfig| None = None
-        # self.mask_config: MaskingConfig | None = None
-        # self.warp_config: WarpConfig | None = None
+        self.mesh_config: MeshIntegrationConfig| None = None
+        self.mask_config: MaskingConfig | None = None
+        self.warp_config: WarpConfig | None = None
 
         self.inspection = None
         self.processor = None
@@ -146,12 +147,28 @@ class DataService:
             logging.warning(f"Failed to retrieve exp.config: {exp_config.name}.")
 
         self.initialize_experiment_from_config(new_conf)
-        return None
+
+
+    @staticmethod
+    def create_default_stitch_config(exp_config: ExpConfig) -> StitchingConfig:
+        return StitchingConfig().from_experiment(exp_config)
+
+
+    def store_stitch_config(
+            self,
+            stitch_config: StitchingConfig,
+            path_out: str | None = None
+    ) -> None:
+
+        if path_out is None:
+            path_out = self.get_stitch_config_path()
+
+        parameter_config.save_to_disk(stitch_config, path_out)
 
 
     def initialize_experiment_from_config(self, config: ExpConfig):
         self.exp_config = config
-        self.acq_config = self._prepare_acquisition_config(config)
+        self.acq_config = AcquisitionConfig().from_experiment(config)
         self.inspection = Inspection(config)
         self.processor = self.inspection.co_processor
         self.service_initialized = True
@@ -202,7 +219,7 @@ class DataService:
                 return
 
             self.exp_config = config
-            self.acq_config = self._prepare_acquisition_config(config)
+            self.acq_config = AcquisitionConfig().from_experiment(config)
 
             parse.main(
                 str(self.inspection.dir_sections),
@@ -255,19 +272,6 @@ class DataService:
         }
 
 
-    @staticmethod
-    def _prepare_acquisition_config(config) -> AcquisitionConfig:
-        """Encapsulates the mapping logic."""
-        cfg = AcquisitionConfig()
-        cfg.sbem_root_dir = config.acq_dir
-        cfg.tile_grid = f"g{config.grid_num:04d}"
-        cfg.grid_shape = config.grid_shape
-        cfg.thickness = config.cut_thickness
-        cfg.resolution_xy = config.pixel_size
-        logging.debug(f'AcquisitionConfig:\n{cfg}')
-        return cfg
-
-
     def get_stitch_config_path(self):
         if self.exp_config is None:
             raise (ValueError, "Failed to load tile_stitching_config.yaml. Experiment is not initialized.")
@@ -285,17 +289,18 @@ class DataService:
         return cfg
 
 
-    def load_experiment(self, config: ExpConfig):
+    def load_experiment(self, config: ExpConfig) -> None:
         """
         Loads inspector, coarse offsets tensor & UI data using specified stitch_config file
         """
         self.initialize_experiment_from_config(config)
 
-        # LOAD STITCHING CONFIG
-        self.load_stitching_config(config_path=self.get_stitch_config_path())
-
-        # ASSIGN REG. CONFIG
+        # LOAD CONFIGS
+        self.load_stitching_config(self.get_stitch_config_path())
         self.reg_config = self.stitch_config.registration_config
+        self.mesh_config = self.stitch_config.mesh_integration_config
+        self.warp_config = self.stitch_config.warp_config
+        self.mask_config = self.stitch_config.mask_config
 
         # LOAD COARSE OFFSETS TENSOR
         try:
@@ -1006,8 +1011,10 @@ class DataService:
                     section = Section(section_data)
                     section.read_tile_id_map()
                     section.ensure_tile_dicts()
-                    section.load_tile_map(gauss=True, clahe=reg_params.apply_clahe,
-                                          parallel=True, max_workers=8)
+                    section.load_tile_map(
+                        gauss=True, clahe=reg_params.apply_clahe,
+                        parallel=True, max_workers=8
+                    )
                     coarse_offsets = section.compute_coarse_offsets_section(reg_params)
                     utils.save_coarse_mat(coarse_offsets, section.path)
 

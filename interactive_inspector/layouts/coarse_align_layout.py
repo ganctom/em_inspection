@@ -5,6 +5,12 @@ from constants import UI
 
 def layout(active_service=None):
 
+    coarse_params = active_service.reg_config.coarse_params
+    stitch_params = active_service.reg_config.stitch_params
+    mesh_params = active_service.mesh_config
+    warp_params = active_service.warp_config
+    mask_params = active_service.mask_config
+
     return dbc.Container([
         # 1. CONFIGURATION SECTION (COLLAPSIBLE)
         dbc.Row([
@@ -33,10 +39,10 @@ def layout(active_service=None):
                             # 1. CONFIGURATION SECTION (Final Tabs Assembly)
                             dbc.Tabs([
                                 UI.TAB_ACQUISITION(active_service),
-                                UI.TAB_MASKING(),
-                                UI.TAB_REGISTRATION(active_service),
-                                UI.TAB_STITCHING_PARAMS(),
-                                UI.TAB_MESH_WARP(),
+                                UI.TAB_MASKING(mask_params),
+                                UI.TAB_REGISTRATION(coarse_params),
+                                UI.TAB_STITCHING(stitch_params),
+                                UI.TAB_MESH_WARP(mesh_params, warp_params),
                             ], id="stitch_config-tabs", active_tab="tab-acq")
                         ]
                     )
