@@ -12,6 +12,7 @@ import logging
 import scipy
 from matplotlib import pyplot as plt
 import numpy as np
+import numpy.typing as npt
 import skimage
 from pathlib import Path
 import pickle
@@ -49,6 +50,17 @@ TileFlowData = Tuple[np.ndarray, TileFlow, TileOffset]
 MarginOverrides = Dict[TileXY, Tuple[int, int, int, int]]
 
 
+class DataServiceError(Exception):
+    """Base exception for the entire data service domain."""
+    pass
+
+class SectionInfrastructureError(DataServiceError):
+    """Raised when critical section files are missing or corrupted."""
+    def __init__(self, section_num: int, message: str):
+        self.section_num = section_num
+        super().__init__(f"[Section {section_num}] {message}")
+
+
 @ft.lru_cache(maxsize=32)
 def cached_read_image(path: str):
     # This ensures that if the same tile is requested twice,
@@ -68,16 +80,14 @@ class CoarseStitchConfig:
 class Section:
     def __init__(self, path: Union[Path, str]):
 
-        path = Path(utils.cross_platform_path(str(path)))
-        if not path.is_dir():
-            m = f"Section init failed: input path is not a directory or does not exist: \n {path}"
-            raise NotADirectoryError(m)
-
-        self.path: Path = path
-        self.path_stitched: Path = self.resolve_dir_stitched()
+        self.path = Path(utils.cross_platform_path(str(path)))
         self.section_num = int(str(self.path.name).split("_g")[0][1:])
-        self.image: np.ndarray | None = None
+        if not self.path.is_dir():
+            m = f"Section init failed: input path is not a directory or does not exist: \n {path}"
+            raise SectionInfrastructureError(self.section_num, m)
 
+        self.path_stitched: Path = self.resolve_dir_stitched()
+        self.image: np.ndarray | None = None
         self.path_cxy = str(self.path / IS.FILE_COARSE_OFFSETS)
         self.path_section_yaml = str(self.path / IS.FILE_SECTION_CONFIG)
         self.path_margin_masks = str(self.path / IS.FILE_MARGIN_MASKS)
@@ -85,17 +95,16 @@ class Section:
         self.path_thumb = self.resolve_path_thumb()
         self.path_fmesh = str(self.path / IS.FILE_MESHES)
 
-        self.tile_id_map: Optional[np.ndarray[int]] = None
+        self.tile_id_map: npt.NDArray[np.int_] | None = None
         self.tile_shape = utils.get_tile_shape(self.path_section_yaml)
         self.tile_dicts: Optional[dict[int, str]] = None
 
         self.mesh_offsets: Optional[np.ndarray[float]] = None
         self.cxy: Optional[np.ndarray[float]] = None
         self.coarse_mesh: Optional[np.ndarray[float]] = None
-
-        self.fflows: Optional[FineFlows] = None
-        self.fflows_clean: Optional[FineFlows] = None
-        self.fflows_recon: Optional[FineFlows] = None
+        self.fflows: Optional[FineFlows] = None  # flow array is 4-dim (y, x, peak sharpness, peak ratio)
+        self.fflows_clean: Optional[FineFlows] = None  # flow array is 2-dim (y, x)
+        self.fflows_recon: Optional[FineFlows] = None  # flow array is 2-dim (y, x)
         self.fmesh: Dict[TileXY, np.ndarray] | None = None
 
         self.mask_map: MaskMap | None = None
@@ -183,31 +192,33 @@ class Section:
             self.read_tile_id_map()
 
         if not isinstance(self.tile_id_map, np.ndarray):
-            logging.warning(f'Verify tile_id_map: no tile IDs found in section tile_id_map.json')
+            logging.warning(f'Verify tile_id_map: No tile IDs found in section tile_id_map.json')
             return False
 
-        tile_id_map_ids = set(self.tile_id_map.flatten())
-        if -1 in tile_id_map_ids:
-            tile_id_map_ids.remove(-1)
+        map_ids = set(np.unique(self.tile_id_map))
+        map_ids.discard(-1)
 
-        # Perform comparison
-        eq = yaml_tile_ids == tile_id_map_ids
-
-        # Print info if tile IDs are not the same in both sets
+        eq = yaml_tile_ids == map_ids
         if not eq and print_ids:
-            sec_num = self.section_num
-            ids = yaml_tile_ids.symmetric_difference(tile_id_map_ids)
-            logging.warning(f'section s{sec_num} yaml tile IDs: {sorted(list(yaml_tile_ids))}')
-            logging.warning(f'section s{sec_num} tile_id_map IDs: {sorted(list(tile_id_map_ids))}')
-            logging.warning(f'missing s{sec_num} tile ids: {sorted(list(ids))}')
+            self._log_id_mismatch(self.section_num, yaml_tile_ids, map_ids)
 
         return eq
 
 
+    @staticmethod
+    def _log_id_mismatch(sec_num, yaml_tile_ids, tile_id_map_ids):
+        ids = yaml_tile_ids.symmetric_difference(tile_id_map_ids)
+        logging.warning(f'section s{sec_num} yaml tile IDs: {sorted(list(yaml_tile_ids))}')
+        logging.warning(f'section s{sec_num} tile_id_map IDs: {sorted(list(tile_id_map_ids))}')
+        logging.warning(f'missing s{sec_num} tile ids: {sorted(list(ids))}')
+
+
     def read_tile_id_map(self) -> None:
         fp = self.path / IS.FILE_TILE_ID_MAP
-        self.tile_id_map = utils.get_tile_id_map(fp) if fp.exists() else None
-        return None
+        try:
+            self.tile_id_map = utils.get_tile_id_map(fp)
+        except (FileNotFoundError, ValueError) as e:
+            logging.error(f"Failed to load tile-id map for section {self.section_num}: {e}")
 
 
     def downscale_section(self, factor: float) -> Optional[np.ndarray]:
@@ -1964,8 +1975,10 @@ class Section:
     def ensure_fflows(self) -> None:
         if self.fflows is not None:
             return
-
-        self.load_fflows()
+        try:
+            self.load_fflows()
+        except FileNotFoundError as e:
+            raise utils.MeshResourceError(e)
         if not self.fflows:
             raise utils.MeshResourceError(
                 f"Failed to load fine flows for section {self.section_num}"
@@ -1989,9 +2002,9 @@ class Section:
 
         fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_x.items()}
         fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_y.items()}
-
         ffx = fine_x, offsets_x
         ffy = fine_y, offsets_y
+
         self.fflows_clean = (ffx, ffy)
 
 
@@ -2161,7 +2174,8 @@ class FlowFieldOrchestrator:
         # 2. Execution
         try:
             logging.info(f'computing fine-flows with stride: {stride}')
-            self.section.fflows = self._run_iterative_flow_estimation(config, stride)
+            self.section.fflows = (
+                self._run_iterative_flow_estimation(config, stride))
         except RuntimeError as e:
             logging.error(f"Flow estimation failed: {e}")
             return
@@ -2209,8 +2223,8 @@ class FlowFieldOrchestrator:
 
             try:
                 logging.info(f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}")
-                flow_x = self._execute_sofima_call(cfg, stride, axis=0)
-                flow_y = self._execute_sofima_call(cfg, stride, axis=1)
+                flow_x: tuple[TileFlow, TileOffset] = self._execute_sofima_call(cfg, stride, axis=0)
+                flow_y: tuple[TileFlow, TileOffset] = self._execute_sofima_call(cfg, stride, axis=1)
                 return flow_x, flow_y
 
             except ValueError:

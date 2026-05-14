@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Optional, Tuple, Any
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
 import numpy.typing as npt
 import gc
@@ -35,7 +36,7 @@ from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
-from Section_refactored import TileFlow, TileXY
+from Section_refactored import TileFlow, TileXY, SectionInfrastructureError
 
 from sofima import flow_utils
 
@@ -435,13 +436,21 @@ class DataService:
         )
 
 
-    def ensure_flow_fig_resources(self, section_num: int) -> None:
+    def ensure_flow_fig_resources(self, section_num: int) -> Section | None:
+
+        # Load section
         section = self._get_initialized_section(section_num)
-        if not section:
+        if section is None:
             return None
 
-        section.ensure_fflows()
-        return None
+        # Load fine flows
+        try:
+            section.ensure_fflows()
+        except utils.MeshResourceError as e:
+            logging.warning(e)
+            return None
+
+        return section
 
 
     def get_flow_fig(
@@ -449,52 +458,119 @@ class DataService:
             section_num: int,
             tile_id: str,
             reg_config: RegistrationConfig | None = None,
-            clean_flow: bool = False
+            do_clean_flow: bool = False
     ) -> Optional[go.Figure]:
 
-        # 1. Parameter Initialization
         # If reg_config is passed, we use it, otherwise fallback to instance default
         cfg = reg_config or self.reg_config
 
-        section = self._get_initialized_section(section_num)
-        if not section:
+        section = self.ensure_flow_fig_resources(section_num)
+        if section is None:
             return None
-        print(cfg)
+
         try:
-            # Load flows
-            section.ensure_fflows()
-            fine_x, _ = section.fflows[0]
-            fine_y, _ = section.fflows[1]
+            fine_x = section.fflows[0][0]  # ndim flow array = (4, y, x)
+            fine_y = section.fflows[1][0]  # ndim flow array = (4, y, x)
 
-            if clean_flow:
-                c_params = cfg.clean_params
-                r_params = cfg.recon_params
-                logging.info(f"Cleaning with: {c_params}")
-
-                # CLEAN FLOWS
-                fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **c_params)[:, 0, :, :]
-                          for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **c_params)[:, 0, :, :]
-                          for k, v in fine_y.items()}
-
-                # RECONCILE FLOWS
-                fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **r_params)[:, 0, :, :]
-                          for k, v in fine_x.items()}
-                fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **r_params)[:, 0, :, :]
-                          for k, v in fine_y.items()}
+            if do_clean_flow:
+                section.clean_fflows(cfg)
+                section.reconcile_fflows(cfg)
+                fine_x = section.fflows_recon[0][0]  # ndim flow array = (2, y, x)
+                fine_y = section.fflows_recon[1][0]  # ndim flow array = (2, y, x)
 
             # Resolving spatial context for key access
-            sec_lookup: SectionIndex = self.processor.get_section_lookup(str(section_num))
-            y, x = sec_lookup[int(tile_id)]
+            sec_lookup = self.processor.get_section_lookup(str(section_num))
+            tile_row_idx, tile_col_idx = sec_lookup[int(tile_id)]
 
             # Delegate to the Plotly utility
-            return utils.plot_all_flow_components_plotly(fine_x, fine_y, xy=(x, y))
+            return self.plot_all_flow_components_plotly(
+                fine_x, fine_y, xy=(tile_col_idx, tile_row_idx)
+            )
 
         except Exception as e:
             err_msg = f"Flow figure failure t{tile_id} s{section_num}: {e}"
             self.message_queue.append(err_msg)
             logging.warning(err_msg)
             return None
+
+
+    @staticmethod
+    def plot_all_flow_components_plotly(
+            fine_x: TileFlow,
+            fine_y: TileFlow,
+            xy: tuple[int, int],
+            transpose: bool = False
+    ) -> go.Figure:
+        """
+        Generates a 2x2 Plotly grid of flow components with specific spatial alignments.
+
+        Fine Flow X (Row 1): Transposed by default, then rotated 180 degrees.
+        Fine Flow Y (Row 2): Standard orientation (transposed only if requested).
+        """
+        if xy not in fine_x and xy not in fine_y:
+            return go.Figure()
+
+        fig: go.Figure = make_subplots(
+            rows=2, cols=2,
+            subplot_titles=(
+                UI.LBL_FLOW_XH, UI.LBL_FLOW_XV, UI.LBL_FLOW_YH, UI.LBL_FLOW_YV
+            ),
+            horizontal_spacing=0.1,
+            vertical_spacing=0.3
+        )
+
+        def _add_trace(row: int, col: int, data: np.ndarray) -> None:
+            fig.add_trace(
+                go.Heatmap(
+                    z=data,
+                    colorscale='Viridis',
+                    colorbar=dict(
+                        thickness=15, len=0.45, yanchor='top',
+                        y=1.0 if row == 1 else 0.45,
+                        x=0.46 if col == 1 else 1.0
+                    )
+                ),
+                row=row, col=col
+            )
+
+        # --- Data Processing & Plotting ---
+        spatial_ndim = 2  # for removing non-spatial channels in fine-flow arrays
+        if xy in fine_x:
+            # X Row: Logic requires a 180-degree flip (inverted indexing)
+            d_x: np.ndarray = fine_x[xy][:spatial_ndim, :]
+            do_T_x: bool = not transpose
+            _add_trace(1, 1, (d_x[0].T if do_T_x else d_x[0])[::-1, ::-1])
+            _add_trace(1, 2, (d_x[1].T if do_T_x else d_x[1])[::-1, ::-1])
+
+        if xy in fine_y:
+            # Y Row: Standard spatial mapping
+            d_y: np.ndarray = fine_y[xy][:spatial_ndim, :]
+            do_T_y: bool = transpose
+            _add_trace(2, 1, d_y[0].T if do_T_y else d_y[0])
+            _add_trace(2, 2, d_y[1].T if do_T_y else d_y[1])
+
+        # --- Global Styling ---
+        fig.update_layout(
+            template="plotly_dark",
+            height=250,
+            margin=dict(l=20, r=0, b=20, t=50),
+            paper_bgcolor='black',
+            plot_bgcolor='black',
+            font=dict(size=10),
+            showlegend=False
+        )
+
+        # White boundary box style
+        axis_style: dict = dict(
+            showticklabels=False, showgrid=False, zeroline=False,
+            mirror=True, ticks='outside', ticklen=0,
+            showline=True, linecolor='white', linewidth=1
+        )
+
+        fig.update_xaxes(**axis_style)
+        fig.update_yaxes(**axis_style, autorange='reversed')
+
+        return fig
 
 
     def get_overlap_figure(
@@ -574,12 +650,16 @@ class DataService:
 
         with self._lock:
             if sec_path not in self._section_cache:
-                section = Section(sec_path)
+                try:
+                    section = Section(sec_path)
+                except SectionInfrastructureError as e:
+                    logging.warning(e)
+                    return None
+
                 # Data Injection from Processor Cache
                 z_str = str(z)
                 if z_str in self.processor.tile_id_maps_obj:
                     section.tile_id_map = self.processor.tile_id_maps_obj[z_str]
-                    section._map_loaded = True
                 else:
                     section.read_tile_id_map()
 

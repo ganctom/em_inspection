@@ -5,6 +5,8 @@ from dash.exceptions import PreventUpdate
 from constants import UI, MSG
 from data_service import service, orchestrator
 from inspection_refactored import init_specific_section_dirs
+from parameter_config import RegistrationConfig
+
 
 @callback(
     [Output(UI.ID_STITCH_PPLN_CONSOLE, "children", allow_duplicate=True),
@@ -16,6 +18,7 @@ from inspection_refactored import init_specific_section_dirs
      State(UI.ID_STITCH_PPLN_STEPS, "value"),
      State(UI.ID_STITCH_CONFIG_PATH, "value"),
      State(UI.ID_RESCALE_FCT, "value"),
+     State('global-settings-store', 'data')
      ],
     prevent_initial_call=True
 )
@@ -25,7 +28,8 @@ def start_stitching_pipeline(
         range_str,
         selected_steps,
         config_path,
-        scl_fct
+        scl_fct,
+        settings_data
 ):
     if not n_clicks:
         raise PreventUpdate
@@ -37,11 +41,17 @@ def start_stitching_pipeline(
     is_par = bool(parallel_value) if not isinstance(parallel_value, list) else 'parallel' in parallel_value
 
     # Validation & Config Prep
+    ui_config = RegistrationConfig(**settings_data)
+    # print(f'fetching patch size: {ui_config.patch_size}')
+    # print(ui_config)
     try:
         sec_nums, final_config = orchestrator.validate_and_prepare(
             range_str,
             config_path,
-            ui_params_raw = {UI.ID_RESCALE_FCT: scl_fct}
+            ui_params_raw = {
+                UI.ID_RESCALE_FCT: scl_fct,
+                UI.ID_CONF_PATCH: tuple(ui_config.patch_size)
+            }
         )
     except Exception as e:
         return [UI.log_row(MSG.SETUP_ERROR.format(error=e), type="error")], 0, True

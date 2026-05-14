@@ -132,6 +132,10 @@ class UIConstants:
     LBL_COL_COARSE_INP = "Section Selection for Coarse Offsets Estimation"
     LBL_COARSE_TAB_REG = "Registration (SOFIMA)"
     LBL_RESCALE_FCT = "Warped Section Downscale Factor"
+    LBL_FLOW_XH = "Fine Flow Hor. Neighbor - X component"
+    LBL_FLOW_XV = "Fine Flow Hor. Neighbor - Y component"
+    LBL_FLOW_YH = "Fine Flow Vert. Neighbor - X component"
+    LBL_FLOW_YV = "Fine Flow Vert. Neighbor - Y component"
 
     # --- IDs ---
     ID_INP_NAME = "new-exp-name"

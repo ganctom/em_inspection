@@ -368,22 +368,14 @@ def read_tile_id_map(dir_section: UniPath) -> Optional[np.ndarray]:
         return get_tile_id_map(fp_json)
 
 
-def get_tile_id_map(path_tid_map: UniPath) -> np.ndarray:
-    """
-    Load a JSON file containing a tile ID map and return it as a NumPy array.
-
-    Args:
-        path_tid_map (UniPath): Path to the JSON file.
-
-    Returns:
-        np.ndarray: Tile ID map as a NumPy array.
-    """
+def get_tile_id_map(path_tid_map: UniPath) -> npt.NDArray[np.int_]:
     try:
         with open(path_tid_map, "r") as file:
-            mp = np.array(json.load(file)).astype(np.int16)
-        return mp
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        raise ValueError(f"Error loading tile ID map from {path_tid_map}: {str(e)}")
+            return np.array(json.load(file), dtype=np.int_)
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Tile-ID map missing at {path_tid_map}")
+    except (json.JSONDecodeError, TypeError) as e:
+        raise ValueError(f"Malformed Tile-ID map at {path_tid_map}: {e}")
 
 
 def aggregate_parallel(
@@ -1946,75 +1938,6 @@ def get_missing_stitched_sections(
     missing = identify_missing_ids(expected_ids, actual_ids)
     logging.info(f"Scan complete: {len(missing)} missing.")
     return missing
-
-
-def plot_all_flow_components_plotly(
-        fine_x: TileFlow,
-        fine_y: TileFlow,
-        xy: tuple[int, int],
-) -> go.Figure:
-    """
-    Reconstructs the 2x2 grid using Plotly for interactive flow visualization.
-    """
-    # Initialize 2x2 grid with shared axes for consistent spatial alignment
-    fig = make_subplots(
-        rows=2, cols=2,
-        subplot_titles=(
-            'Horizontal neighbor (X)', 'Horizontal neighbor (Y)',
-            'Vertical neighbor (X)', 'Vertical neighbor (Y)'
-        ),
-        horizontal_spacing=0.05,
-        vertical_spacing=0.1
-    )
-
-    # Data mapping configuration
-    # (Row, Col, Source Dict, Component Index)
-    mapping = [
-        (1, 1, fine_x, 0), (1, 2, fine_x, 1),
-        (2, 1, fine_y, 0), (2, 2, fine_y, 1)
-    ]
-
-    for row, col, source, comp_idx in mapping:
-        if xy not in source:
-            continue
-
-        # Extract and handle spatial orientation
-        data = source[xy][comp_idx, ...]
-        if row == 1:
-            data = data.T
-
-        # Add Heatmap trace
-        fig.add_trace(
-            go.Heatmap(
-                z=data,
-                colorscale='Viridis',
-                showscale=(row == 1 and col == 1),  # Shared colorbar logic
-                colorbar=dict(thickness=15, x=1.02) if (row == 1 and col == 1) else None
-            ),
-            row=row, col=col
-        )
-
-    fig.update_layout(
-        title=dict(
-            text=f"<b>FLOW ANALYSIS</b>",
-            x=0.5, y=0.98, xanchor='center',
-            font=dict(family="Monospace", size=14, color="#00FFCC")
-        ),
-        template="plotly_dark",
-        paper_bgcolor='black',
-        plot_bgcolor='black',
-        margin=dict(l=0, r=0, b=0, t=50),
-        height=300,
-        dragmode='pan',
-        autosize=True
-    )
-
-    # Invert Y-axis to match matshow/imshow 'upper' origin
-    fig.update_yaxes(autorange='reversed')
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(visible=False)
-
-    return fig
 
 
 if __name__ == "__main__":

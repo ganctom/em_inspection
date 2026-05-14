@@ -528,7 +528,6 @@ def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, curr
      Input('active-item-index', 'data'),
      Input({'type': UIConstants.ID_BTN_FLOW, 'index': ALL}, 'n_clicks'),
      Input({'type': UIConstants.ID_BTN_CLEAN_FLOW, 'index': ALL}, 'n_clicks')],
-    # Added explicit input for Clean Flow
     [State('selection-store', 'data'),
      State('guess-mode-select', 'value'),
      State('manual-dx', 'value'),
@@ -562,12 +561,13 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
         item_tid, item_z = item['tid'], item['z']
 
         ui_config = None
-        clean_flow = False
+        do_clean_flow = False
         if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
             ui_config = RegistrationConfig(**settings_data)
-            clean_flow = True
+            do_clean_flow = True
+            # print(f'ui_config: {ui_config}')
 
-        fig = service.get_flow_fig(item_z, item_tid, ui_config, clean_flow)
+        fig = service.get_flow_fig(item_z, item_tid, ui_config, do_clean_flow)
 
         if fig is None:
             error_msg = service.message_queue.pop() if service.message_queue else "Unknown Error"
