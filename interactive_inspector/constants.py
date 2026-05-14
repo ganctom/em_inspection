@@ -163,6 +163,8 @@ class UIConstants:
     ID_RESCALE_FCT = "resize-fct"
     ID_BTN_FLOW = "flow-ov-btn"
     ID_BTN_CLEAN_FLOW = "clean-flow-ov-btn"
+    ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
+    ID_GLOBAL_SETTINGS_STORE = "'global-settings-store'"
 
 
     # --- Messages ---

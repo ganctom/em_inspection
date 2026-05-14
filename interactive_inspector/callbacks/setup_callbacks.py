@@ -4,7 +4,7 @@ import dash
 import dash_bootstrap_components as dbc
 from dash import Input, Output, State, callback, html, ctx, no_update
 from data_service import service
-from experiment_configs import get_experiment_configurations
+from experiment_configs import get_experiment_configurations, ExpConfig, ExperimentRegistryError
 from constants import UI
 
 
@@ -12,7 +12,7 @@ from constants import UI
 @callback(
     [
         Output("setup-feedback", "children", allow_duplicate=True),
-        Output('global-settings-store', 'data', allow_duplicate=True)
+        Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True)
     ],
     [Input(UI.BTN_INIT['id'], "n_clicks"),
      Input(UI.BTN_ADD_EXP['id'], "n_clicks")],
@@ -29,8 +29,10 @@ from constants import UI
      State(UI.ID_INP_CT, "value")],
     prevent_initial_call=True
 )
-def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
-                                  n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct):
+def handle_project_initialization(
+        n_load, n_add, sel_name, n_name, n_acq,
+        n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct
+):
 
     # 1. Immediate Guard: Exit if no actual button was clicked
     if not ctx.triggered_id or (not n_load and not n_add):
@@ -67,17 +69,38 @@ def handle_project_initialization(n_load, n_add, sel_name, n_name, n_acq,
             if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
                 return dbc.Alert("Missing required fields.", color="warning"), no_update
 
-            grid_shape = (int(n_sx), int(n_sy))
-            service.create_and_save_new_experiment(
-                n_name, n_proc, n_grid_num, grid_shape, n_f, n_l, n_acq, px, ct
+            exp_config = ExpConfig(
+                name=n_name,
+                acq_dir=n_acq,
+                proc_dir=n_proc,
+                grid_num= n_grid_num,
+                grid_shape= (int(n_sx), int(n_sy)),
+                first_sec=n_f,
+                last_sec=n_l,
+                pixel_size=px,
+                cut_thickness=ct,
             )
 
-            alert = dbc.Alert([
-                html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{n_name}' created."),
-            ], color="success", className="mt-3")
+            try:
+                exp_config = exp_config.validate_range()
+                service.create_and_save_new_experiment(exp_config)
 
-            return alert, no_update
+                alert = dbc.Alert([
+                    html.H5("Success!", className="alert-heading"),
+                    html.P(f"Experiment '{n_name}' created."),
+                ], color="success", className="mt-3")
+
+                return alert, no_update
+
+            except (ValueError, ExperimentRegistryError) as e:
+                return dbc.Alert([
+                    html.H5("Action Failed", className="alert-heading"),
+                    html.P(str(e)),
+                ], color="danger", className="mt-3"), no_update
+
+            except Exception as e:
+                logging.error(f"Unexpected error: {e}")
+                return dbc.Alert("An internal server error occurred.", color="danger"), no_update
 
     except Exception as e:
         return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3"), store_data
@@ -220,32 +243,32 @@ def master_ui_poller(n):
         True,  # Disable interval
         dash.no_update, dash.no_update, dash.no_update, dash.no_update
     )
-
-@callback(
-    Output('global-settings-store', 'data'),
-    Input(UI.ID_BTN_INIT, 'n_clicks'),  # Triggered when project is initialized
-    State(UI.ID_SEL_EXPERIMENT, 'value'),
-    prevent_initial_call=True
-)
-def sync_config_to_store(n_clicks, selected_exp):
-    if not n_clicks or not selected_exp:
-        return no_update
-
-    # At this point, service.load_experiment() has been called
-    # (likely in another callback or as part of the init process)
-    if service.stitch_config:
-        cfg = service.stitch_config.registration_config
-
-        # Flatten the object into a dictionary for JSON serialization in dcc.Store
-        config_dict = {
-            "min_peak_ratio": cfg.min_peak_ratio,
-            "min_peak_sharpness": cfg.min_peak_sharpness,
-            "max_deviation": cfg.max_deviation,
-            "max_magnitude": cfg.max_magnitude,
-            "min_patch_size": cfg.min_patch_size,
-            "max_gradient": cfg.max_gradient,
-            "reconcile_flow_max_deviation": cfg.reconcile_flow_max_deviation
-        }
-        return config_dict
-
-    return no_update
+#
+# @callback(
+#     Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data'),
+#     Input(UI.ID_BTN_INIT, 'n_clicks'),  # Triggered when project is initialized
+#     State(UI.ID_SEL_EXPERIMENT, 'value'),
+#     prevent_initial_call=True
+# )
+# def sync_config_to_store(n_clicks, selected_exp):
+#     if not n_clicks or not selected_exp:
+#         return no_update
+#
+#     # At this point, service.load_experiment() has been called
+#     # (likely in another callback or as part of the init process)
+#     if service.stitch_config:
+#         cfg = service.stitch_config.registration_config
+#
+#         # Flatten the object into a dictionary for JSON serialization in dcc.Store
+#         config_dict = {
+#             "min_peak_ratio": cfg.min_peak_ratio,
+#             "min_peak_sharpness": cfg.min_peak_sharpness,
+#             "max_deviation": cfg.max_deviation,
+#             "max_magnitude": cfg.max_magnitude,
+#             "min_patch_size": cfg.min_patch_size,
+#             "max_gradient": cfg.max_gradient,
+#             "reconcile_flow_max_deviation": cfg.reconcile_flow_max_deviation
+#         }
+#         return config_dict
+#
+#     return no_update

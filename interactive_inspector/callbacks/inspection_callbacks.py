@@ -486,7 +486,7 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 
 
 @app.callback(
-    Output('global-settings-store', 'data', allow_duplicate=True),
+    Output(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True),
     [
         # Add all your manual UI inputs here as Inputs
         Input(UIConstants.ID_CONF_MIN_PKR, 'value'),
@@ -497,7 +497,7 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
         Input(UIConstants.ID_CONF_MAX_GRAD, 'value'),
         Input(UIConstants.ID_CONF_RECON_FLOW_MAX_DEV, 'value'),
     ],
-    State('global-settings-store', 'data'),
+    State(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data'),
     prevent_initial_call=True
 )
 def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data):
@@ -533,7 +533,7 @@ def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, curr
      State('manual-dx', 'value'),
      State('manual-dy', 'value'),
      State(UIConstants.ID_INP_SEARCH_RAD, "value"),
-     State('global-settings-store', 'data')
+     State(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data')
      ],
     prevent_initial_call=True
 )

@@ -1,7 +1,8 @@
 import logging
 import dash_bootstrap_components as dbc
-from dash import html, dcc, Input, Output, callback, no_update, Dash
+from dash import html, dcc, Input, Output, callback, no_update
 from dash_extensions import EventListener
+
 
 # 1. Setup logging
 # logging.basicConfig(level=logging.DEBUG)
@@ -31,7 +32,7 @@ app.layout = html.Div([
     dcc.Store(id='selection-store', data=[], storage_type='session'),
     dcc.Store(id='active-item-index', data=None, storage_type='session'),
     dcc.Store(id='manual-nudge-store', data={'dx': 0, 'dy': 0}),
-    dcc.Store(id='global-settings-store', storage_type='session'),
+    dcc.Store(id=UIConstants.ID_GLOBAL_SETTINGS_STORE, storage_type='session'),
 
     EventListener(
         id="keyboard-listener",
@@ -126,6 +127,7 @@ def display_page(pathname):
             html.H1("404", className="text-danger"),
             html.P(f"Path '{pathname}' not found.")
         ], className="p-5 text-center"), no_update
+
 
 
 if __name__ == '__main__':

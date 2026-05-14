@@ -23,7 +23,7 @@ import parse_sbem_dataset as parse
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
 from coarse_offset_processor import SectionIndex
-from experiment_configs import ExperimentRegistry, ExpConfig
+from experiment_configs import ExperimentRegistry, ExpConfig, ExperimentRegistryError
 from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
                               MaskingConfig, WarpConfig)
 from Tile_refactored import Tile
@@ -127,17 +127,26 @@ class DataService:
         return get_missing_stitched_sections(dir_stitched, sec_nums_to_check)
 
 
-    def create_and_save_new_experiment(
-            self, exp_name, proc_dir, grid_num, grid_shape, first_sec, last_sec, acq_dir, px, ct
-    ):
-        """Called by the Dash Callback when the user hits 'Add Experiment'"""
+    def create_and_save_new_experiment(self, exp_config: ExpConfig) -> None:
+        """Called by the Dash Callback when the user hits 'Add Experiment'
 
-        self.registry.add(exp_name, acq_dir, proc_dir, grid_num, grid_shape, first_sec, last_sec, px, ct)
-        new_conf = self.registry.get_all().get(exp_name)
-        if new_conf:
-            self.initialize_experiment_from_config(new_conf)
-        else:
-            logging.warning("Issue with getting exp. configs.")
+        The list of user experiments is located in the application 'app_data' folder
+        and used for selection in 'Existing Experiments' in the SETUP page.
+        """
+
+        # Register new experiment
+        self.registry.add(exp_config)
+
+        # Store new experiment info into 'user_experiments.yaml'
+        self.registry.save_user_experiments(self.registry.app_cfg.exp_yaml_path)
+
+        # Initialize experiment
+        new_conf = self.registry.get_all().get(exp_config.name, None)
+        if new_conf is None:
+            logging.warning(f"Failed to retrieve exp.config: {exp_config.name}.")
+
+        self.initialize_experiment_from_config(new_conf)
+        return None
 
 
     def initialize_experiment_from_config(self, config: ExpConfig):
@@ -259,14 +268,6 @@ class DataService:
         return cfg
 
 
-    @staticmethod
-    def _prepare_registration_config(config) -> RegistrationConfig:
-        """Encapsulates the mapping logic."""
-        cfg = RegistrationConfig()
-        logging.debug(f'RegistrationConfig:\n{cfg}')
-        return cfg
-
-
     def get_stitch_config_path(self):
         if self.exp_config is None:
             raise (ValueError, "Failed to load tile_stitching_config.yaml. Experiment is not initialized.")
@@ -310,7 +311,8 @@ class DataService:
 
 
     def initialize_experiment(
-            self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
+            self, exp_name, proc_dir, grid_num, first_sec, last_sec,
+            grid_shape, acq_dir
     ):
         """
         The 'Actual' constructor called by the Setup page.

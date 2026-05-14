@@ -23,6 +23,13 @@ def layout(active_service=None):
                             # Path Selection
                             UI.PATH_SELECTOR_STITCH(active_service),
 
+                            dbc.Button(
+                                "Sync Settings to Global Store",
+                                id=UI.ID_BTN_FETCH_GLOBAL,
+                                color="primary",
+                                className="mb-3"
+                            ),
+
                             # 1. CONFIGURATION SECTION (Final Tabs Assembly)
                             dbc.Tabs([
                                 UI.TAB_ACQUISITION(active_service),

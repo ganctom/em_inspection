@@ -1,3 +1,4 @@
+import logging
 import threading
 import yaml
 import dash
@@ -377,3 +378,121 @@ def toggle_backup_button(n_clicks, current_ttp_text):
     tooltip_output = new_msg if new_msg != current_ttp_text else dash.no_update
     return button_disabled, tooltip_output
 
+
+def assemble_stitching_config_from_ui(*args):
+    """
+    Shared logic to parse UI States into a StitchingConfig Pydantic model.
+    """
+    def clean_dict(d):
+        return {k: v for k, v in d.items() if v is not None and v != ""}
+
+    def parse_csv(val):
+        if not val or not str(val).strip(): return None
+        return [int(x.strip()) for x in str(val).split(",")]
+
+    (out_dir, start, end,
+     ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks,
+     max_dev, max_mag, min_p, max_g, rec_dev,
+     m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
+     w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe,
+     mask_margin, mask_rim_size
+    ) = args
+
+    reg_cfg = pcfg.RegistrationConfig(**clean_dict({
+        "overlaps_x": parse_csv(ox), "overlaps_y": parse_csv(oy), "min_overlap": m_ov,
+        "min_range": parse_csv(m_rng), "filter_size": fs, "patch_size": parse_csv(patch),
+        "batch_size": batch, "min_peak_ratio": pkr, "min_peak_sharpness": pks,
+        "max_deviation": max_dev, "max_magnitude": max_mag, "min_patch_size": min_p,
+        "max_gradient": max_g, "reconcile_flow_max_deviation": rec_dev
+    }))
+
+    mesh_cfg = pcfg.MeshIntegrationConfig(**clean_dict({
+        "dt": m_dt, "gamma": m_gamma, "k0": m_k0, "k": m_k, "stride": m_stride,
+        "num_iters": m_iters, "max_iters": m_max_i, "stop_v_max": m_stop,
+        "dt_max": m_dt_m, "start_cap": m_scap, "final_cap": m_fcap,
+        "prefer_orig_order": bool(m_orig), "remove_drift": bool(m_drift)
+    }))
+
+    warp_cfg = pcfg.WarpConfigStitching(**clean_dict({
+        "margin": w_margin, "warp_parallelism": w_parallel, "kernel_size": w_kernel,
+        "clip_limit": w_clip, "nbins": w_nbins, "use_clahe": bool(w_clahe)
+    }))
+
+    mask_cfg = pcfg.MaskingConfig(**clean_dict({
+        "mask_margin": mask_margin,
+        "rim_size": mask_rim_size
+    }))
+
+    new_cfg = pcfg.StitchingConfig(
+        output_dir=out_dir,
+        start_section=start,
+        end_section=end,
+        registration_config=reg_cfg,
+        mesh_integration_config=mesh_cfg,
+        warp_config=warp_cfg,
+        mask_config=mask_cfg,
+    )
+
+    return new_cfg
+
+
+@callback(
+    Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data'),
+    Input(UI.ID_BTN_FETCH_GLOBAL, "n_clicks"),
+    [
+        State("conf-output-dir", "value"),
+        State("conf-start", "value"),
+        State("conf-end", "value"),
+        # Registration (9 outputs)
+        State(UI.ID_CONF_OVERLAPS_X, "value"),
+        State(UI.ID_CONF_OVERLAPS_Y, "value"),
+        State(UI.ID_CONF_MIN_OVERLAP, "value"),
+        State(UI.ID_CONF_MIN_RANGE, "value"),
+        State(UI.ID_CONF_FILTER_SIZE, "value"),
+        State(UI.ID_CONF_PATCH, "value"),
+        State(UI.ID_CONF_BATCH, "value"),
+        State(UI.ID_CONF_MIN_PKR, "value"),
+        State(UI.ID_CONF_MIN_PKS, "value"),
+        # Extra Reg (5 outputs)
+        State(UI.ID_CONF_MAX_DEV, "value"),
+        State(UI.ID_CONF_MAX_MAG, "value"),
+        State(UI.ID_CONF_MIN_PATCH, "value"),
+        State(UI.ID_CONF_MAX_GRAD, "value"),
+        State(UI.ID_CONF_RECON_FLOW_MAX_DEV, "value"),
+        # Mesh (13 outputs)
+        State(UI.ID_CONF_MESH_DT, "value"),
+        State(UI.ID_CONF_MESH_GAMMA, "value"),
+        State(UI.ID_CONF_MESH_K0, "value"),
+        State(UI.ID_CONF_MESH_K, "value"),
+        State(UI.ID_CONF_MESH_STRIDE, "value"),
+        State(UI.ID_CONF_MESH_NUM_ITERS, "value"),
+        State(UI.ID_CONF_MESH_MAX_ITERS, "value"),
+        State(UI.ID_CONF_MESH_STOP_V, "value"),
+        State(UI.ID_CONF_MESH_DT_MAX, "value"),
+        State(UI.ID_CONF_MESH_START_CAP, "value"),
+        State(UI.ID_CONF_MESH_FINAL_CAP, "value"),
+        State(UI.ID_CONF_MESH_ORIG_ORDER, "value"),
+        State(UI.ID_CONF_MESH_REMOVE_DRIFT, "value"),
+        # Warp (6 outputs)
+        State(UI.ID_CONF_WARP_MARGIN, "value"),
+        State(UI.ID_CONF_WARP_PARALLEL, "value"),
+        State(UI.ID_CONF_WARP_KERNEL, "value"),
+        State(UI.ID_CONF_WARP_CLIP, "value"),
+        State(UI.ID_CONF_WARP_NBINS, "value"),
+        State(UI.ID_CONF_WARP_CLAHE, "value"),
+        # Mask (2 outputs)
+        State(UI.ID_CONF_MASK_MARGIN, "value"),
+        State(UI.ID_CONF_MASK_RIM_SIZE, "value"),
+    ],
+    prevent_initial_call=True
+)
+def fetch_to_global_store(n_clicks, *args):
+    if not n_clicks:
+        return no_update
+
+    try:
+        config_model = assemble_stitching_config_from_ui(*args)
+        return config_model.model_dump()  # Sync to dcc.Store
+    except Exception as e:
+        logging.error(f"Fetch to global store failed: {e}")
+        return no_update

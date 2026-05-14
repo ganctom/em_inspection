@@ -18,7 +18,7 @@ from parameter_config import RegistrationConfig
      State(UI.ID_STITCH_PPLN_STEPS, "value"),
      State(UI.ID_STITCH_CONFIG_PATH, "value"),
      State(UI.ID_RESCALE_FCT, "value"),
-     State('global-settings-store', 'data')
+     State(UI.ID_GLOBAL_SETTINGS_STORE, 'data')
      ],
     prevent_initial_call=True
 )
