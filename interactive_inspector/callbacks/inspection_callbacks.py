@@ -565,7 +565,6 @@ def handle_actions(nudge_trigger, single_clicks, batch_clicks, active_idx,
         if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
             ui_config = RegistrationConfig(**settings_data)
             do_clean_flow = True
-            # print(f'ui_config: {ui_config}')
 
         fig = service.get_flow_fig(item_z, item_tid, ui_config, do_clean_flow)
 

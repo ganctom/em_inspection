@@ -103,7 +103,6 @@ class Section:
         self.cxy: Optional[np.ndarray[float]] = None
         self.coarse_mesh: Optional[np.ndarray[float]] = None
         self.fflows: Optional[FineFlows] = None  # flow array is 4-dim (y, x, peak sharpness, peak ratio)
-        self.fflows_clean: Optional[FineFlows] = None  # flow array is 2-dim (y, x)
         self.fflows_recon: Optional[FineFlows] = None  # flow array is 2-dim (y, x)
         self.fmesh: Dict[TileXY, np.ndarray] | None = None
 
@@ -1828,8 +1827,7 @@ class Section:
 
         # 1. Resource Validation & Dependency Loading
         self._ensure_fine_mesh_resources()
-        self.clean_fflows(reg_config)
-        self.reconcile_fflows(reg_config)
+        self.clean_and_reconcile_fflows(reg_config)
 
         # 2. Computation Block
         try:
@@ -1837,16 +1835,15 @@ class Section:
 
             # Extract coordinate grids and reconciled flows
             cx, cy = np.squeeze(self.cxy)
+
             ffx, ffxo = self.fflows_recon[0]
             ffy, ffyo = self.fflows_recon[1]
 
-            data_x: Tuple[np.ndarray, dict, dict] = (cx, ffx, ffxo)
-            data_y: Tuple[np.ndarray, dict, dict] = (cy, ffy, ffyo)
+            data_x = (cx, ffx, ffxo)
+            data_y = (cy, ffy, ffyo)
 
             stride_tuple = (mesh_config.stride, mesh_config.stride)
 
-            # Aggregate tile-wise data into global arrays for relaxation
-            # Accessing first tile's shape to define global grid dimensions
             sample_tile_shape = next(iter(self.tile_map.values())).shape
 
             fx, fy, nds, nbors, key_to_idx = stitch_elastic.aggregate_arrays(
@@ -1866,14 +1863,9 @@ class Section:
                 return jnp.transpose(nds, [1, 0, 2, 3])
 
             # Initialize SOFIMA integration config via attribute mapping
-            config_attrs = {
-                attr: getattr(mesh_config, attr) for attr in [
-                    'dt', 'gamma', 'k0', 'k', 'num_iters',
-                    'max_iters', 'stop_v_max', 'dt_max', 'prefer_orig_order',
-                    'start_cap', 'final_cap', 'remove_drift'
-                ]
-            }
+            config_attrs = mesh_config.model_dump()
             config_attrs['stride'] = stride_tuple
+
             config_sofima = mesh.IntegrationConfig(**config_attrs)
 
             logging.info(f"[Section {self.section_num}] Executing JAX mesh relaxation...")
@@ -1985,7 +1977,7 @@ class Section:
             )
 
 
-    def clean_fflows(self, config: RegistrationConfig) -> None:
+    def clean_and_reconcile_fflows(self, config: RegistrationConfig) -> None:
 
         if self.fflows is None:
             raise ValueError (f"s{self.section_num} clean_fflows failed: fine flows not available.")
@@ -1993,41 +1985,13 @@ class Section:
         fine_x, offsets_x = self.fflows[0]
         fine_y, offsets_y = self.fflows[1]
 
-        kwargs = {
-            "min_peak_ratio": float(config.min_peak_ratio),
-            "min_peak_sharpness": float(config.min_peak_sharpness),
-            "max_deviation": float(config.max_deviation),
-            "max_magnitude": float(config.max_magnitude)
-        }
-
+        # Clean flows
+        kwargs = config.clean_kwargs
         fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_x.items()}
         fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_y.items()}
-        ffx = fine_x, offsets_x
-        ffy = fine_y, offsets_y
 
-        self.fflows_clean = (ffx, ffy)
-
-
-    def reconcile_fflows(self, config: RegistrationConfig) -> None:
-
-        if self.fflows_clean is None:
-            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows are missing")
-
-        if self.fflows_clean[0] is None:
-            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows [0] is missing")
-
-        if self.fflows_clean[1] is None:
-            raise ValueError (f"s{self.section_num} reconcile_fflows failed: (reconciled flows [1] is missing")
-
-        fine_x, offsets_x = self.fflows_clean[0]
-        fine_y, offsets_y = self.fflows_clean[1]
-
-        kwargs = {
-            "min_patch_size": int(config.min_patch_size),
-            "max_gradient": float(config.max_gradient),
-            "max_deviation": float(config.reconcile_flow_max_deviation)
-        }
-
+        # Reconcile flows
+        kwargs = config.recon_kwargs
         fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
                   fine_x.items()}
         fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
@@ -2035,7 +1999,9 @@ class Section:
 
         ffx = fine_x, offsets_x
         ffy = fine_y, offsets_y
+
         self.fflows_recon = (ffx, ffy)
+
 
 # ----  EOF FINE MESH ----
 

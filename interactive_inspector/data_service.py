@@ -512,10 +512,9 @@ class DataService:
 
             # Perform cleaning if requested
             if do_clean_flow:
-                section.clean_fflows(cfg)
-                section.reconcile_fflows(cfg)
-                fine_x = section.fflows_recon[0][0]
-                fine_y = section.fflows_recon[1][0]
+                section.clean_and_reconcile_fflows(cfg)
+                fine_x, _ = section.fflows_recon[0]
+                fine_y, _ = section.fflows_recon[1]
 
             return self.plot_all_flow_components_plotly(
                 fine_x, fine_y, xy=xy, z_range=z_lims

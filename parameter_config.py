@@ -138,51 +138,56 @@ class RegistrationConfig(BaseModel):
         return self.model_dump()
 
     @property
-    def clean_params(self) -> dict:
-        """Returns a subset of parameters for flow_utils.clean_flow."""
-        return {
-            "min_peak_ratio": float(self.min_peak_ratio),
-            "min_peak_sharpness": float(self.min_peak_sharpness),
-            "max_magnitude": float(self.max_magnitude),
-            "max_deviation": float(self.max_deviation),
-        }
+    def clean_kwargs(self) -> dict:
+        """Slices parameters required strictly for flow filtering/cleaning."""
+        return self.model_dump(include={
+            "min_peak_ratio",
+            "min_peak_sharpness",
+            "max_magnitude",
+            "max_deviation"
+        })
 
     @property
-    def recon_params(self) -> dict:
-        """Returns a subset of parameters for flow_utils.reconcile_flows."""
-        return {
-            "max_gradient": float(self.max_gradient),
-            "max_deviation": float(self.max_deviation),
-            "min_patch_size": int(self.min_patch_size),
-        }
+    def recon_kwargs(self) -> dict:
+        """Slices and maps parameters required strictly for flow reconciliation."""
+        # 1. Extract the raw subset
+        raw_subset = self.model_dump(include={
+            "max_gradient",
+            "reconcile_flow_max_deviation",
+            "min_patch_size"
+        })
+        raw_subset["max_deviation"] = raw_subset.pop("reconcile_flow_max_deviation")
+
+        return raw_subset
 
     @property
     def coarse_params(self) -> CoarseParams:
         """Returns a subset of parameters as a structured dataclass object."""
-        return CoarseParams(
-            overlaps_x=self.overlaps_x,
-            overlaps_y=self.overlaps_y,
-            min_range=self.min_range,
-            min_overlap=self.min_overlap,
-            filter_size=self.filter_size,
-        )
+        coarse_fields = {
+            "overlaps_x",
+            "overlaps_y",
+            "min_range",
+            "min_overlap",
+            "filter_size",
+        }
+        return CoarseParams(**self.model_dump(include=coarse_fields))
 
     @property
     def stitch_params(self) -> StitchParams:
         """Returns parameters for fine-grained patch-based stitching."""
-        return StitchParams(
-            patch_size=self.patch_size,
-            batch_size=self.batch_size,
-            min_peak_ratio=self.min_peak_ratio,
-            min_peak_sharpness=self.min_peak_sharpness,
-            max_deviation=self.max_deviation,
-            max_magnitude=self.max_magnitude,
-            min_patch_size=self.min_patch_size,
-            max_gradient=self.max_gradient,
-            reconcile_flow_max_deviation=self.reconcile_flow_max_deviation,
-            step_patch_size=self.step_patch_size,
-        )
-
+        stitch_fields = {
+            "patch_size",
+            "batch_size",
+            "min_peak_ratio",
+            "min_peak_sharpness",
+            "max_deviation",
+            "max_magnitude",
+            "min_patch_size",
+            "max_gradient",
+            "reconcile_flow_max_deviation",
+            "step_patch_size",
+        }
+        return StitchParams(**self.model_dump(include=stitch_fields))
 
 class MeshIntegrationConfig(BaseModel):
     dt: float = 0.001
