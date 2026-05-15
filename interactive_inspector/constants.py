@@ -184,6 +184,7 @@ class UIConstants:
     ID_BTN_CLEAN_FLOW = "clean-flow-ov-btn"
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
     ID_GLOBAL_SETTINGS_STORE = "global-settings-store"
+    ID_PARSE_PROGRESS_BAR = "progress-bar-container"
 
     TYPE_EXP_FIELD = "exp-field"
 

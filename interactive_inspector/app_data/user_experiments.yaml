@@ -142,3 +142,51 @@ ROLI_F1_run-12:
   last_sec: 1250
   pixel_size: 10.0
   cut_thickness: 25.0
+ROLI_F1_run-13:
+  name: ROLI_F1_run-13
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-13
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1250
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-14:
+  name: ROLI_F1_run-14
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-14
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1250
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-15:
+  name: ROLI_F1_run-15
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-15
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1250
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-16:
+  name: ROLI_F1_run-16
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-16
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1250
+  pixel_size: 10.0
+  cut_thickness: 25.0

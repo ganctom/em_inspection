@@ -87,19 +87,9 @@ def layout():
                     dbc.Collapse(
                         id="progress-collapse",
                         is_open=False,
-                        children=[
-                            html.Div([
-                                html.Div(id="parsing-status-text", className="small fw-bold mb-1 mt-3"),
-                                dbc.Progress(
-                                    id="parsing-progress-bar",
-                                    value=0,
-                                    label="0%",
-                                    striped=True,
-                                    animated=True,
-                                    style={"height": "25px"}
-                                ),
-                            ])
-                        ]
+                        children=html.Div(
+                            id=UI.ID_PARSE_PROGRESS_BAR
+                        )
                     )
                 ], className="p-4 border rounded h-100")
             ], width=7),

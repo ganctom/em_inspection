@@ -4,6 +4,7 @@ import numpy as np
 import numpy.typing as npt
 import plotly.graph_objects as go
 from interactive_inspector.constants import UIConstants as UI
+from parameter_config import ExpConfig
 
 
 def create_grid_navigator(
@@ -177,3 +178,40 @@ def selection_card(index: int, item: dict) -> html.Div:
             'paddingRight': '20px'   # increased a bit for extra safety with gap
         }
     )
+
+def to_details_card(exp_config: ExpConfig) -> dbc.Card:
+    """Generates a standardized Dash card UI component from the model instance."""
+    return dbc.Card([
+        dbc.CardHeader(html.Strong(exp_config.name)),
+        dbc.CardBody([
+            html.P([html.B("Path: "), html.Span(exp_config.proc_dir, className="text-break small")]),
+            html.P([html.B("Sections: "), f"{exp_config.first_sec} - {exp_config.last_sec}"], className="mb-1"),
+            html.P([
+                html.B("Grid: "),
+                f"#{exp_config.grid_num} ({exp_config.grid_shape[0]}x{exp_config.grid_shape[1]})"], className="mb-1"),
+        ])
+    ], className="mt-3 shadow-sm")
+
+
+def create_progress_view(
+    progress: int,
+    message: str,
+    active: bool,
+    status_id: str = "parsing-status-text",
+    bar_id: str = "parsing-progress-bar"
+) -> html.Div:
+    """
+    Generates a reusable, standardized progress block combining status text
+    and a bootstrap progress bar. IDs can be overridden for cross-page reuse.
+    """
+    return html.Div([
+        html.P(message, id=status_id, className="small text-muted mb-1"),
+        dbc.Progress(
+            value=progress,
+            label=f"{progress}%" if progress > 0 else "",
+            animated=active,
+            striped=active,
+            color="primary" if active else "success",
+            id=bar_id
+        )
+    ])

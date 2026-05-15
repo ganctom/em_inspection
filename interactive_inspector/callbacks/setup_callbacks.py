@@ -8,6 +8,7 @@ from experiment_configs import get_experiment_configurations, ExpConfig, Experim
 from constants import UI
 from pydantic import ValidationError
 from assets.dash_helpers import parse_form, create_alert
+from layouts.components_layouts import to_details_card, create_progress_view
 
 
 # ==============================================================================
@@ -84,6 +85,9 @@ def handle_create_experiment(n_clicks, _raw_layout_values, exp_config=None):
         return create_alert("Action Failed", "An unexpected internal server error occurred.", exception=e), no_update
 
 
+# ==============================================================================
+# --- 3. EXPERIMENT SELECTION DETAILS DISPLAY ---
+# ==============================================================================
 @callback(
     [Output("experiment-details-card", "children"),
      Output(UI.ID_BTN_INIT, "disabled")],
@@ -93,130 +97,113 @@ def update_details(exp_name):
     if not exp_name:
         return "", True
 
-    configs = get_experiment_configurations()
-    cfg = configs.get(exp_name)
+    cfg = get_experiment_configurations().get(exp_name)
     if not cfg:
-        return dbc.Alert("Configuration not found", color="danger"), True
+        return create_alert("Error", "Configuration not found."), True
 
-    card = dbc.Card([
-        dbc.CardHeader(html.Strong(cfg.name)),
-        dbc.CardBody([
-            html.P([html.B("Path: "), html.Span(cfg.proc_dir, className="text-break small")]),
-            html.P([html.B("Sections: "), f"{cfg.first_sec} - {cfg.last_sec}"], className="mb-1"),
-            html.P([html.B("Grid: "), f"#{cfg.grid_num} ({cfg.grid_shape[0]}x{cfg.grid_shape[1]})"], className="mb-1"),
-        ])
-    ], className="mt-3 shadow-sm")
-
-    return card, False
+    return to_details_card(cfg), False
 
 
-# --- TRIGGER CALLBACK ---
-@callback(
-    [Output("progress-interval", "disabled"),
-     Output("progress-collapse", "is_open"),
-     Output("parsing-progress-bar", "animated", allow_duplicate=True),
-     Output("parsing-progress-bar", "striped", allow_duplicate=True),
-     Output("parsing-progress-bar", "color", allow_duplicate=True),
-     Output("parsing-progress-bar", "value", allow_duplicate=True),
-     Output("setup-feedback", "children", allow_duplicate=True)],
-    Input(UI.ID_BTN_PARSE, "n_clicks"),
-    State({'type': UI.TYPE_EXP_FIELD, 'index': UI.ID_INP_NAME}, "value"),
-    prevent_initial_call=True
-)
-def trigger_parsing(n, exp_name):
-    if not exp_name:
-        return True, False, dash.no_update, dash.no_update, dash.no_update, 0, dash.no_update
-
-    thread = threading.Thread(
-        target=service.parse_experiment,
-        args=(exp_name,),
-        daemon=True
-    )
-    thread.start()
-
-    return False, True, True, True, "primary", 0, ""
-
-
+# ==============================================================================
+# --- 4. TOGGLE PARSE GATEWAY BUTTON ---
+# ==============================================================================
 @callback(
     [Output(UI.ID_BTN_PARSE, "disabled"),
      Output(UI.ID_TTP_PARSE, "children")],
     [Input({'type': UI.TYPE_EXP_FIELD, 'index': UI.ID_INP_NAME}, "value"),
-     Input("setup-feedback", "children"),
-     Input(UI.ID_BTN_INIT, "n_clicks")],
+     Input(UI.ID_GLOBAL_SETTINGS_STORE, "data")],
     prevent_initial_call=False
 )
-def toggle_parse_button(exp_name, feedback, n_init):
-    # 1. Check the Backend: Does the ppln_service have an active stitch_config?
+def toggle_parse_button(exp_name, settings_data):
     has_config = service.exp_config is not None
+    name_matches = False
+    if has_config and exp_name:
+        name_matches = (exp_name.strip() == service.exp_config.name)
 
-    # 2. Check the Frontend: Is there a name present?
-    current_name = exp_name if exp_name else (service.exp_config.name if has_config else None)
-    has_name = bool(current_name and current_name.strip())
-
-    # 3. Validation: Did the last action result in an error?
-    is_error = False
-    if isinstance(feedback, dict) and 'props' in feedback:
-        is_error = feedback.get('props', {}).get('color') == 'danger'
-
-    # The "Green Light" condition
-    is_ready = has_config and has_name and not is_error
-
-    # Return state
+    is_ready = has_config and name_matches
     button_disabled = not is_ready
     tooltip_msg = UI.MSG_PARSE_READY if is_ready else UI.MSG_PARSE_DISABLED
 
     return button_disabled, tooltip_msg
 
 
+# ==============================================================================
+# --- 5. TRIGGER PARSING  ---
+# ==============================================================================
 @callback(
-    [Output("parsing-progress-bar", "value"),
-     Output("parsing-progress-bar", "label"),
-     Output("parsing-status-text", "children"),
+    [Output(UI.ID_PARSE_PROGRESS_BAR, "children"),
+     Output("progress-interval", "disabled"),
+     Output("progress-collapse", "is_open"),
+     # Add this line here to target the alert slot
+     Output("setup-feedback", "children", allow_duplicate=True)],
+    Input(UI.ID_BTN_PARSE, "n_clicks"),
+    State({'type': UI.TYPE_EXP_FIELD, 'index': UI.ID_INP_NAME}, "value"),
+    prevent_initial_call=True
+)
+def trigger_parsing(n_clicks, exp_name):
+    if not n_clicks:
+        return no_update, no_update, no_update, no_update
+
+    if not exp_name:
+        return no_update, True, False, no_update
+
+    # Start backend compilation worker thread
+    threading.Thread(
+        target=service.parse_experiment,
+        args=(exp_name,),
+        daemon=True
+    ).start()
+
+    # Generate layout view at 0% to populate the wrapper container instantly
+    initial_loader = create_progress_view(
+        progress=0, message="Initializing process...", active=True
+    )
+
+    return initial_loader, False, True, ""
+
+
+# ==============================================================================
+# --- 6. MASTER UI POLLER (Watches background interval loops) ---
+# ==============================================================================
+@callback(
+    [Output(UI.ID_PARSE_PROGRESS_BAR, "children", allow_duplicate=True),
      Output("progress-interval", "disabled", allow_duplicate=True),
-     Output("setup-feedback", "children", allow_duplicate=True),
-     Output("parsing-progress-bar", "animated"),
-     Output("parsing-progress-bar", "striped"),
-     Output("parsing-progress-bar", "color")],
+     Output("setup-feedback", "children", allow_duplicate=True)],
     Input("progress-interval", "n_intervals"),
     prevent_initial_call=True
 )
 def master_ui_poller(n):
-    """Handles ONLY Parsing background process for the Setup Page."""
+    """Interval ticker tracking backend threading completion state updates."""
+    status = service.parsing_status
 
-    # --- PARSING IS ACTIVE ---
-    if service.parsing_status["active"] or service.parsing_status["progress"] > 0:
+    # --- Case A: Background thread processing is actively moving ---
+    if status["active"] or status["progress"] > 0:
         service.update_percentage_only()
-        status = service.parsing_status
-        finished = not status["active"] and status["progress"] >= 100
+        is_finished = not status["active"] and status["progress"] >= 100
 
-        final_alert = dash.no_update
-        if finished:
-            service.parsing_status["progress"] = 0  # Reset for next run
-            alert_color = "success" if (status.get("missing_count", 0) == 0) else "warning"
-            final_alert = dbc.Alert([
-                html.H5("Processing Complete", className="alert-heading"),
-                html.Ul([
-                    html.Li(f"Missing Folders: {status.get('missing_count', 0)}"),
-                    html.Li(f"Invalid Maps: {status.get('invalid_maps_count', 0)}"),
-                ], className="mb-0")
-            ], color=alert_color, className="mt-3")
+        final_alert = no_update
+        if is_finished:
+            status["progress"] = 0  # Reset token map registry boundary
 
-        # Return state: value, label, status_text, interval_disabled, feedback, animated, striped, color
-        return (
-            status["progress"],
-            f"{status['progress']}%",
-            status["message"],
-            finished,
-            final_alert,
-            not finished,
-            not finished,
-            "success" if finished else "primary"
+            has_issues = status.get("missing_count", 0) > 0 or status.get("invalid_maps_count", 0) > 0
+            alert_color = "warning" if has_issues else "success"
+
+            final_alert = create_alert(
+                title="Processing Complete" if not has_issues else "Processing Finished with Warnings",
+                color=alert_color,
+                bullet_points=[
+                    f"Missing Folders: {status.get('missing_count', 0)}",
+                    f"Invalid Maps: {status.get('invalid_maps_count', 0)}"
+                ]
+            )
+
+        progress_view = create_progress_view(
+            progress=status["progress"],
+            message=status["message"],
+            active=not is_finished
         )
 
-    # --- NOTHING ACTIVE ---
-    # Shut down the interval to save resources
-    return (
-        dash.no_update, dash.no_update, dash.no_update,
-        True,  # Disable interval
-        dash.no_update, dash.no_update, dash.no_update, dash.no_update
-    )
+        return progress_view, is_finished, final_alert
+
+    # --- Case B: Process completely went cold/idle ---
+    return no_update, True, no_update
