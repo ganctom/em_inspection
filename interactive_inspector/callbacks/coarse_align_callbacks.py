@@ -288,7 +288,9 @@ def handle_coarse_offset_backup(n_clicks):
     if not n_clicks or not service.exp_config:
         return [UI.log_row("Error: No active experiment.", type="error")], True, no_update
 
-    thread = threading.Thread(target=service.run_offsets_backup_thread, daemon=True)
+    thread = threading.Thread(
+        target=service.run_offsets_backup_thread,
+        daemon=True)
     thread.start()
 
     init_log = [

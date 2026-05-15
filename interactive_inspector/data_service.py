@@ -23,7 +23,6 @@ import parse_sbem_dataset as parse
 
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
-from coarse_offset_processor import SectionIndex
 from experiment_configs import ExperimentRegistry, ExpConfig, ExperimentRegistryError
 from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
                               MaskingConfig, WarpConfig)
@@ -31,48 +30,20 @@ from Tile_refactored import Tile
 from constants import DataConstants as DC
 from constants import UIConstants as UI
 from schema import InspectionSchema as IS
-from inspection_utils_refactor import save_img, get_missing_stitched_sections
+from inspection_utils_refactor import get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils,
     store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
-from Section_refactored import TileFlow, TileXY, SectionInfrastructureError
+from Section_refactored import TileFlow, SectionInfrastructureError
 
-from sofima import flow_utils
+class DataServiceError(Exception):
+    """Base exception for the entire experiment registry errors"""
+    def __init__(self, message):
+        super().__init__(message)
+        self.message = message
 
-
-@dataclass
-class FlowParams:
-    min_peak_ratio: float
-    min_peak_sharpness: float
-    max_magnitude: float
-    max_deviation: float
-    max_gradient: float
-    min_patch_size: int
-    recon_flow_max_dev: float
-
-    @property
-    def as_dict(self) -> dict[str, float]:
-        # Merges both dictionaries; reconcile_params takes precedence on key collisions
-        return self.clean_params | self.reconcile_params
-
-    @property
-    def clean_params(self) -> dict[str, float]:
-        return {
-            "min_peak_ratio": self.min_peak_ratio,
-            "min_peak_sharpness": self.min_peak_sharpness,
-            "max_magnitude": self.max_magnitude,
-            "max_deviation": self.max_deviation,
-        }
-
-    @property
-    def reconcile_params(self) -> dict[str, float]:
-        return {
-            "max_gradient": self.max_gradient,
-            "reconcile_flow_max_deviation": self.recon_flow_max_dev,
-            "min_patch_size": self.min_patch_size,
-        }
 
 @dataclass(frozen=True)
 class OverlapContext:
@@ -122,6 +93,22 @@ class DataService:
         self.message_queue = deque()
         self.service_initialized = False
 
+
+    def handle_new_exp_infra(self, exp_config: ExpConfig) -> None:
+        """Performs actions during new experiment initialization """
+        # Register new experiment into list of projects
+        self.create_and_save_new_experiment(exp_config)
+    
+        # Create and save default stitching config to allow further steps
+        self.stitch_config = self.create_default_stitch_config(exp_config)
+    
+        # Save tile_stitching_config.yaml
+        self.store_stitch_config(self.stitch_config, path_out=None)
+
+        # Initial self and database
+        self.load_experiment(exp_config)
+
+        
     def get_missing_stitched_sections(self) -> list[int]:
         dir_stitched = self.inspection.dir_stitched
         sec_nums_to_check = list(range(self.inspection.first_sec, self.inspection.last_sec))
@@ -487,8 +474,19 @@ class DataService:
         # If reg_config is passed, we use it, otherwise fallback to instance default
         cfg = reg_config or self.reg_config
 
-        section = self.ensure_flow_fig_resources(section_num)
-        if section is None: return None
+        try:
+            section = self.ensure_flow_fig_resources(section_num)
+        except utils.MeshResourceError as e:
+            err_msg = f"Flow figure failure t{tile_id} s{section_num}: {e}"
+            self.message_queue.append(err_msg)
+            logging.warning(err_msg)
+            return None
+
+        if section is None:
+            err_msg = f"Flow figure failure t{tile_id} s{section_num}"
+            self.message_queue.append(err_msg)
+            logging.warning(err_msg)
+            return None
 
         try:
             # Grab raw data first to establish the baseline colormap range

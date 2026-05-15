@@ -2,125 +2,87 @@ import logging
 import threading
 import dash
 import dash_bootstrap_components as dbc
-from dash import Input, Output, State, callback, html, ctx, no_update
+from dash import Input, Output, State, callback, html, ctx, no_update, ALL
 from data_service import service
 from experiment_configs import get_experiment_configurations, ExpConfig, ExperimentRegistryError
 from constants import UI
 from pydantic import ValidationError
+from assets.dash_helpers import parse_form, create_alert
 
-# --- 1. INITIALIZATION CALLBACK ---
+
+# ==============================================================================
+# --- LOAD EXISTING EXPERIMENT ---
+# ==============================================================================
 @callback(
-    [
-        Output("setup-feedback", "children", allow_duplicate=True),
-        Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True)
-    ],
-    [Input(UI.BTN_INIT['id'], "n_clicks"),
-     Input(UI.BTN_ADD_EXP['id'], "n_clicks")],
-    [State(UI.ID_SEL_EXPERIMENT, "value"),
-     State(UI.ID_INP_NAME, "value"),
-     State(UI.ID_INP_ACQ, "value"),
-     State(UI.ID_INP_PROC, "value"),
-     State(UI.ID_INP_GRID_NUM, "value"),
-     State(UI.ID_INP_GS_X, "value"),
-     State(UI.ID_INP_GS_Y, "value"),
-     State(UI.ID_INP_FIRST_SEC, "value"),
-     State(UI.ID_INP_LAST_SEC, "value"),
-     State(UI.ID_INP_PX_SIZE, "value"),
-     State(UI.ID_INP_CT, "value")],
+    [Output("setup-feedback", "children", allow_duplicate=True),
+     Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True)],
+    [Input(UI.ID_BTN_INIT, "n_clicks")],
+    [State(UI.ID_SEL_EXPERIMENT, "value")],
     prevent_initial_call=True
 )
-def handle_project_initialization(
-        n_load, n_add, sel_name, n_name, n_acq,
-        n_proc, n_grid_num, n_sx, n_sy, n_f, n_l, px, ct
-):
-
-    # 1. Immediate Guard: Exit if no actual button was clicked
-    if not ctx.triggered_id or (not n_load and not n_add):
+def handle_load_experiment(n_clicks, sel_name):
+    if not n_clicks or not ctx.triggered_id:
         return no_update, no_update
 
-    trigger = ctx.triggered_id
-
-    # 2. Initialize store_data at function scope to prevent UnboundLocalError
-    settings_store = no_update
-
     try:
-        # --- CASE A: LOAD EXISTING ---
-        if trigger == UI.ID_BTN_INIT:
-            configs = get_experiment_configurations()
-            cfg = configs.get(sel_name)
+        configs = get_experiment_configurations()
+        cfg = configs.get(sel_name)
 
-            if not cfg:
-                return dbc.Alert("Invalid experiment selection.", color="danger"), no_update
+        if not cfg:
+            return create_alert("Invalid Selection", "The chosen experiment could not be found."), no_update
 
-            service.load_experiment(cfg)
-            settings_store = service.stitch_config.model_dump()
+        service.load_experiment(cfg)
 
-            alert = dbc.Alert([
-                html.H5("Success!", className="alert-heading"),
-                html.P(f"Experiment '{cfg.name}' loaded successfully."),
-            ], color="success", className="mt-3")
-
-            return alert, settings_store
-
-        # --- CASE B: CREATE NEW ---
-        elif trigger == UI.ID_BTN_ADD_EXP:
-            if not all([n_name, n_acq, n_proc, n_sx, n_sy]):
-                return dbc.Alert("Missing required fields.", color="warning"), no_update
-
-            try:
-                exp_config = ExpConfig(
-                    name=n_name,
-                    acq_dir=n_acq,
-                    proc_dir=n_proc,
-                    grid_num=n_grid_num,
-                    grid_shape=(int(n_sx), int(n_sy)),
-                    first_sec=n_f,
-                    last_sec=n_l,
-                    pixel_size=px,
-                    cut_thickness=ct,
-                )
-            except ValidationError as e:
-                error_messages = [err['msg'] for err in e.errors()]
-                return dbc.Alert([
-                    html.H5("Action Failed", className="alert-heading"),
-                    html.Ul([html.Li(msg) for msg in error_messages])
-                ], color="danger", className="mt-3"), no_update
-
-            try:
-                # Register new experiment into list of projects
-                service.create_and_save_new_experiment(exp_config)
-
-                # Create and save default stitching config to allow further steps
-                stitch_config = service.create_default_stitch_config(exp_config)
-
-                # Save tile_stitching_config.yaml
-                service.store_stitch_config(stitch_config, path_out=None)
-                settings_store = stitch_config.model_dump()
-
-                # Initial service and database
-                service.load_experiment(exp_config)
-
-                alert = dbc.Alert([
-                    html.H5("Success!", className="alert-heading"),
-                    html.P(f"Experiment '{n_name}' created. Continue with the 'Parse Experiment' step."),
-                ], color="success", className="mt-3")
-
-                return alert, settings_store
-
-            except (ValueError, ExperimentRegistryError) as e:
-                return dbc.Alert([
-                    html.H5("Action Failed", className="alert-heading"),
-                    html.P(str(e)),
-                ], color="danger", className="mt-3"), no_update
-
-            except Exception as e:
-                logging.error(f"Unexpected error: {e}")
-                return dbc.Alert("An internal server error occurred.", color="danger"), no_update
+        return (
+            create_alert("Success!", f"Experiment '{cfg.name}' loaded successfully.", color="success"),
+            service.stitch_config.model_dump()
+        )
 
     except Exception as e:
-        return dbc.Alert(f"Initialization Error: {str(e)}", color="danger", className="mt-3"), store_data
+        logging.error(f"Error loading experiment: {e}", exc_info=True)
+        return create_alert("Initialization Error", color="danger", exception=e), no_update
 
-    return no_update, no_update
+
+# ==============================================================================
+# --- CREATE NEW EXPERIMENT ---
+# ==============================================================================
+@callback(
+    [Output("setup-feedback", "children", allow_duplicate=True),
+     Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True)],
+    [Input(UI.ID_BTN_ADD_EXP, "n_clicks")],
+    [State({'type': UI.TYPE_EXP_FIELD, 'index': ALL}, "value")],
+    prevent_initial_call=True
+)
+@parse_form(
+    type_tag=UI.TYPE_EXP_FIELD,
+    target_model=ExpConfig,
+    param_name="exp_config"
+)
+def handle_create_experiment(n_clicks, _raw_layout_values, exp_config=None):
+    if not n_clicks or not ctx.triggered_id:
+        return no_update, no_update
+
+    # 1. Handle Pydantic validation intercept
+    if isinstance(exp_config, ValidationError):
+        return create_alert("Validation Failed", exception=exp_config), no_update
+
+    # 2. Infrastructure configuration pass
+    try:
+        service.handle_new_exp_infra(exp_config)
+
+        success_msg = f"Experiment '{exp_config.name}' created. Continue with the 'Parse Experiment' step."
+        return (
+            create_alert("Success!", success_msg, color="success"),
+            service.stitch_config.model_dump()
+        )
+
+    except (ValueError, ExperimentRegistryError) as e:
+        return create_alert("Infrastructure Setup Failed", exception=e), no_update
+
+    except Exception as e:
+        logging.error(f"Unexpected error during experiment creation: {e}", exc_info=True)
+        return create_alert("Action Failed", "An unexpected internal server error occurred.", exception=e), no_update
+
 
 @callback(
     [Output("experiment-details-card", "children"),
@@ -158,7 +120,7 @@ def update_details(exp_name):
      Output("parsing-progress-bar", "value", allow_duplicate=True),
      Output("setup-feedback", "children", allow_duplicate=True)],
     Input(UI.ID_BTN_PARSE, "n_clicks"),
-    State(UI.ID_INP_NAME, "value"),
+    State({'type': UI.TYPE_EXP_FIELD, 'index': UI.ID_INP_NAME}, "value"),
     prevent_initial_call=True
 )
 def trigger_parsing(n, exp_name):
@@ -178,7 +140,7 @@ def trigger_parsing(n, exp_name):
 @callback(
     [Output(UI.ID_BTN_PARSE, "disabled"),
      Output(UI.ID_TTP_PARSE, "children")],
-    [Input(UI.ID_INP_NAME, "value"),
+    [Input({'type': UI.TYPE_EXP_FIELD, 'index': UI.ID_INP_NAME}, "value"),
      Input("setup-feedback", "children"),
      Input(UI.ID_BTN_INIT, "n_clicks")],
     prevent_initial_call=False

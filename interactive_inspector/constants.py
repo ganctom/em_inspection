@@ -1,13 +1,27 @@
+from __future__ import annotations
 import time
 from dataclasses import dataclass
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+from typing import TYPE_CHECKING
 
-from parameter_config import (
-    DEF_CT, DEF_PX_SIZE, FN_STITCHING_CFG,
-    MaskingConfig, StitchingConfig, CoarseParams,
-    StitchParams, MeshIntegrationConfig, WarpConfigStitching,
-)
+if TYPE_CHECKING:
+    from parameter_config import (MaskingConfig, CoarseParams,
+        StitchParams, MeshIntegrationConfig, WarpConfigStitching,
+    )
+
+class DataConstants:
+    CACHED_BASKET_ITEMS = 15
+    DEF_SCALE_FCT = 0.3
+    DEF_PX_SIZE = 10.
+    DEF_CT = 25.
+    FN_STITCHING_CFG = "tile_stitching_config.yaml"
+
+
+@dataclass()
+class KeyboardShortcuts:
+    KEY_GRID_NAV_SLIDER_PLUS: str = "w"
+    KEY_GRID_NAV_SLIDER_MINUS: str = "s"
 
 
 @dataclass(frozen=True)
@@ -111,7 +125,7 @@ class UIConstants:
     }
 
     # --- CONFIG FILENAMES --- #
-    FN_CFG_TILE_STITCHING = FN_STITCHING_CFG
+    FN_CFG_TILE_STITCHING = DataConstants.FN_STITCHING_CFG
 
     # --- LABELS ---
     NAME_WORKFLOW = "SBFI WORKFLOW"
@@ -141,21 +155,23 @@ class UIConstants:
     LBL_FLOW_YV = "Fine Flow Vert. Neighbor - Y component"
 
     # --- IDs ---
-    ID_INP_NAME = "new-exp-name"
-    ID_INP_ACQ = "new-exp-acq"
-    ID_INP_PROC = "new-exp-proc"
+
+    ID_INP_NAME = "name"
+    ID_INP_ACQ = "acq_dir"
+    ID_INP_PROC = "proc_dir"
+    ID_INP_GRID_NUM = "grid_num"
+    ID_INP_GS_X = "gs_x"
+    ID_INP_GS_Y = "gs_y"
+    ID_INP_FIRST_SEC = "first_sec"
+    ID_INP_LAST_SEC = "last_sec"
+    ID_INP_PX_SIZE = "pixel_size"
+    ID_INP_CT = "cut_thickness"
+
     ID_BTN_ADD_EXP = "add-new-exp-btn"
     ID_BTN_PARSE = "parse-exp-btn"
     ID_BTN_PARSE_WRAPPER = "parse-btn-wrapper"
     ID_TTP_PARSE = "parse-btn-tooltip"
     ID_BTN_INIT = "load-stitch_config-btn"
-    ID_INP_PX_SIZE = "new-exp-px-size"
-    ID_INP_CT = "new-exp-ct"
-    ID_INP_GS_X = "new-exp-grid-size-x"
-    ID_INP_GS_Y = "new-exp-grid-size-y"
-    ID_INP_GRID_NUM = "new-exp-grid-num"
-    ID_INP_FIRST_SEC = "new-exp-first-sec"
-    ID_INP_LAST_SEC = "new-exp-last-sec"
     ID_SEL_EXPERIMENT = "experiment-select"
     ID_BTN_BCKP_CO = "init-exp-backup-co"
     ID_TTP_BCKP = "bckp-btn-tooltip"
@@ -167,7 +183,9 @@ class UIConstants:
     ID_BTN_FLOW = "flow-ov-btn"
     ID_BTN_CLEAN_FLOW = "clean-flow-ov-btn"
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
-    ID_GLOBAL_SETTINGS_STORE = "'global-settings-store'"
+    ID_GLOBAL_SETTINGS_STORE = "global-settings-store"
+
+    TYPE_EXP_FIELD = "exp-field"
 
 
     # --- Messages ---
@@ -278,46 +296,83 @@ class UIConstants:
         className = "small mb-1" + (" fw-bold" if is_bold else "")
         return dbc.Label(text, className=className)
 
+    # Function to generate the dict ID
+    @staticmethod
+    def field_id(name: str, id_type: str = TYPE_EXP_FIELD):
+        return {'type': id_type, 'index': name}
+
     # --- COMPONENT REGISTRY ---
     @property
     def INP_NAME(self):
-        return self.text_factory(self.ID_INP_NAME, "e.g. FISH_ID_1")
+        return self.text_factory(
+            id=self.field_id(name=self.ID_INP_NAME, id_type=self.TYPE_EXP_FIELD),
+            placeholder="e.g. FISH_ID_1"
+        )
 
     @property
     def INP_ACQ(self):
-        return self.text_factory(self.ID_INP_ACQ, "/Volumes/.../sbem_acq-dir")
+        return self.text_factory(
+            id=self.field_id(name=self.ID_INP_ACQ, id_type=self.TYPE_EXP_FIELD),
+            placeholder="/Volumes/.../sbem_acq-dir"
+        )
 
     @property
     def INP_PROC(self):
-        return self.text_factory(self.ID_INP_PROC, "/Volumes/.../run-01")
-
-    @property
-    def INP_PX_SIZE(self):
-        return self.numeric_factory(self.ID_INP_PX_SIZE, DEF_PX_SIZE)
-
-    @property
-    def INP_CT(self):
-        return self.numeric_factory(self.ID_INP_CT, DEF_CT)
-
-    @property
-    def INP_GS_X(self):
-        return self.numeric_factory(self.ID_INP_GS_X, is_int=True)
-
-    @property
-    def INP_GS_Y(self):
-        return self.numeric_factory(self.ID_INP_GS_Y, is_int=True)
+        return self.text_factory(
+            id=self.field_id(name=self.ID_INP_PROC, id_type=self.TYPE_EXP_FIELD),
+            placeholder="/Volumes/.../run-01"
+        )
 
     @property
     def INP_GRID_NUM(self):
-        return self.numeric_factory(self.ID_INP_GRID_NUM, 0, is_int=True)
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_GRID_NUM, id_type=self.TYPE_EXP_FIELD),
+            is_int=True
+        )
 
     @property
     def INP_FIRST_SEC(self):
-        return self.numeric_factory(self.ID_INP_FIRST_SEC, placeholder="Start", is_int=True)
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_FIRST_SEC, id_type=self.TYPE_EXP_FIELD),
+            placeholder="Start",
+            is_int=True
+        )
 
     @property
     def INP_LAST_SEC(self):
-        return self.numeric_factory(self.ID_INP_LAST_SEC, placeholder="End", is_int=True)
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_LAST_SEC, id_type=self.TYPE_EXP_FIELD),
+            placeholder="End",
+            is_int=True
+        )
+
+    @property
+    def INP_PX_SIZE(self):
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_PX_SIZE, id_type=self.TYPE_EXP_FIELD),
+            placeholder=str(DataConstants.DEF_PX_SIZE)
+        )
+
+    @property
+    def INP_CT(self):
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_CT, id_type=self.TYPE_EXP_FIELD),
+            placeholder=str(DataConstants.DEF_CT)
+        )
+
+    @property
+    def INP_GS_X(self):
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_GS_X, id_type=self.TYPE_EXP_FIELD),
+            is_int=True
+        )
+
+    @property
+    def INP_GS_Y(self):
+        return self.numeric_factory(
+            id=self.field_id(name=self.ID_INP_GS_Y, id_type=self.TYPE_EXP_FIELD),
+            is_int=True
+        )
 
     @property
     def BTN_ADD_EXP(self):
@@ -765,7 +820,7 @@ class UIConstants:
         # Start with the base factory dictionary
         inp_cfg = cls.text_factory(
             id=cls.ID_STITCH_CONFIG_PATH,
-            placeholder=f"/Volumes/.../{FN_STITCHING_CFG}"
+            placeholder=f"/Volumes/.../{DataConstants.FN_STITCHING_CFG}"
         )
 
         # Inject the path if the ppln_service provides one
@@ -1065,16 +1120,3 @@ class WorkflowNav:
 # Create a single instance to use properties easily
 UI = UIConstants()
 Nav = WorkflowNav()
-
-
-class DataConstants:
-    scfg = StitchingConfig()
-    CACHED_BASKET_ITEMS = 15
-    DEF_SCALE_FCT = scfg.pipeline_config.downscale_factor
-
-
-@dataclass()
-class KeyboardShortcuts:
-    KEY_GRID_NAV_SLIDER_PLUS: str = "w"
-    KEY_GRID_NAV_SLIDER_MINUS: str = "s"
-

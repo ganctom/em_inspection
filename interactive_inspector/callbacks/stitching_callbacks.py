@@ -42,8 +42,6 @@ def start_stitching_pipeline(
 
     # Validation & Config Prep
     ui_config = RegistrationConfig(**settings_data)
-    # print(f'fetching patch size: {ui_config.patch_size}')
-    # print(ui_config)
     try:
         sec_nums, final_config = orchestrator.validate_and_prepare(
             range_str,

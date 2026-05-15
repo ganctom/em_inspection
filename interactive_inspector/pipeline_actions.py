@@ -26,7 +26,6 @@ class TaskRegistry:
     @classmethod
     def register(cls, task_key: Task):
         def decorator(handler_cls: type[TaskHandler]):
-            # Instantiate the handler once during registration
             cls._registry[task_key] = handler_cls()
             return handler_cls
         return decorator
@@ -42,7 +41,7 @@ class TaskRegistry:
 @TaskRegistry.register(Task.COARSE_MESH)
 class CoarseMeshHandler(TaskHandler):
     def run(self, section: Section, config: StitchingConfig) -> None:
-        # Convert Pydantic sub-model to the Frozen Dataclass (IntegrationConfig)
+
         yaml_config = config.mesh_integration_config
 
         cfg = IntegrationConfig(

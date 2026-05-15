@@ -3,15 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator, computed_field
+from pydantic import BaseModel, field_validator, model_validator, Field
 from typing import Tuple, Dict
+from interactive_inspector.constants import UIConstants as UI
+from interactive_inspector.constants import DataConstants as DC
 
 from inspection_utils_refactor import cross_platform_path
 
-DEF_PX_SIZE = 10.
-DEF_CT = 25.
-
-FN_STITCHING_CFG = "tile_stitching_config.yaml"
 EXP_YAML_PATH = "/Users/ganctoma/SW/_projects/em_inspection/src/em_inspection/interactive_inspector/app_data/user_experiments.yaml"
 
 
@@ -47,8 +45,8 @@ class AcquisitionConfig(BaseModel):
     acquisition: str = "run_0"
     tile_grid: str = "g0000"
     grid_shape: tuple[int, int] = (30, 25)
-    thickness: float = DEF_CT
-    resolution_xy: float = DEF_PX_SIZE
+    thickness: float = DC.DEF_CT
+    resolution_xy: float = DC.DEF_PX_SIZE
 
     @field_validator('sbem_root_dir', mode='before')
     @classmethod
@@ -74,8 +72,17 @@ class ExpConfig(BaseModel):
     grid_shape: Tuple[int, int]
     first_sec: int
     last_sec: int
-    pixel_size: float = DEF_PX_SIZE
-    cut_thickness: float = DEF_CT
+    pixel_size: float = DC.DEF_PX_SIZE
+    cut_thickness: float = DC.DEF_CT
+
+    @classmethod
+    def from_form_data(cls, raw_form: dict) -> "ExpConfig":
+        """Factory method to construct the model explicitly from UI dictionary structure."""
+        cleaned = {k: (None if v == "" else v) for k, v in raw_form.items()}
+        x = int(cleaned.pop(UI.ID_INP_GS_X, 0) or 0)
+        y = int(cleaned.pop(UI.ID_INP_GS_Y, 0) or 0)
+        cleaned["grid_shape"] = (x, y)
+        return cls(**cleaned)
 
     @field_validator('acq_dir', 'proc_dir', mode='before')
     @classmethod

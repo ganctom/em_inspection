@@ -82,3 +82,63 @@ ROLI_F1_run-07:
   last_sec: 1280
   pixel_size: 10.0
   cut_thickness: 25.0
+ROLI_F1_run-08:
+  name: ROLI_F1_run-08
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-08
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1260
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-09:
+  name: ROLI_F1_run-09
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-09
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1260
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-10:
+  name: ROLI_F1_run-10
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-10
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1260
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-11:
+  name: ROLI_F1_run-11
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-11
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1260
+  pixel_size: 10.0
+  cut_thickness: 25.0
+ROLI_F1_run-12:
+  name: ROLI_F1_run-12
+  acq_dir: /Volumes/storage/groups/scratch/team/project/_EM_acquisitions/20260201_RoLi_F1
+  proc_dir: /Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-12
+  grid_num: 0
+  grid_shape:
+  - 30
+  - 25
+  first_sec: 1250
+  last_sec: 1250
+  pixel_size: 10.0
+  cut_thickness: 25.0
