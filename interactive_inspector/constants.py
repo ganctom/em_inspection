@@ -3,7 +3,7 @@ import time
 from dataclasses import dataclass
 from dash import html, dcc
 import dash_bootstrap_components as dbc
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from parameter_config import (MaskingConfig, CoarseParams,
@@ -180,13 +180,26 @@ class UIConstants:
     ID_TAB_PPLN = "stitch_config-ppln-cfg"
     ID_TAB_PPLN_CFG = "tab-ppln-cfg"
     ID_RESCALE_FCT = "resize-fct"
+    ID_BTN_RANGE_MASKS = "range-masks-ov-btn"
+    LBL_BTN_RANGE_MASKS = "RangeMasks"
     ID_BTN_FLOW = "flow-ov-btn"
+    LBL_BTN_FLOW = "Flow"
     ID_BTN_CLEAN_FLOW = "clean-flow-ov-btn"
+    LBL_BTN_CLEAN_FLOW = "CleanFlow"
+    ID_BTN_PLOT_OV = "plot-ov-btn"
+    LBL_BTN_PLOT_OV = "OV"
+    ID_BTN_CALC = "compute-single-btn"
+    LBL_BTN_CALC = "Calc"
+    ID_BTN_REMOVE_OV = "remove-btn"
+    LBL_BTN_REMOVE_OV = "×"
+
+
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
     ID_GLOBAL_SETTINGS_STORE = "global-settings-store"
     ID_PARSE_PROGRESS_BAR = "progress-bar-container"
 
     TYPE_EXP_FIELD = "exp-field"
+    TYPE_DYN_RANGE_FIELD = "dyn-range-field"
 
 
     # --- Messages ---
@@ -299,7 +312,10 @@ class UIConstants:
 
     # Function to generate the dict ID
     @staticmethod
-    def field_id(name: str, id_type: str = TYPE_EXP_FIELD):
+    def field_id(
+            name: str,
+            id_type: Union[TYPE_EXP_FIELD, TYPE_DYN_RANGE_FIELD]  # TODO: use Enum
+    ):
         return {'type': id_type, 'index': name}
 
     # --- COMPONENT REGISTRY ---
@@ -403,6 +419,53 @@ class UIConstants:
             children=self.MSG_PARSE_DISABLED
         )
 
+    # --- SELECTION BASKET BUTTONS (Clean PEP 8 Compliance) ---
+
+    _btn_style = {'padding': '1px 6px', 'fontSize': '10px'}
+
+    @classmethod
+    def _basket_button_factory(cls, index: int, id_type: str, children: str, color: str = "secondary",
+                               style: dict = None):
+        """Internal helper to dry up basket button instantiation."""
+        cfg = cls.button_factory(
+            id={'type': id_type, 'index': index},
+            children=children,
+            size="sm",
+            color=color,
+            style=style or cls._btn_style
+        )
+        return dbc.Button(**cfg)
+
+    @classmethod
+    def btn_range_masks(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_RANGE_MASKS, cls.LBL_BTN_RANGE_MASKS)
+
+    @classmethod
+    def btn_flow(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_FLOW, cls.LBL_BTN_FLOW)
+
+    @classmethod
+    def btn_clean_flow(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_CLEAN_FLOW, cls.LBL_BTN_CLEAN_FLOW)
+
+    @classmethod
+    def btn_plot_ov(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_PLOT_OV, cls.LBL_BTN_PLOT_OV)
+
+    @classmethod
+    def btn_calc(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_CALC, cls.LBL_BTN_CALC, color="primary")
+
+    @classmethod
+    def btn_remove(cls, index: int):
+        return cls._basket_button_factory(
+            index=index,
+            id_type='remove-btn',
+            children="×",
+            color="danger",
+            style={'padding': '2px 7px', 'fontSize': '10px'}
+        )
+
     # --- COARSE ALIGNMENT SECTION PROPERTIES ---
 
     @classmethod
@@ -496,7 +559,7 @@ class UIConstants:
         content = [
             dbc.Row([
                 dbc.Col([
-                    cls.label_factory("Overlaps X (csv)"),
+                    cls.label_factory(cls.LBL_CONF_OVERLAPS_X),
                     dbc.Input(**cls.text_factory(
                         id=cls.ID_CONF_OVERLAPS_X,
                         placeholder="e.g. 200, 300, 400",
@@ -505,7 +568,7 @@ class UIConstants:
                 ], width=6),
 
                 dbc.Col([
-                    cls.label_factory("Overlaps Y (csv)"),
+                    cls.label_factory(cls.LBL_CONF_OVERLAPS_Y),
                     dbc.Input(**cls.text_factory(
                         cls.ID_CONF_OVERLAPS_Y,
                         placeholder="e.g. 200, 300, 400",
@@ -514,32 +577,30 @@ class UIConstants:
                 ], width=6),
 
                 dbc.Col([
-                    cls.label_factory("Min Range (csv)"),
+                    cls.label_factory(cls.LBL_CONF_MIN_RANGE),
                     dbc.Input(**cls.text_factory(
-                        cls.ID_CONF_MIN_RANGE,
-                        placeholder="10, 100, 0",
+                        id=cls.ID_CONF_MIN_RANGE,
                         value=to_csv(params.min_range),
-
+                        placeholder="10, 100, 0",
                     ))
                 ], width=6),
 
-                # Pure Numeric Inputs
                 dbc.Col([
-                    cls.label_factory("Min Overlap"),
+                    cls.label_factory(cls.LBL_CONF_FILTER_SIZE),
                     dbc.Input(**cls.numeric_factory(
-                        cls.ID_CONF_MIN_OVERLAP,
-                        placeholder="20",
-                        value=str(params.min_overlap),
+                        id=cls.ID_CONF_FILTER_SIZE,
+                        value=str(params.filter_size),
+                        placeholder="10",
                         is_int=True
                     ))
                 ], width=6),
 
                 dbc.Col([
-                    cls.label_factory("Filter Size"),
+                    cls.label_factory(cls.LBL_CONF_MIN_OVERLAP),
                     dbc.Input(**cls.numeric_factory(
-                        cls.ID_CONF_FILTER_SIZE,
-                        placeholder="10",
-                        value=str(params.filter_size),
+                        cls.ID_CONF_MIN_OVERLAP,
+                        placeholder="20",
+                        value=str(params.min_overlap),
                         is_int=True
                     ))
                 ], width=6),
@@ -853,10 +914,15 @@ class UIConstants:
 
     # Registration IDs
     ID_CONF_OVERLAPS_X = "conf-overlaps-x"
+    LBL_CONF_OVERLAPS_X = "Overlaps X (csv)"
     ID_CONF_OVERLAPS_Y = "conf-overlaps-y"
+    LBL_CONF_OVERLAPS_Y = "Overlaps Y (csv)"
     ID_CONF_MIN_OVERLAP = "conf-min-overlap"
+    LBL_CONF_MIN_OVERLAP = "Min Overlap"
     ID_CONF_MIN_RANGE = "conf-min-range"
+    LBL_CONF_MIN_RANGE = "Min Range (csv)"
     ID_CONF_FILTER_SIZE = "conf-filter-size"
+    LBL_CONF_FILTER_SIZE = "Filter Size"
     ID_CONF_PATCH = "conf-patch"
     ID_CONF_BATCH = "conf-batch"
     ID_CONF_MIN_PKR = "conf-min-pkr"

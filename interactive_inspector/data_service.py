@@ -23,7 +23,7 @@ import parse_sbem_dataset as parse
 
 import inspection_refactored
 from Section_refactored import CoarseStitchConfig
-from experiment_configs import ExperimentRegistry, ExpConfig, ExperimentRegistryError
+from experiment_configs import ExperimentRegistry, ExpConfig
 from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
                               MaskingConfig, WarpConfig)
 from Tile_refactored import Tile
@@ -37,6 +37,8 @@ from inspection_refactored import (
     store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
 )
 from Section_refactored import TileFlow, SectionInfrastructureError
+from dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
+
 
 class DataServiceError(Exception):
     """Base exception for the entire experiment registry errors"""
@@ -606,6 +608,32 @@ class DataService:
 
         fig.update_xaxes(**axis_style)
         fig.update_yaxes(**axis_style, autorange='reversed')
+
+        return fig
+
+
+    def get_range_masks_fig(
+            self,
+            section_num: int,
+            tile_id_num: int,
+    )-> go.Figure | None:
+
+        # Load section
+        section = self._get_initialized_section(section_num)
+        if section is None:
+            return None
+
+        # Load image
+        t = Tile(section.tile_dicts[tile_id_num])
+        t.load_image(clahe=False)
+
+        # Get range masks configuration
+        rac = RangeAnalysisConfig()
+        rac.min_range = self.stitch_config.registration_config.min_range
+        rac.filter_size = self.stitch_config.registration_config.filter_size
+
+        # Create range mask figure
+        fig = create_range_mask_plot(t.img_data, rac)
 
         return fig
 

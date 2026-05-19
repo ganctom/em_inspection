@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+interactive_inspector/app_data/user_experiments.yaml

@@ -134,43 +134,14 @@ def selection_card(index: int, item: dict) -> html.Div:
 
         # Action Buttons Group with gaps
         dbc.ButtonGroup([
+            UI.btn_range_masks(index),
+            UI.btn_flow(index),
+            UI.btn_clean_flow(index),
+            UI.btn_plot_ov(index),
+            UI.btn_calc(index),
+            UI.btn_remove(index)
+        ], className="flex-shrink-0 gap-1")
 
-            dbc.Button("Flow",
-                       id={'type': UI.ID_BTN_FLOW, 'index': index},
-                       size="sm",
-                       color="secondary",
-                       outline=True,
-                       style={'padding': '1px 6px', 'fontSize': '10px'}),
-
-            dbc.Button("CleanFlow",
-                       id={'type': UI.ID_BTN_CLEAN_FLOW, 'index': index},
-                       size="sm",
-                       color="secondary",
-                       outline=True,
-                       style={'padding': '1px 6px', 'fontSize': '10px'}),
-
-            dbc.Button("OV",
-                       id={'type': 'plot-ov-btn', 'index': index},
-                       size="sm",
-                       color="secondary",
-                       outline=True,
-                       style={'padding': '1px 6px', 'fontSize': '10px'}),
-
-            dbc.Button("Calc",
-                       id={'type': 'compute-single-btn', 'index': index},
-                       size="sm",
-                       color="primary",
-                       outline=True,
-                       style={'padding': '1px 6px', 'fontSize': '10px'}),
-
-            dbc.Button("×",
-                       id={'type': 'remove-btn', 'index': index},
-                       size="sm",
-                       color="danger",
-                       outline=True,
-                       style={'padding': '2px 7px', 'fontSize': '10px'}),
-        ],
-        className="flex-shrink-0 gap-1")   # ← This adds nice gap between buttons
     ],
         className="d-flex align-items-center gap-3 p-1 px-3 border-bottom bg-white hover-shadow-sm",
         style={

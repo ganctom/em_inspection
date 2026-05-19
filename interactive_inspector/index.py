@@ -101,7 +101,9 @@ def display_page(pathname):
 
         # Check if project is initialized
         if service.exp_config and service.acq_config and service.stitch_config:
+
             settings_store = service.stitch_config.model_dump()
+            logging.debug(f'initial settings store: {settings_store}')
             return layout, no_update, settings_store
 
         # Fallback if Step 1 is incomplete
@@ -109,13 +111,14 @@ def display_page(pathname):
 
     # 3. Inspection Page
     elif pathname == UIConstants.TAB_3_URL:
-        settings_store = service.stitch_config.model_dump()
+        # settings_store = service.stitch_config.model_dump()
+        # logging.debug(f'INSP: {service.stitch_config}')
         if service.processor is None:
             return dbc.Container([
                 dbc.Alert(UIConstants.TAB_3_ALERT, color="warning", className="mt-5")
-            ]), no_update, no_update, settings_store
+            ]), no_update, no_update, no_update
 
-        return inspection_layout.layout(), no_update, settings_store
+        return inspection_layout.layout(), no_update, no_update
 
     # 4. Stitching Page
     elif pathname == UIConstants.TAB_4_URL:

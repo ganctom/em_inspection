@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import yaml
@@ -62,6 +63,19 @@ class AcquisitionConfig(BaseModel):
                 thickness = exp.cut_thickness,
                 resolution_xy = exp.pixel_size,
             )
+
+    @property
+    def grid_number(self) -> int:
+        """Parses tile_grid (e.g., 'g0002', 'g0102') and extracts the integer component."""
+        match = re.match(r"^g0*(\d+)", self.tile_grid)
+        if match:
+            return int(match.group(1))
+
+        # Fallback if tile_grid is completely zero-padded (e.g., 'g0000')
+        if re.match(r"^g0+$", self.tile_grid):
+            return 0
+
+        raise ValueError(f"Invalid tile_grid format: {self.tile_grid}. Expected 'gXXXX'.")
 
 
 class ExpConfig(BaseModel):
