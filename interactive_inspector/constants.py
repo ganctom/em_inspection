@@ -198,7 +198,7 @@ class UIConstants:
     ID_BTN_REMOVE_OV = "remove-btn"
     LBL_BTN_REMOVE_OV = "×"
     ID_BTN_TILE_IMAGE = "plot-tile-btn"
-    LBL_BTN_TILE_IMAGE = "TileImg"
+    LBL_BTN_TILE_IMAGE = "Tile Image"
 
 
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
@@ -448,7 +448,7 @@ class UIConstants:
 
     @classmethod
     def btn_tile_img(cls, index: int):
-        return cls._basket_button_factory(index, cls.ID_BTN_PLOT_OV, cls.LBL_BTN_PLOT_OV)
+        return cls._basket_button_factory(index, cls.ID_BTN_TILE_IMAGE, cls.LBL_BTN_TILE_IMAGE)
 
     @classmethod
     def btn_range_masks(cls, index: int):

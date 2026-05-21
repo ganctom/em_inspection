@@ -134,7 +134,7 @@ def selection_card(index: int, item: dict) -> html.Div:
 
         # Action Buttons Group with gaps
         dbc.ButtonGroup([
-            UI.btn_plot_ov(index),
+            UI.btn_tile_img(index),
             UI.btn_range_masks(index),
             UI.btn_flow(index),
             UI.btn_clean_flow(index),

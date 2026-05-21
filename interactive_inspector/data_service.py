@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import logging
 from pathlib import Path
 from typing import Optional, Tuple, Any
+
+import cv2
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -611,54 +613,68 @@ class DataService:
 
         return fig
 
-
-    def get_range_masks_fig(
-            self,
-            section_num: int,
-            tile_id_num: int,
-    )-> go.Figure | None:
-
-        # Load section
+    def _resolve_tile(self, section_num: int, tile_id_num: int) -> Optional[Tile]:
+        """Internal domain helper to safely fetch and instantiate a Tile entity."""
         section = self._get_initialized_section(section_num)
         if section is None:
             return None
 
-        # Load image
-        t = Tile(section.tile_dicts[tile_id_num])
+        if tile_id_num not in section.tile_dicts:
+            logging.warning(f'Tile t{tile_id_num} not resolved.')
+            return None
+
+        return Tile(section.tile_dicts[tile_id_num])
+
+    def get_range_masks_fig(
+            self,
+            section_num: int,
+            tile_id_num: int
+    ) -> Optional[go.Figure]:
+
+        t = self._resolve_tile(section_num, tile_id_num)
+        if t is None:
+            return None
+
         t.load_image(clahe=False)
 
-        # Get range masks configuration
         rac = RangeAnalysisConfig()
         rac.min_range = self.stitch_config.registration_config.min_range
         rac.filter_size = self.stitch_config.registration_config.filter_size
 
-        # Create range mask figure
-        fig = create_range_mask_plot(t.img_data, rac)
+        return create_range_mask_plot(t.img_data, rac)
 
-        return fig
 
     def get_tile_image_fig(
             self,
             section_num: int,
             tile_id_num: int,
-    ) -> go.Figure | None:
-        """Loads the specified tile image and generates a clean visualization figure."""
-        # 1. Fetch initialized section boundary
-        section = self._get_initialized_section(section_num)
-        if section is None:
-            return None
+            bin_fct: int = 2,
+            gauss_sigma: float = 0.8,
+            apply_clahe: bool = True,
+    ) -> go.Figure:
 
-        # 2. Instantiate tile and execute disk/cache read
-        t = Tile(section.tile_dicts[tile_id_num])
-        t.load_image(clahe=False)
+        t = self._resolve_tile(section_num, tile_id_num)
 
-        # 3. Generate image figure (using px.imshow or your custom utility)
-        # If you have a specific custom wrapper, use it here instead of px.imshow
-        import plotly.express as px
-        fig = px.imshow(t.img_data, color_continuous_scale='gray')
+        # 1. Start the common core pipeline steps
+        pipeline = t.load_image().denoise(gauss_sigma)
 
-        # Hide colorbars and adjust margins for clean image viewing
-        fig.update_layout(coloraxis_showscale=False, margin=dict(l=0, r=0, b=0, t=30))
+        # 2. Conditionally inject the CLAHE transformation
+        if apply_clahe:
+            pipeline = pipeline.clahe()
+
+        # 3. Downscaling for responsiveness
+        display_img = pipeline.bin(bin_fct).processed
+
+        fig = px.imshow(display_img, color_continuous_scale='gray')
+
+        fig.update_layout(
+            coloraxis_showscale=False,
+            paper_bgcolor='black',
+            plot_bgcolor='black',
+            margin=dict(l=0, r=0, b=20, t=15),
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, ticks='', visible=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, ticks='', visible=False)
+        )
 
         return fig
 

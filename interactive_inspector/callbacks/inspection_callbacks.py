@@ -173,7 +173,7 @@ def render_raw_tile_image_visualizations(_tile_clicks, selection_data):
         # 4. Invoke Isolated Backend Call
         fig = service.get_tile_image_fig(
             section_num=int(item_z),
-            tile_id_num=int(item_tid)
+            tile_id_num=int(item_tid),
         )
 
         if fig is None:
