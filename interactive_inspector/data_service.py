@@ -223,7 +223,7 @@ class DataService:
 
             self.parsing_status.update(results)
             self.parsing_status["progress"] = 100
-            self.parsing_status["message"] = "Processing Finished"
+            self.parsing_status["message"] = UI.MSG_PARSE_EXP_OK
 
         except Exception as e:
             self.parsing_status["message"] = f"Error: {str(e)}"
@@ -634,6 +634,31 @@ class DataService:
 
         # Create range mask figure
         fig = create_range_mask_plot(t.img_data, rac)
+
+        return fig
+
+    def get_tile_image_fig(
+            self,
+            section_num: int,
+            tile_id_num: int,
+    ) -> go.Figure | None:
+        """Loads the specified tile image and generates a clean visualization figure."""
+        # 1. Fetch initialized section boundary
+        section = self._get_initialized_section(section_num)
+        if section is None:
+            return None
+
+        # 2. Instantiate tile and execute disk/cache read
+        t = Tile(section.tile_dicts[tile_id_num])
+        t.load_image(clahe=False)
+
+        # 3. Generate image figure (using px.imshow or your custom utility)
+        # If you have a specific custom wrapper, use it here instead of px.imshow
+        import plotly.express as px
+        fig = px.imshow(t.img_data, color_continuous_scale='gray')
+
+        # Hide colorbars and adjust margins for clean image viewing
+        fig.update_layout(coloraxis_showscale=False, margin=dict(l=0, r=0, b=0, t=30))
 
         return fig
 

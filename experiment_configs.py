@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 import yaml
 
@@ -60,11 +61,14 @@ class ExperimentRegistry:
     def load_from_disk(self) -> None:
         """Loads previously saved experiments."""
         p = self.app_cfg.exp_yaml_path
-        with open(p, 'r') as f:
-            data = yaml.safe_load(f) or {}
-            for name, fields in data.items():
-                self.app_cfg.projects[name] = ExpConfig.model_validate(fields)
-        return None
+        try:
+            with open(p, 'r') as f:
+                data = yaml.safe_load(f) or {}
+                for name, fields in data.items():
+                    self.app_cfg.projects[name] = ExpConfig.model_validate(fields)
+        except FileNotFoundError as _:
+            logging.warning('There are no previous experiments in the application config file!')
+
 
     def get_all(self) -> Dict[str, ExpConfig]:
         return self.app_cfg.projects

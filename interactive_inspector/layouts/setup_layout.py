@@ -28,7 +28,7 @@ def layout():
             # --- LEFT COLUMN: ADD NEW ---
             dbc.Col([
                 html.Div([
-                    html.H4("Add New Experiment", className="mb-3"),
+                    html.H4(UI.LBL_ADD_NEW_EXP, className="mb-3"),
 
                     dbc.Label(UI.NAME_INP_NAME, **UI.LBL_CFG),
                     dbc.Input(**UI.INP_NAME),
@@ -98,8 +98,8 @@ def layout():
             dbc.Col([
                 html.Div([
                     # --- HEADER ---
-                    html.H4("Existing Experiments", className="mb-3"),
-                    html.P("Select a pre-configured experiment to begin inspection.",
+                    html.H4(UI.LBL_EXISTING_EXP, className="mb-3"),
+                    html.P(UI.LBL_INFO_EXISTING_EXP,
                            className="text-muted small"),
 
                     # Selection dropdown

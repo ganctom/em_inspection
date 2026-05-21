@@ -140,6 +140,57 @@ def render_range_mask_visualizations(_range_clicks, selection_data):
 
 
 # =============================================================================
+# 3. RAW TILE IMAGE VISUALIZATION CALLBACK
+# =============================================================================
+@app.callback(
+    [Output('integrated-overlap-graph', 'figure', allow_duplicate=True),
+     Output('integrated-ov-status', 'children', allow_duplicate=True),
+     Output('registration-log', 'children', allow_duplicate=True)],
+    [Input({'type': UIConstants.ID_BTN_TILE_IMAGE, 'index': ALL}, 'n_clicks')],
+    [State('selection-store', 'data')],
+    prevent_initial_call=True
+)
+def render_raw_tile_image_visualizations(_tile_clicks, selection_data):
+    # 1. Structural Lifecycle Guards
+    if not ctx.triggered_id or not selection_data:
+        return no_update, no_update, no_update
+
+    trig = ctx.triggered[0] if ctx.triggered else None
+    trig_val = trig['value'] if trig else None
+    if not trig_val or trig_val == 0:
+        return no_update, no_update, no_update
+
+    # 2. Extract Index Pointer
+    clicked_idx = ctx.triggered_id.get('index') if isinstance(ctx.triggered_id, dict) else None
+    if clicked_idx is None or clicked_idx >= len(selection_data):
+        return no_update, "Index out of bounds.", no_update
+
+    # 3. Data Key Selection
+    item = selection_data[clicked_idx]
+    item_tid, item_z = item.get('tid'), item.get('z')
+
+    try:
+        # 4. Invoke Isolated Backend Call
+        fig = service.get_tile_image_fig(
+            section_num=int(item_z),
+            tile_id_num=int(item_tid)
+        )
+
+        if fig is None:
+            error_msg = service.message_queue.pop() if getattr(service, 'message_queue', None) else "Unknown Error"
+            return no_update, "Tile Image Load Error", html.Div(error_msg, className="text-danger")
+
+        # 5. Enforce Standard Responsive Layout Parameters
+        fig.update_layout(autosize=True, uirevision=True)
+        status = f"Inspecting raw tile image: t{item_tid} | z{item_z}"
+        return fig, status, no_update
+
+    except Exception as e:
+        # Prevent runtime stack exceptions from altering DOM component properties
+        return no_update, f"Visualizer Crash: {str(e)}", html.Div(str(e), className="text-danger")
+
+
+# =============================================================================
 # 3. BATCH COARSE OFFSETS CALCULATION CALLBACK
 # =============================================================================
 @app.callback(

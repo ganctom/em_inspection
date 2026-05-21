@@ -142,6 +142,11 @@ class UIConstants:
     NAME_INP_SEC_RANGE = "Section range"
     NAME_INP_PX_SIZE = "Pixel size (nm)"
     NAME_INP_CT = "Cutting thickness (nm)"
+
+    LBL_ADD_NEW_EXP = "Add New Experiment"
+    LBL_EXISTING_EXP = "Existing Experiments"
+    LBL_INFO_EXISTING_EXP = "Select a pre-configured experiment or add new experiment to begin the workflow."
+
     LBL_CFG_PATH_YAML = "Config File Path (.yaml)"
     LBL_ACQ_RNG = "Acquisition & Range"
     LBL_PPLN_CFG = "Pipeline Config"
@@ -192,6 +197,8 @@ class UIConstants:
     LBL_BTN_CALC = "Calc"
     ID_BTN_REMOVE_OV = "remove-btn"
     LBL_BTN_REMOVE_OV = "×"
+    ID_BTN_TILE_IMAGE = "plot-tile-btn"
+    LBL_BTN_TILE_IMAGE = "TileImg"
 
 
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
@@ -207,6 +214,9 @@ class UIConstants:
     MSG_PARSE_READY = "Click to start parsing the acquired dataset and validation."
     MSG_BCKP_CO_DISABLED = "Initialize the project to enable coarse offsets backup or downstream workflow steps."
     MSG_BCKP_CO_READY = "Aggregates and stores coarse offsets and tile-id maps from all sections to enable Inspection."
+    MSG_PARSE_EXP_OK = ("Parsing the acquisition metadata has finished. Refresh the page to update the list of "
+                        "existing experiments.")
+
 
     # Standard Label Style
     LBL_CFG = {"className": "small mb-0"}
@@ -435,6 +445,10 @@ class UIConstants:
             style=style or cls._btn_style
         )
         return dbc.Button(**cfg)
+
+    @classmethod
+    def btn_tile_img(cls, index: int):
+        return cls._basket_button_factory(index, cls.ID_BTN_PLOT_OV, cls.LBL_BTN_PLOT_OV)
 
     @classmethod
     def btn_range_masks(cls, index: int):
