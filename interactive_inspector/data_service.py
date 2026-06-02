@@ -277,6 +277,7 @@ class DataService:
 
         cfg = StitchingConfig(**data)
         self.stitch_config = cfg
+
         return cfg
 
 
@@ -1001,6 +1002,12 @@ class DataService:
                 reg["min_peak_ratio"] = int(ui_params_dict["min_peak_ratio"])
             if "min_peak_sharpness" in ui_params_dict:
                 reg["min_peak_sharpness"] = int(ui_params_dict["min_peak_sharpness"])
+            if "clahe" in ui_params_dict:
+                reg["clahe"] = ui_params_dict["clahe"]
+            if "clip_limit" in ui_params_dict:
+                reg["clip_limit"] = float(ui_params_dict["clip_limit"])
+            if "kernel_size" in ui_params_dict:
+                reg["kernel_size"] = int(ui_params_dict["kernel_size"])
             if "max_deviation" in ui_params_dict:
                 reg["max_deviation"] = int(ui_params_dict["max_deviation"])
             if "max_magnitude" in ui_params_dict:
@@ -1016,8 +1023,8 @@ class DataService:
             if "warp_config" not in target_dict:
                 target_dict["warp_config"] = {}
 
-            if "clahe" in ui_params_dict:
-                target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["clahe"])
+            if "use_clahe" in ui_params_dict:
+                target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["use_clahe"])
 
             # Pipeline Config
             if "pipeline_config" not in target_dict:
@@ -1028,6 +1035,7 @@ class DataService:
                 if val is not None:
                     target_dict["pipeline_config"]["downscale_factor"] = float(val)
 
+            return
 
         _apply_overrides(raw_dict)
 
@@ -1039,7 +1047,11 @@ class DataService:
             return StitchingConfig(**raw_dict)  # Brute force attempt
 
 
-    def run_coarse_align_thread(self, section_numbers, reg_params: CoarseStitchConfig):
+    def run_coarse_align_thread(
+            self,
+            section_numbers,
+            reg_params: CoarseStitchConfig
+    ):
         self.abort_requested = False
         self.coarse_align_status = {
             "active": True,
@@ -1078,8 +1090,11 @@ class DataService:
                     section.read_tile_id_map()
                     section.ensure_tile_dicts()
                     section.load_tile_map(
-                        gauss=True, clahe=reg_params.apply_clahe,
-                        parallel=True, max_workers=8
+                        gauss=True,
+                        clahe=reg_params.apply_clahe,
+                        clahe_params=reg_params.clahe_params,
+                        parallel=True,
+                        max_workers=8
                     )
                     coarse_offsets = section.compute_coarse_offsets_section(reg_params)
                     utils.save_coarse_mat(coarse_offsets, section.path)

@@ -67,7 +67,7 @@ def cached_read_image(path: str):
     # it returns the numpy array from RAM instantly.
     return skimage.io.imread(path)
 
-@dataclass(frozen=True)
+@dataclass(frozen=False)
 class CoarseStitchConfig:
     """Encapsulates hyper-parameters for rigid stitching alignment."""
     overlaps_xy: Tuple[Tuple[int, ...], Tuple[int, ...]] = ((200, 300), (200, 300))
@@ -75,7 +75,15 @@ class CoarseStitchConfig:
     min_overlap: int = 20
     filter_size: int = 10
     apply_clahe: bool = True
+    clip_limit: float = 2.0
+    kernel_size: int = 128
 
+    @property
+    def clahe_params(self) -> dict[str, Any]:
+        return {
+            "clip_limit": self.clip_limit,
+            "kernel_size": self.kernel_size,
+        }
 
 class Section:
     def __init__(self, path: Union[Path, str]):
@@ -1630,6 +1638,7 @@ class Section:
             self,
             gauss: bool = False,
             clahe: bool = False,
+            clahe_params: dict[str, Any] | None = None,
             parallel: bool = False,
             max_workers: Optional[int] = None
     ) -> None:
@@ -1657,9 +1666,10 @@ class Section:
                 workers = max_workers or min(8, len(positions))
                 with ThreadPoolExecutor(max_workers=workers) as executor:
                     results = list(
-                        executor.map(lambda p: self._get_tile_data(p, clahe, gauss), positions))
+                        executor.map(lambda p: self._get_tile_data(p, clahe, clahe_params, gauss), positions)
+                    )
             else:
-                results = [self._get_tile_data(p, clahe, gauss) for p in positions]
+                results = [self._get_tile_data(p, clahe, clahe_params, gauss) for p in positions]
 
             for pos_tuple, img_data in results:
                 if img_data is not None:
@@ -1682,6 +1692,7 @@ class Section:
             self,
             pos: tuple[int, int],
             clahe: bool,
+            clahe_params: dict[str, Any],
             gauss: bool = False,
     ) -> tuple[tuple[int, int], Optional[np.ndarray]]:
         """Encapsulates tile lookup, I/O, and post-processing logic."""
@@ -1716,7 +1727,7 @@ class Section:
                 img = ndimage.gaussian_filter(img, sigma=0.7)
 
             if clahe:
-                img = utils.apply_clahe(img)
+                img = utils.apply_clahe(img, **clahe_params)
 
             return (x, y), img
 
@@ -1735,13 +1746,23 @@ class Section:
             self.tile_map[(x, y)] = img
 
 
-    def ensure_tile_map_ready(self, apply_clahe: bool = False) -> None:
+    def ensure_tile_map_ready(
+            self,
+            apply_clahe: bool = False,
+            clahe_params: dict[str, Any] | None = None
+    ) -> None:
         """Ensure tile map is loaded. Raises if loading fails."""
         if self.tile_map is not None and len(self.tile_map) > 0:
             return
 
         try:
-            self.load_tile_map(clahe=apply_clahe, parallel=True, max_workers=8)
+            self.load_tile_map(
+                gauss=True if apply_clahe else False,
+                clahe=apply_clahe,
+                clahe_params=clahe_params,
+                parallel=True,
+                max_workers=8
+            )
 
         except ValueError as e:
             logging.error(e)
@@ -1749,8 +1770,6 @@ class Section:
         except Exception as e:
             logging.error(e)
 
-        # if not self.tile_map:
-        #     raise RuntimeError(f"Tile map loaded but is empty for section {self.section_num}")
 
 # ---- EOF LOADING TILE-MAP ----
 
@@ -1760,7 +1779,10 @@ class Section:
     def _is_cache_valid(self, overwrite: bool) -> bool:
         return Path(self.path_cxy).exists() and not overwrite
 
-    def compute_coarse_offsets_section(self, config: CoarseStitchConfig) -> Optional[np.ndarray]:
+    def compute_coarse_offsets_section(
+            self,
+            config: CoarseStitchConfig
+    ) -> Optional[np.ndarray]:
         """Pure computational bridge to the stitch_rigid backend."""
         try:
             cx, cy = stitch_rigid.compute_coarse_offsets(
@@ -2087,7 +2109,19 @@ class Section:
         # Image Buffer Loading
         if self.tile_map is None:
             try:
-                self.load_tile_map(clahe=config.use_clahe, parallel=True)
+                clahe = config.use_clahe
+                clahe_params = None
+                if clahe:
+                    clahe_params = {
+                        "kernel_size": config.kernel_size,
+                        "clip_limit": config.clip_limit
+                    }
+
+                self.load_tile_map(
+                    gauss=False, clahe=clahe, clahe_params=clahe_params,
+                    parallel=True, max_workers=config.warp_parallelism
+                )
+
             except utils.TileLoadingError as e:
                 raise RuntimeError(f"Aborting section {self.section_num} due to missing tile-map data.") from e
 

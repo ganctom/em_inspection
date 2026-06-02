@@ -269,7 +269,9 @@ def execute_single_calculation(single_clicks, selection_data, active_idx, nudge_
     nudge = (safe_nudge.get('dx', 0), safe_nudge.get('dy', 0))
     current_nudge = nudge if btn_idx == active_idx else (0, 0)
 
-    result = service.compute_coarse_shift(item_tid, item_z, item_ov, initial_nudge=current_nudge, max_ext=search_rad)
+    result = service.compute_coarse_shift(
+        item_tid, item_z, item_ov, initial_nudge=current_nudge, max_ext=search_rad
+    )
 
     if isinstance(result, str):
         return html.Div(result, className="text-danger"), no_update, "Refinement Failed"

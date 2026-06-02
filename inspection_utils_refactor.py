@@ -278,7 +278,26 @@ def get_section_num(section_path: UniPath) -> Optional[int]:
         return None
 
 
-def apply_clahe(image, clip_limit=2., grid_size=(8, 8)):
+def apply_clahe(image, clip_limit=2.0, kernel_size=128):
+    """
+    Applies CLAHE using a pixel-based kernel size.
+
+    Parameters:
+        image (numpy.ndarray): Input grayscale image.
+        clip_limit (float): Threshold for contrast limiting.
+        kernel_size (int): Approximate pixel width/height of the local neighborhood.
+    """
+    # Extract image dimensions (assuming grayscale/single channel)
+    height, width = image.shape[:2]
+
+    # Calculate the number of tiles needed to approximate the kernel size
+    # OpenCV requires integer values for the grid dimensions
+    grid_x = max(1, round(width / kernel_size))
+    grid_y = max(1, round(height / kernel_size))
+
+    grid_size = (grid_x, grid_y)
+
+    # Initialize and apply CLAHE
     clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=grid_size)
     return clahe.apply(image)
 

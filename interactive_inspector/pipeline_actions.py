@@ -215,6 +215,7 @@ class PipelineOrchestrator:
 
         # 2. Param Prep
         hashable_ui = make_hashable_params(ui_params_raw)
+
         stitching_config = self.ppln_service.prepare_stitching_params(
             config_path=config_path,
             ui_params=hashable_ui
@@ -222,7 +223,11 @@ class PipelineOrchestrator:
         return sec_nums, stitching_config
 
 
-    def start_coarse_align(self, sec_nums: list[int], reg_cfg: RegistrationConfig):
+    def start_coarse_align(
+            self,
+            sec_nums: list[int],
+            reg_cfg: RegistrationConfig
+    ):
         """Launches the thread via DataService."""
 
         reg_params = CoarseStitchConfig(
@@ -230,7 +235,9 @@ class PipelineOrchestrator:
             min_range=tuple(reg_cfg.min_range),
             min_overlap=int(reg_cfg.min_overlap),
             filter_size=int(reg_cfg.filter_size),
-            apply_clahe=True
+            apply_clahe=reg_cfg.clahe,
+            clip_limit=reg_cfg.clip_limit,
+            kernel_size=reg_cfg.kernel_size,
         )
 
         thread = threading.Thread(

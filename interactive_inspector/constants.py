@@ -618,7 +618,38 @@ class UIConstants:
                         is_int=True
                     ))
                 ], width=6),
-            ]),
+
+                dbc.Col([
+                    dbc.Checklist(
+                        id=cls.ID_REG_CLAHE,
+                        options=[{"label": UI.LBL_REG_CLAHE, "value": True}],
+                        value=[True] if params.clahe else [],
+                        switch=True,
+                        className="small"
+                    )
+                ], width=4),
+
+                dbc.Col([
+                    cls.label_factory(cls.LBL_REG_CLAHE_CLIP),
+                    dbc.Input(**cls.numeric_factory(
+                        cls.ID_REG_CLAHE_CLIP,
+                        placeholder="2.0",
+                        value=str(params.clip_limit),
+                        is_int=True
+                    ))
+                ], width=4),
+
+                dbc.Col([
+                    cls.label_factory(cls.LBL_REG_CLAHE_KERNEL),
+                    dbc.Input(**cls.numeric_factory(
+                        cls.ID_REG_CLAHE_KERNEL,
+                        placeholder="128",
+                        value=str(params.kernel_size),
+                        is_int=True
+                    ))
+                ], width=6),
+
+            ], className="mb-3"),
         ]
 
         return cls.tab_factory(
@@ -937,6 +968,16 @@ class UIConstants:
     LBL_CONF_MIN_RANGE = "Min Range (csv)"
     ID_CONF_FILTER_SIZE = "conf-filter-size"
     LBL_CONF_FILTER_SIZE = "Filter Size"
+
+    ID_REG_CLAHE = "conf-clahe"
+    LBL_REG_CLAHE = "Apply CLAHE"
+
+    ID_REG_CLAHE_KERNEL = "conf-clahe-kernel-size"
+    LBL_REG_CLAHE_KERNEL = "CLAHE Kernel Size"
+
+    ID_REG_CLAHE_CLIP = "conf-clahe-clip-limit"
+    LBL_REG_CLAHE_CLIP = "CLAHE Clip Limit"
+
     ID_CONF_PATCH = "conf-patch"
     ID_CONF_BATCH = "conf-batch"
     ID_CONF_MIN_PKR = "conf-min-pkr"

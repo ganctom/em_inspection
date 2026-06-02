@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator, Field
-from typing import Tuple, Dict
+from typing import Tuple, Dict, Any
 from interactive_inspector.constants import UIConstants as UI
 from interactive_inspector.constants import DataConstants as DC
 
@@ -122,6 +122,10 @@ class CoarseParams:
     min_range: list[int]
     min_overlap: int
     filter_size: int
+    # denoise: bool
+    clahe: bool
+    clip_limit: float
+    kernel_size: int
 
 
 @dataclass(frozen=False)
@@ -154,6 +158,10 @@ class RegistrationConfig(BaseModel):
     max_gradient: float = 12.0
     reconcile_flow_max_deviation: float = -1.0
     step_patch_size: int = 10
+    clahe: bool = False
+    clip_limit: float = 2.0
+    kernel_size: int = 128
+
 
     def to_dict(self):
         return self.model_dump()
@@ -190,6 +198,9 @@ class RegistrationConfig(BaseModel):
             "min_range",
             "min_overlap",
             "filter_size",
+            "clahe",
+            "clip_limit",
+            "kernel_size"
         }
         return CoarseParams(**self.model_dump(include=coarse_fields))
 

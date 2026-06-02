@@ -17,12 +17,15 @@ from parameter_config import StitchingConfig
         Output("conf-output-dir", "value"),
         Output("conf-start", "value"),
         Output("conf-end", "value"),
-        # Registration (9 outputs)
+        # Registration (12 outputs)
         Output(UI.ID_CONF_OVERLAPS_X, "value"),
         Output(UI.ID_CONF_OVERLAPS_Y, "value"),
         Output(UI.ID_CONF_MIN_OVERLAP, "value"),
         Output(UI.ID_CONF_MIN_RANGE, "value"),
         Output(UI.ID_CONF_FILTER_SIZE, "value"),
+        Output(UI.ID_REG_CLAHE, "value"),
+        Output(UI.ID_REG_CLAHE_CLIP, "value"),
+        Output(UI.ID_REG_CLAHE_KERNEL, "value"),
         Output(UI.ID_CONF_PATCH, "value"),
         Output(UI.ID_CONF_BATCH, "value"),
         Output(UI.ID_CONF_MIN_PKR, "value"),
@@ -67,6 +70,9 @@ from parameter_config import StitchingConfig
 )
 def handle_config_load(n_clicks, file_path):
 
+    def fmt_bool(val: bool) -> list[bool]:
+        return [True] if val else []
+
     total_outputs = 41
     if not file_path:
         return [no_update] * (total_outputs - 2) + ["Please enter a path", ""]
@@ -77,7 +83,12 @@ def handle_config_load(n_clicks, file_path):
 
         cfg = pcfg.StitchingConfig(**data)
 
-        reg, mesh, warp, mask = (cfg.registration_config, cfg.mesh_integration_config, cfg.warp_config, cfg.mask_config)
+        reg, mesh, warp, mask = (
+            cfg.registration_config,
+            cfg.mesh_integration_config,
+            cfg.warp_config,
+            cfg.mask_config
+        )
 
         service.stitch_config = cfg
         service.reg_config = reg
@@ -85,25 +96,45 @@ def handle_config_load(n_clicks, file_path):
         to_csv = lambda x: ", ".join(map(str, x)) if x else ""
 
         return [
-            file_path, cfg.output_dir, cfg.start_section, cfg.end_section,
+            file_path,
+            cfg.output_dir,
+            cfg.start_section,
+            cfg.end_section,
+
             # Registration
-            to_csv(reg.overlaps_x), to_csv(reg.overlaps_y), reg.min_overlap,
-            to_csv(reg.min_range), reg.filter_size, to_csv(reg.patch_size),
+            to_csv(reg.overlaps_x),
+            to_csv(reg.overlaps_y),
+            reg.min_overlap,
+            to_csv(reg.min_range),
+            reg.filter_size,
+            # fmt_bool(reg.clahe),
+            # bool(reg.clahe),
+            reg.clahe,
+            reg.clip_limit,
+            reg.kernel_size,
+            to_csv(reg.patch_size),
             reg.batch_size, reg.min_peak_ratio, reg.min_peak_sharpness,
             reg.max_deviation, reg.max_magnitude, reg.min_patch_size,
             reg.max_gradient, reg.reconcile_flow_max_deviation,
+
             # Mesh
             mesh.dt, mesh.gamma, mesh.k0, mesh.k, mesh.stride,
             mesh.num_iters, mesh.max_iters, mesh.stop_v_max, mesh.dt_max,
             mesh.start_cap, mesh.final_cap,
-            [True] if mesh.prefer_orig_order else [],
-            [True] if mesh.remove_drift else [],
+            fmt_bool(mesh.prefer_orig_order),
+            fmt_bool(mesh.remove_drift),
+
             # Warp
-            warp.margin, warp.warp_parallelism, warp.kernel_size,
-            warp.clip_limit, warp.nbins,
-            [True] if warp.use_clahe else [],
+            warp.margin,
+            warp.warp_parallelism,
+            warp.kernel_size,
+            warp.clip_limit,
+            warp.nbins,
+            fmt_bool(warp.use_clahe),
+
             # Masking
-            mask.mask_margin, mask.rim_size,
+            mask.mask_margin,
+            mask.rim_size,
             # Status
             "Config loaded successfully", f"Active: {file_path.split('/')[-1]}"
         ]
@@ -120,28 +151,52 @@ def handle_config_load(n_clicks, file_path):
         State("conf-output-dir", "value"),
         State("conf-start", "value"),
         State("conf-end", "value"),
+
         # Reg States
-        State(UI.ID_CONF_OVERLAPS_X, "value"), State(UI.ID_CONF_OVERLAPS_Y, "value"),
-        State(UI.ID_CONF_MIN_OVERLAP, "value"), State(UI.ID_CONF_MIN_RANGE, "value"),
-        State(UI.ID_CONF_FILTER_SIZE, "value"), State(UI.ID_CONF_PATCH, "value"),
-        State(UI.ID_CONF_BATCH, "value"), State(UI.ID_CONF_MIN_PKR, "value"),
-        State(UI.ID_CONF_MIN_PKS, "value"), State(UI.ID_CONF_MAX_DEV, "value"),
-        State(UI.ID_CONF_MAX_MAG, "value"), State(UI.ID_CONF_MIN_PATCH, "value"),
-        State(UI.ID_CONF_MAX_GRAD, "value"), State(UI.ID_CONF_RECON_FLOW_MAX_DEV, "value"),
+        State(UI.ID_CONF_OVERLAPS_X, "value"),
+        State(UI.ID_CONF_OVERLAPS_Y, "value"),
+        State(UI.ID_CONF_MIN_OVERLAP, "value"),
+        State(UI.ID_CONF_MIN_RANGE, "value"),
+        State(UI.ID_CONF_FILTER_SIZE, "value"),
+        State(UI.ID_REG_CLAHE, "value"),
+        State(UI.ID_REG_CLAHE_CLIP, "value"),
+        State(UI.ID_REG_CLAHE_KERNEL, "value"),
+        State(UI.ID_CONF_PATCH, "value"),
+        State(UI.ID_CONF_BATCH, "value"),
+        State(UI.ID_CONF_MIN_PKR, "value"),
+        State(UI.ID_CONF_MIN_PKS, "value"),
+        State(UI.ID_CONF_MAX_DEV, "value"),
+        State(UI.ID_CONF_MAX_MAG, "value"),
+        State(UI.ID_CONF_MIN_PATCH, "value"),
+        State(UI.ID_CONF_MAX_GRAD, "value"),
+        State(UI.ID_CONF_RECON_FLOW_MAX_DEV, "value"),
+
         # Mesh States
-        State(UI.ID_CONF_MESH_DT, "value"), State(UI.ID_CONF_MESH_GAMMA, "value"),
-        State(UI.ID_CONF_MESH_K0, "value"), State(UI.ID_CONF_MESH_K, "value"),
-        State(UI.ID_CONF_MESH_STRIDE, "value"), State(UI.ID_CONF_MESH_NUM_ITERS, "value"),
-        State(UI.ID_CONF_MESH_MAX_ITERS, "value"), State(UI.ID_CONF_MESH_STOP_V, "value"),
-        State(UI.ID_CONF_MESH_DT_MAX, "value"), State(UI.ID_CONF_MESH_START_CAP, "value"),
-        State(UI.ID_CONF_MESH_FINAL_CAP, "value"), State(UI.ID_CONF_MESH_ORIG_ORDER, "value"),
+        State(UI.ID_CONF_MESH_DT, "value"),
+        State(UI.ID_CONF_MESH_GAMMA, "value"),
+        State(UI.ID_CONF_MESH_K0, "value"),
+        State(UI.ID_CONF_MESH_K, "value"),
+        State(UI.ID_CONF_MESH_STRIDE, "value"),
+        State(UI.ID_CONF_MESH_NUM_ITERS, "value"),
+        State(UI.ID_CONF_MESH_MAX_ITERS, "value"),
+        State(UI.ID_CONF_MESH_STOP_V, "value"),
+        State(UI.ID_CONF_MESH_DT_MAX, "value"),
+        State(UI.ID_CONF_MESH_START_CAP, "value"),
+        State(UI.ID_CONF_MESH_FINAL_CAP, "value"),
+        State(UI.ID_CONF_MESH_ORIG_ORDER, "value"),
         State(UI.ID_CONF_MESH_REMOVE_DRIFT, "value"),
+
         # Warp States
-        State(UI.ID_CONF_WARP_MARGIN, "value"), State(UI.ID_CONF_WARP_PARALLEL, "value"),
-        State(UI.ID_CONF_WARP_KERNEL, "value"), State(UI.ID_CONF_WARP_CLIP, "value"),
-        State(UI.ID_CONF_WARP_NBINS, "value"), State(UI.ID_CONF_WARP_CLAHE, "value"),
+        State(UI.ID_CONF_WARP_MARGIN, "value"),
+        State(UI.ID_CONF_WARP_PARALLEL, "value"),
+        State(UI.ID_CONF_WARP_KERNEL, "value"),
+        State(UI.ID_CONF_WARP_CLIP, "value"),
+        State(UI.ID_CONF_WARP_NBINS, "value"),
+        State(UI.ID_CONF_WARP_CLAHE, "value"),
+
         # Masking states
-        State(UI.ID_CONF_MASK_MARGIN, "value"), State(UI.ID_CONF_MASK_RIM_SIZE, "value"),
+        State(UI.ID_CONF_MASK_MARGIN, "value"),
+        State(UI.ID_CONF_MASK_RIM_SIZE, "value"),
     ],
     prevent_initial_call=True
 )
@@ -158,18 +213,33 @@ def handle_config_save(n_clicks, path, *args):
     try:
         # Unpack exactly as listed in the States above
         (out_dir, start, end,
-         ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_dev,
-         m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
+         ox, oy, m_ov, m_rng, fs,
+         clahe, clahe_clip, clahe_kernel,
+         patch, batch, pkr, pks, max_dev, max_mag, min_p, max_g, rec_dev,
+         m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m,
+         m_scap, m_fcap, m_orig, m_drift,
          w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe,
          mask_margin, mask_rim_size
          ) = args
 
         reg_cfg = pcfg.RegistrationConfig(**clean_dict({
-            "overlaps_x": parse_csv(ox), "overlaps_y": parse_csv(oy), "min_overlap": m_ov,
-            "min_range": parse_csv(m_rng), "filter_size": fs, "patch_size": parse_csv(patch),
-            "batch_size": batch, "min_peak_ratio": pkr, "min_peak_sharpness": pks,
-            "max_deviation": max_dev, "max_magnitude": max_mag, "min_patch_size": min_p,
-            "max_gradient": max_g, "reconcile_flow_max_deviation": rec_dev
+            "overlaps_x": parse_csv(ox),
+            "overlaps_y": parse_csv(oy),
+            "min_overlap": m_ov,
+            "min_range": parse_csv(m_rng),
+            "filter_size": fs,
+            "clahe": bool(clahe),
+            "clip_limit": clahe_clip,
+            "kernel_size": clahe_kernel,
+            "patch_size": parse_csv(patch),
+            "batch_size": batch,
+            "min_peak_ratio": pkr,
+            "min_peak_sharpness": pks,
+            "max_deviation": max_dev,
+            "max_magnitude": max_mag,
+            "min_patch_size": min_p,
+            "max_gradient": max_g,
+            "reconcile_flow_max_deviation": rec_dev
         }))
 
         mesh_cfg = pcfg.MeshIntegrationConfig(**clean_dict({
@@ -217,13 +287,28 @@ def handle_config_save(n_clicks, path, *args):
      State(UI.ID_CONF_OVERLAPS_Y, "value"),
      State(UI.ID_CONF_MIN_RANGE, "value"),
      State(UI.ID_CONF_MIN_OVERLAP, "value"),
-     State(UI.ID_CONF_FILTER_SIZE, "value")],
+     State(UI.ID_CONF_FILTER_SIZE, "value"),
+     State(UI.ID_REG_CLAHE, "value"),
+     State(UI.ID_REG_CLAHE_CLIP, "value"),
+     State(UI.ID_REG_CLAHE_KERNEL, "value"),
+     ],
     prevent_initial_call=True
 )
 def run_coarse_alignment(n_clicks, range_str, config_path, *ui_vals):
     # 1. Map raw UI values to keys
-    ui_keys = ["overlaps_x", "overlaps_y", "min_range", "min_overlap", "filter_size"]
+    ui_keys = [
+        "overlaps_x",
+        "overlaps_y",
+        "min_range",
+        "min_overlap",
+        "filter_size",
+        "clahe",
+        "clip_limit",
+        "kernel_size",
+    ]
     ui_params_raw = dict(zip(ui_keys, ui_vals))
+
+    ui_params_raw['clahe'] = bool(ui_params_raw['clahe'])
 
     try:
         # 2. Delegate logic to Orchestrator
@@ -239,6 +324,12 @@ def run_coarse_alignment(n_clicks, range_str, config_path, *ui_vals):
             UI.log_row(f"Sections: {sec_nums[0]}-{sec_nums[-1]} ({len(sec_nums)} total)"),
             UI.log_row(f"Overlaps X: {reg_cfg.overlaps_x}"),
             UI.log_row(f"Overlaps Y: {reg_cfg.overlaps_y}"),
+            UI.log_row(f"Min. Range: {reg_cfg.min_range}"),
+            UI.log_row(f"Min. Overlap: {reg_cfg.min_overlap}"),
+            UI.log_row(f"Filter Size: {reg_cfg.filter_size}"),
+            UI.log_row(f"CLAHE: {reg_cfg.clahe}"),
+            UI.log_row(f"CLAHE clip limit : {reg_cfg.clip_limit}"),
+            UI.log_row(f"CLAHE kernel size: {reg_cfg.kernel_size}"),
             UI.log_row("-" * 50),
             UI.log_row("▶ Thread active. Monitoring...", type="success")
         ]
@@ -381,63 +472,6 @@ def toggle_backup_button(n_clicks, current_ttp_text):
     return button_disabled, tooltip_output
 
 
-# def assemble_stitching_config_from_ui(*args) -> StitchingConfig:
-#     """
-#     Shared logic to parse UI States into a StitchingConfig Pydantic model.
-#     """
-#     def clean_dict(d):
-#         return {k: v for k, v in d.items() if v is not None and v != ""}
-#
-#     def parse_csv(val):
-#         if not val or not str(val).strip(): return None
-#         return [int(x.strip()) for x in str(val).split(",")]
-#
-#     (out_dir, start, end,
-#      ox, oy, m_ov, m_rng, fs, patch, batch, pkr, pks,
-#      max_dev, max_mag, min_p, max_g, rec_dev,
-#      m_dt, m_gamma, m_k0, m_k, m_stride, m_iters, m_max_i, m_stop, m_dt_m, m_scap, m_fcap, m_orig, m_drift,
-#      w_margin, w_parallel, w_kernel, w_clip, w_nbins, w_clahe,
-#      mask_margin, mask_rim_size
-#     ) = args
-#
-#     reg_cfg = pcfg.RegistrationConfig(**clean_dict({
-#         "overlaps_x": parse_csv(ox), "overlaps_y": parse_csv(oy), "min_overlap": m_ov,
-#         "min_range": parse_csv(m_rng), "filter_size": fs, "patch_size": parse_csv(patch),
-#         "batch_size": batch, "min_peak_ratio": pkr, "min_peak_sharpness": pks,
-#         "max_deviation": max_dev, "max_magnitude": max_mag, "min_patch_size": min_p,
-#         "max_gradient": max_g, "reconcile_flow_max_deviation": rec_dev
-#     }))
-#
-#     mesh_cfg = pcfg.MeshIntegrationConfig(**clean_dict({
-#         "dt": m_dt, "gamma": m_gamma, "k0": m_k0, "k": m_k, "stride": m_stride,
-#         "num_iters": m_iters, "max_iters": m_max_i, "stop_v_max": m_stop,
-#         "dt_max": m_dt_m, "start_cap": m_scap, "final_cap": m_fcap,
-#         "prefer_orig_order": bool(m_orig), "remove_drift": bool(m_drift)
-#     }))
-#
-#     warp_cfg = pcfg.WarpConfigStitching(**clean_dict({
-#         "margin": w_margin, "warp_parallelism": w_parallel, "kernel_size": w_kernel,
-#         "clip_limit": w_clip, "nbins": w_nbins, "use_clahe": bool(w_clahe)
-#     }))
-#
-#     mask_cfg = pcfg.MaskingConfig(**clean_dict({
-#         "mask_margin": mask_margin,
-#         "rim_size": mask_rim_size
-#     }))
-#
-#     new_cfg = pcfg.StitchingConfig(
-#         output_dir=out_dir,
-#         start_section=start,
-#         end_section=end,
-#         registration_config=reg_cfg,
-#         mesh_integration_config=mesh_cfg,
-#         warp_config=warp_cfg,
-#         mask_config=mask_cfg,
-#     )
-#
-#     return new_cfg
-
-
 def assemble_stitching_config_from_ui(ui_states: dict) -> StitchingConfig:
     """
     Shared logic to parse UI keyword states into a StitchingConfig Pydantic model.
@@ -455,7 +489,10 @@ def assemble_stitching_config_from_ui(ui_states: dict) -> StitchingConfig:
         "overlaps_y": parse_csv(ui_states.get("overlaps_y")),
         "min_overlap": ui_states.get("min_overlap"),
         "min_range": parse_csv(ui_states.get("min_range")),
+        "clahe": bool(ui_states.get("clahe")),
         "filter_size": ui_states.get("filter_size"),
+        "clip_limit": ui_states.get("clip_limit"),
+        "kernel_size": ui_states.get("kernel_size"),
         "patch_size": parse_csv(ui_states.get("patch")),
         "batch_size": ui_states.get("batch"),
         "min_peak_ratio": ui_states.get("min_pkr"),
@@ -511,7 +548,6 @@ def assemble_stitching_config_from_ui(ui_states: dict) -> StitchingConfig:
     return new_cfg
 
 
-
 @callback(
     Output(UI.ID_GLOBAL_SETTINGS_STORE, 'data'),
     # Use the 'inputs' keyword argument to group the triggering Input and all context States
@@ -527,6 +563,9 @@ def assemble_stitching_config_from_ui(ui_states: dict) -> StitchingConfig:
         min_overlap=State(UI.ID_CONF_MIN_OVERLAP, "value"),
         min_range=State(UI.ID_CONF_MIN_RANGE, "value"),
         filter_size=State(UI.ID_CONF_FILTER_SIZE, "value"),
+        clahe=State(UI.ID_REG_CLAHE, "value"),
+        clip_limit=State(UI.ID_REG_CLAHE_CLIP, "value"),
+        kernel_size=State(UI.ID_REG_CLAHE_KERNEL, "value"),
         patch=State(UI.ID_CONF_PATCH, "value"),
         batch=State(UI.ID_CONF_BATCH, "value"),
         min_pkr=State(UI.ID_CONF_MIN_PKR, "value"),
