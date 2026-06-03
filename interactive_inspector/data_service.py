@@ -10,7 +10,6 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple, Any
 
-import cv2
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -1151,6 +1150,38 @@ class DataService:
         logging.log(getattr(logging, level.upper()), f"Section {sec_num}: {error_msg}")
         failed_list.append(sec_num)
         self._log_status(f"❌ {sec_num}: {error_msg}", level)
+
+
+    def compute_auto_zoom_ranges(
+            self,
+            shifts: npt.NDArray[np.float64],
+            sec_nums: list[int]
+    ) -> Tuple[list[int], list[int]]:
+        """
+        Calculates column-specific horizontal and vertical auto-zoom bounding x-ranges
+        based on active finite coordinates in the shifts data.
+        """
+
+        def get_range_for_indices(indices: list[int]) -> list[int]:
+            sub_shifts = shifts[indices, :]
+            mask = ~np.isnan(sub_shifts).all(axis=0)
+            if np.any(mask):
+                valid_idx = np.where(mask)[0]
+                return [int(sec_nums[valid_idx[0]]) - 2, int(sec_nums[valid_idx[-1]]) + 2]
+            return [int(min(sec_nums)), int(max(sec_nums))]
+
+        range_h = get_range_for_indices([0, 1])
+        range_v = get_range_for_indices([2, 3])
+        return range_h, range_v
+
+
+    def get_inf_y_ceiling(self, data_row: npt.NDArray[np.float64]) -> float:
+        """
+        Extracts the maximum finite position within a given vector trace component
+        to serve as the canvas height ceiling for infinite tracking markers.
+        """
+        finite_data = data_row[np.isfinite(data_row)]
+        return float(np.max(finite_data)) if finite_data.size > 0 else 0.0
 
 # Initialize single instances
 service = DataService()

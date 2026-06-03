@@ -124,6 +124,14 @@ class UIConstants:
         2: OverlapType.VERTICAL, 3: OverlapType.VERTICAL
     }
 
+    # --- COARSE OFFSETS INSPECTOR - QUAD-PLOT --- #
+    QUAD_PLOT_PAD_FCT = 0.3
+    QPLT_1 = "H-Overlap: Δx"
+    QPLT_2 = "V-Overlap: Δx"
+    QPLT_3 = "H-Overlap: Δy"
+    QPLT_4= "V-Overlap: Δy"
+    QUAD_PLOT_TITLES = (QPLT_1, QPLT_2, QPLT_3, QPLT_4)
+
     # --- CONFIG FILENAMES --- #
     FN_CFG_TILE_STITCHING = DataConstants.FN_STITCHING_CFG
 
@@ -160,7 +168,6 @@ class UIConstants:
     LBL_FLOW_YV = "Fine Flow Vert. Neighbor - Y component"
 
     # --- IDs ---
-
     ID_INP_NAME = "name"
     ID_INP_ACQ = "acq_dir"
     ID_INP_PROC = "proc_dir"
