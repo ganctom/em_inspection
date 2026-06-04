@@ -22,7 +22,6 @@ def save_to_disk(cfg_obj: BaseModel, path_out: str):
     raw_data = cfg_obj.model_dump()
     clean_data = prepare_for_yaml(raw_data)
     with open(path_out, 'w') as f:
-        # sort_keys=True ensures the alphabetical ordering you requested
         yaml.safe_dump(clean_data, f, default_flow_style=False, sort_keys=False)
 
 

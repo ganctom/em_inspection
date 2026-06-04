@@ -1,3 +1,5 @@
+import logging
+
 from dash import html
 import dash_bootstrap_components as dbc
 import numpy as np
@@ -11,8 +13,13 @@ def create_grid_navigator(
         tile_ids: npt.NDArray[np.int_],
         active_tid: str = None,
         dirty_tids: set = None,
-        available_tids: set = None
+        available_tids: set[int] = None
 ) -> go.Figure:
+
+    # Fallback/Guard: Force reconstruction if an unflattened 1D array bypasses the initialization
+    if tile_ids.ndim == 1:
+        logging.warning("Grid Navigator received a 1D array. Check initialization lifecycle pipes.")
+        return go.Figure()
 
     # Single lookup for all valid tile coordinates
     valid_coords = np.where(tile_ids != -1)
@@ -151,16 +158,28 @@ def selection_card(index: int, item: dict) -> html.Div:
         }
     )
 
+
 def to_details_card(exp_config: ExpConfig) -> dbc.Card:
     """Generates a standardized Dash card UI component from the model instance."""
     return dbc.Card([
         dbc.CardHeader(html.Strong(exp_config.name)),
         dbc.CardBody([
-            html.P([html.B("Path: "), html.Span(exp_config.proc_dir, className="text-break small")]),
-            html.P([html.B("Sections: "), f"{exp_config.first_sec} - {exp_config.last_sec}"], className="mb-1"),
+            html.P([
+                html.B("Acquisition Path: "),
+                html.Span(exp_config.acq_dir, className="text-break small")
+            ], className="mb-2"),
+            html.P([
+                html.B("Processing Path: "),
+                html.Span(exp_config.proc_dir, className="text-break small")
+            ], className="mb-2"),
+            html.P([
+                html.B("Section Range: "),
+                f"{exp_config.first_sec} - {exp_config.last_sec}"
+            ], className="mb-1"),
             html.P([
                 html.B("Grid: "),
-                f"#{exp_config.grid_num} ({exp_config.grid_shape[0]}x{exp_config.grid_shape[1]})"], className="mb-1"),
+                f"#{exp_config.grid_num} ({exp_config.grid_shape[0]}x{exp_config.grid_shape[1]})"
+            ], className="mb-1"),
         ])
     ], className="mt-3 shadow-sm")
 

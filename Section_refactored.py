@@ -2,14 +2,12 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import functools as ft
 import gc
-from pickle import UnpicklingError
 from zipfile import BadZipFile
 
 import jax
 import jax.numpy as jnp
 import logging
 
-import scipy
 from matplotlib import pyplot as plt
 import numpy as np
 import numpy.typing as npt
@@ -593,10 +591,10 @@ class Section:
                 self.load_coarse_mesh()
                 return self.coarse_mesh is not None
             else:
-                print(f"File '{self.path_cmesh}' does not exist.")
+                logging.info(f"File '{self.path_cmesh}' does not exist.")
                 return False
         except Exception as e:
-            print(f"An error occurred while checking and loading '{self.path_cmesh}': {e}")
+            logging.error(f"An error occurred while checking and loading '{self.path_cmesh}': {e}")
             return False
 
 
@@ -845,7 +843,7 @@ class Section:
         for fn, i_map in zip(fns, maps):
             path_mask = self.path / fn
             if not path_mask.exists():
-                logging.warning(f's{self.section_num} {fn} does not exist!')
+                logging.info(f's{self.section_num} {fn} does not exist!')
                 continue
             try:
                 data = np.load(path_mask, allow_pickle=True)
@@ -1692,7 +1690,7 @@ class Section:
             self,
             pos: tuple[int, int],
             clahe: bool,
-            clahe_params: dict[str, Any],
+            clahe_params: dict[str, Any] | None = None,
             gauss: bool = False,
     ) -> tuple[tuple[int, int], Optional[np.ndarray]]:
         """Encapsulates tile lookup, I/O, and post-processing logic."""
@@ -1727,7 +1725,7 @@ class Section:
                 img = ndimage.gaussian_filter(img, sigma=0.7)
 
             if clahe:
-                img = utils.apply_clahe(img, **clahe_params)
+                img = utils.apply_clahe(img, **(clahe_params or {}))
 
             return (x, y), img
 
@@ -1756,8 +1754,10 @@ class Section:
             return
 
         try:
+            denoise = True if apply_clahe else False
+
             self.load_tile_map(
-                gauss=True if apply_clahe else False,
+                gauss=denoise,
                 clahe=apply_clahe,
                 clahe_params=clahe_params,
                 parallel=True,
@@ -2167,13 +2167,13 @@ class FlowFieldOrchestrator:
             logging.info(f"Skipping s{self.section.section_num}: fflows already exist.")
             return
 
-        if not self._prepare_infrastructure(masking):
+        if not self._prepare_infrastructure(masking=masking, apply_clahe=True):
             logging.error(f"Infrastructure failure for s{self.section.section_num}.")
             return
 
         # 2. Execution
         try:
-            logging.info(f'computing fine-flows with stride: {stride}')
+            logging.info(f'Computing fine-flows with stride: {stride}')
             self.section.fflows = (
                 self._run_iterative_flow_estimation(config, stride))
         except RuntimeError as e:
@@ -2184,7 +2184,11 @@ class FlowFieldOrchestrator:
         if store and self.section.fflows:
             self._persist_fflows(self.section.fflows, ext)
 
-    def _prepare_infrastructure(self, masking: bool) -> bool:
+    def _prepare_infrastructure(
+            self,
+            masking: bool,
+            apply_clahe: bool = False
+    ) -> bool:
         """Ensures all buffers and remote data are ready for computation."""
         if self.section.cxy is None:
             _ = self.section.get_coarse_mat()
@@ -2194,8 +2198,10 @@ class FlowFieldOrchestrator:
             return False
 
         try:
-            # Reusing your hardened SMB-aware loader
-            self.section.ensure_tile_map_ready(apply_clahe=False)
+            self.section.ensure_tile_map_ready(
+                apply_clahe=apply_clahe,
+                clahe_params={}
+            )
         except Exception:
             return False
 
@@ -2236,6 +2242,9 @@ class FlowFieldOrchestrator:
 
     def _execute_sofima_call(self, cfg: RegistrationConfig, stride: int, axis: int):
         """Wrapper for the external library call."""
+
+        logging.info(f'tile_map keys: {list(self.section.tile_map.keys())}')
+
         return stitch_elastic.compute_flow_map(
             tile_map=self.section.tile_map,
             offset_map=self.section.cxy[axis],

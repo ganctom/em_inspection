@@ -2,8 +2,6 @@ import json
 import logging
 import multiprocessing
 import os
-from dataclasses import dataclass
-from glob import glob
 from platform import system
 from pathlib import Path
 from typing import Optional, Iterable, Union, Sequence, Dict, Iterator, Tuple, List, Set
@@ -11,12 +9,9 @@ from functools import partial
 
 import jax
 import numpy as np
-from numba.core.imputils import lower_setattr_generic
-from tqdm import tqdm
 
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
-import parameter_config
 
 from Section_refactored import Section, fine_align_section, Vector, cached_read_image
 from coarse_offset_processor import CoarseOffsetProcessor
@@ -1117,40 +1112,6 @@ def _get_update_targets(
         if k in cxyz_file.files and np.array_equal(cxyz_file[k], v, equal_nan=True):
             continue
         yield k, v
-
-
-def store_cxyz_to_offset_files(
-        insp: Inspection,
-        new_cxyz: Optional[Dict[str, np.ndarray]] = None
-) -> None:
-    """Stores updated coarse offset arrays from new_cxyz into section cx_cy.json files"""
-
-    if not new_cxyz: return
-    if not insp.path_cxyz.exists():
-        logger.error("Backup missing: %s", insp.path_cxyz)
-        return
-
-    try:
-        with np.load(insp.path_cxyz, mmap_mode='r') as backup:
-            targets = list(_get_update_targets(backup, new_cxyz))
-            if not targets:
-                print(f"All {len(new_cxyz)} items match. Skipping.")
-                return
-
-            stats = {"ok": 0, "err": 0}
-            for k, v in tqdm(targets, desc="Updating"):
-                sec_path = insp.dir_sections / f"s{k}_g{insp.grid_nr}"
-                p = utils.cross_platform_path(str(sec_path))
-                try:
-                    utils.save_coarse_mat(v, p, file_format='json')
-                    stats["ok"] += 1
-                except (IOError, OSError) as e:
-                    logger.error("Error s%s: %s", k, e)
-                    stats["err"] += 1
-
-            print(f"\nWritten: {stats['ok']} | Skipped: {len(new_cxyz)-stats['ok']} | Errors: {stats['err']}")
-    except Exception as e:
-        logger.critical("Failed: %s", e, exc_info=True)
 
 
 def parse_acquisition(

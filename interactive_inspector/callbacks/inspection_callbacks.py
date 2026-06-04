@@ -278,7 +278,9 @@ def execute_single_calculation(single_clicks, selection_data, active_idx, nudge_
         return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
 
     item = selection_data[active_idx]
+
     fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
+
     return html.P(f"T{calc_item['tid']} Refined: {result['refined']}",
                   className="text-success small"), fig, "Refinement Applied"
 
@@ -298,7 +300,6 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
         return no_update
 
     trigger = ctx.triggered_id
-    logging.info(f'navigation.py: handle_selection_state triggered')
 
     # 1. Handle Clear All
     if trigger == 'clear-selection':
@@ -357,7 +358,6 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
 )
 def sync_selection_ui(data):
     """Updates the 'Basket' UI whenever the store changes."""
-    logging.info(f'navigation.py: sync-selection_ui triggered')
     if not data:
         return html.Div("No vectors selected.", className="text-muted small italic p-2")
     return [selection_card(i, item) for i, item in enumerate(data)]
@@ -371,7 +371,6 @@ def sync_selection_ui(data):
      Input('theme-switch', 'value')]
 )
 def render_main_visuals(grid_click, selection_store, dark_mode):
-    logging.info('navigation.py: render_main_visuals triggered')
 
     if service.processor is None or not ctx.triggered:
         return no_update
@@ -502,7 +501,7 @@ def handle_persist_to_disk(n_clicks):
     if not n_clicks:
         return no_update
     try:
-        service.processor.save_offsets_to_disk()
+        service.processor.save_offsets_to_disk_db()
         return html.Div([
             html.P("💾 CXYZ File Updated", className="text-warning mb-0 fw-bold"),
             html.Small("Modifications persisted to disk.", className="text-white-50")
@@ -530,7 +529,7 @@ def handle_export_sections(n_clicks):
         return no_update
 
     try:
-        service.store_offsets_to_yamls()
+        service.store_offsets_to_cx_cy_json_files()
 
         return html.Div([
             html.P("🚀 Storing coarse offsets to section cx_cy files", className="text-info mb-0 fw-bold"),
@@ -555,57 +554,52 @@ def handle_export_sections(n_clicks):
 )
 def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     trigger = ctx.triggered_id
-    logging.debug(f"DEBUG: Grid navigator callback triggered by {ctx.triggered_id}")
 
     # 0. Handle the "Nothing happened yet" case
     if not trigger:
-        # Just return the defaults so the grid actually draws on page load
-        # You can use your 'meta' defaults here
         return slider_val, no_update, no_update
 
-    # 1. Setup bounds
-    tile_maps = getattr(service.processor, 'tile_id_maps_obj', {})
-    z_keys = sorted([int(z) for z in tile_maps.keys()])
+    # 1. Setup bounds from the processor's clean sequence array
+    z_keys = getattr(service.processor, 'section_sequence', [])
     if not z_keys:
+        logging.warning("Grid Navigator: No section sequence found in processor state.")
         return no_update, no_update, no_update
 
     z_min, z_max = min(z_keys), max(z_keys)
 
     # 2. Resolve Current Z logic
     if trigger == 'manual-z-input' and manual_z is not None:
-        # User typed a number. Clamp it to valid range.
         current_z = max(z_min, min(z_max, int(manual_z)))
-        # Map logical Z back to the slider's visual position
-        # (Assuming visual max at top = logical min)
         slider_val = (z_max + z_min) - current_z
-
     elif trigger == 'section-filter-slider' and slider_val is not None:
-        # Slider moved. Map visual position to logical Z.
         current_z = (z_max + z_min) - slider_val
-
     else:
-        # Fallback/Initial state or clickData trigger
-        # Calculate current_z from the existing slider_val
         current_z = (z_max + z_min) - slider_val if slider_val is not None else z_min
 
     # 3. Generate the Grid Figure
-    active_tid = click_data['points'][0]['text'] if click_data else None
+    active_tid: str = click_data['points'][0]['text'] if click_data else None
+
+    # Query your updated memory-lean inf-registry tracking errors
     registry = getattr(service.processor, '_inf_registry', {})
     dirty_tids = set(registry.keys())
 
-    z_str = str(int(current_z))
-    z_map = tile_maps.get(z_str)
-    available_tids = set(z_map[z_map != -1].flatten().astype(int)) if z_map is not None else set()
+    # Get available tile IDs for this slice via the lookup dictionary
+    try:
+        z_str = str(int(current_z))
+        lookup = service.processor.get_section_lookup(z_str)
+        available_tids = set(lookup.tile_to_coords.keys())
+    except Exception as e:
+        logging.warning(f"Failed to extract active coordinates map for slice {current_z}: {e}")
+        available_tids = set()
 
     fig = create_grid_navigator(
-        service.tile_ids,
+        tile_ids=service.tile_ids,
         active_tid=active_tid,
         dirty_tids=dirty_tids,
         available_tids=available_tids
     )
 
     # 4. Sync the UI
-    # We return the new slider_val and the confirmed current_z to the input box
     return slider_val, fig, int(current_z)
 
 
@@ -623,9 +617,9 @@ def handle_keyboard_nav(n_events, event, current_slider_val):
     if not event or current_slider_val is None:
         return no_update
 
-    tile_maps = getattr(service.processor, 'tile_id_maps_obj', {})
-    z_keys = [int(z) for z in tile_maps.keys()]
+    z_keys = getattr(service.processor, 'section_sequence', [])
     if not z_keys:
+        logging.debug("Keyboard Navigation: Action aborted due to uninitialized section keys sequence.")
         return no_update
 
     # Normalize key to lowercase to handle 'W' and 'w'
@@ -732,7 +726,6 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 @app.callback(
     Output(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True),
     [
-        # Add all your manual UI inputs here as Inputs
         Input(UIConstants.ID_CONF_MIN_PKR, 'value'),
         Input(UIConstants.ID_CONF_MIN_PKS, 'value'),
         Input(UIConstants.ID_CONF_MAX_DEV, 'value'),
@@ -769,6 +762,7 @@ def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, curr
 )
 def handle_background_preload(selection_data):
     if selection_data and len(selection_data) > 0:
+        logging.debug(f'selection data: {selection_data}')
         service.preload_source_images(selection_data)
         return "true"
     return "false"
@@ -827,15 +821,24 @@ def apply_padded_y_ranges(
         y_lower = y_min - (y_range * padding_factor)
         y_upper = y_max + (y_range * padding_factor)
 
-        # Performance-optimized binding using low-level dictionary updates
         if grid_ref is not None:
             try:
-                axis_ref = grid_ref[r - 1][c - 1][0]
-                y_axis_key = axis_ref.yaxis.id if hasattr(axis_ref.yaxis, 'id') else axis_ref.yaxis
-                fig.layout[y_axis_key].update(range=[y_lower, y_upper])
+                subplot_refs = grid_ref[r - 1][c - 1]
+                if subplot_refs:
+                    ref = subplot_refs[0]
+
+                    if hasattr(ref, 'layout_keys') and len(ref.layout_keys) >= 2:
+                        y_axis_key = ref.layout_keys[1]  # Index 1 is always the y-axis
+                    else:
+                        axis_id = ref.id.replace('x', '')
+                        y_axis_key = f"yaxis{axis_id.replace('y', '')}" if axis_id != 'y' else 'yaxis'
+
+                    fig.layout[y_axis_key].update(range=[y_lower, y_upper])
+                else:
+                    raise KeyError("Empty subplot reference list.")
+
             except (IndexError, AttributeError, KeyError) as e:
-                logging.debug(f"Grid reference extraction failed, falling back to slow update. Error: {e}")
+                logging.debug(f"Grid reference extraction failed, falling back to update. Error: {e}")
                 fig.update_yaxes(range=[y_lower, y_upper], row=r, col=c)
         else:
-            # Standalone API fallback if structure varies
             fig.update_yaxes(range=[y_lower, y_upper], row=r, col=c)

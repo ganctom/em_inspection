@@ -112,7 +112,7 @@ def layout():
                     html.Div([
                         # 1. Initialize Project Button
                         dbc.Button(**UI.BTN_INIT),
-                    ], className="d-grid gap-2 mt-3")  # mt-3 separates buttons from the details card
+                    ], className="d-grid gap-2 mt-3")
 
                 ], className="p-4 bg-light border rounded h-100")
             ], width=5),

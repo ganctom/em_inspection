@@ -22,8 +22,8 @@ import yaml
 import parameter_config
 import parse_sbem_dataset as parse
 
-import inspection_refactored
 from Section_refactored import CoarseStitchConfig
+from coarse_offset_processor import SectionIndex
 from experiment_configs import ExperimentRegistry, ExpConfig
 from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
                               MaskingConfig, WarpConfig)
@@ -34,8 +34,7 @@ from schema import InspectionSchema as IS
 from inspection_utils_refactor import get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
-    Inspection, Section, _prepare_sections, Vector, utils,
-    store_cxyz_to_offset_files, cached_read_image, init_specific_section_dirs,
+    Inspection, Section, _prepare_sections, Vector, utils, cached_read_image, init_specific_section_dirs,
 )
 from Section_refactored import TileFlow, SectionInfrastructureError
 from dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
@@ -151,7 +150,7 @@ class DataService:
     ) -> None:
 
         if path_out is None:
-            path_out = self.get_stitch_config_path()
+            path_out = self.get_stitch_config_path
 
         parameter_config.save_to_disk(stitch_config, path_out)
 
@@ -261,7 +260,7 @@ class DataService:
             "invalid_maps_count": len(invalid_maps)
         }
 
-
+    @property
     def get_stitch_config_path(self):
         if self.exp_config is None:
             raise (ValueError, "Failed to load tile_stitching_config.yaml. Experiment is not initialized.")
@@ -281,29 +280,30 @@ class DataService:
 
 
     def load_experiment(self, config: ExpConfig) -> None:
-        """
-        Loads inspector, coarse offsets tensor & UI data using specified stitch_config file
-        """
+        """Loads inspector configuration profiles and loads offsets database."""
         self.initialize_experiment_from_config(config)
 
-        # LOAD CONFIGS
-        self.load_stitching_config(self.get_stitch_config_path())
+        # === Load Configuration Profiles ===
+        self.load_stitching_config(self.get_stitch_config_path)
         self.reg_config = self.stitch_config.registration_config
         self.mesh_config = self.stitch_config.mesh_integration_config
         self.warp_config = self.stitch_config.warp_config
         self.mask_config = self.stitch_config.mask_config
 
-        # LOAD COARSE OFFSETS TENSOR
-        try:
-            self.processor.load_all_offsets_and_tile_id_maps_from_npz()
-            self.tile_ids = self.processor.get_largest_tile_id_map()
-        except FileNotFoundError as _:
-            msg = f"DataService: Loaded {config.name}. Coarse offsets not loaded."
-            logging.info(msg)
+        # === Database Lifecycle Handshake ===
+        if not self.processor.db_path.exists():
+            logging.info(f"DataService: Target database file for {config.name} not found. Spawning ingestion worker...")
+            thread = threading.Thread(
+                target=self.run_offsets_backup_thread,
+                daemon=True
+            )
+            thread.start()
+        else:
+            logging.info(f"DataService: Existing database identified for {config.name}. Synchronizing engines...")
+            self.initialize_database_context()
 
         self.clear_cache()
-        msg = f"DataService: Loaded {config.name} successfully."
-        logging.info(msg)
+        logging.info(f"DataService: Loaded {config.name} configuration context successfully.")
 
 
     def initialize_experiment(
@@ -344,47 +344,134 @@ class DataService:
         self.backup_status["message"] = f"Task {task_index + 1}/{total_tasks}: {current}/{total} sections..."
 
 
-    def run_offsets_backup_thread(self):
+    def initialize_database_context(self, overwrite: bool = False):
+        """
+        Orchestrates DuckDB lifecycle. Resolves existing database loads,
+        otherwise populates real coarse offsets or initializes a structural NaN placeholder.
+        """
+        db_path = self.processor.db_path
+
+        if db_path.exists() and overwrite:
+            logging.info(f"Overwrite flag active. Purging database container at: {db_path}")
+            try:
+                db_path.unlink()
+            except OSError as e:
+                logging.error(f"Failed to unlink database file {db_path}: {e}")
+                raise
+
+        if not db_path.exists():
+            logging.info(f"Database target {db_path} not found. Attempting real record injection...")
+
+            # 1. Direct execution: Attempt to back up real coarse offsets first
+            offsets_discovered = self.backup_coarse_offsets_to_duckdb()
+
+            # 2. Fallback execution: If no files existed on disk, compile structural NaN framework
+            if not offsets_discovered:
+                logging.warning("No coarse offset matrix files discovered. Generating structural NaN placeholder...")
+                self.initialize_empty_coarse_offsets_db()
+        else:
+            logging.info(f"Existing DuckDB container discovered at {db_path}. Skipping compilation.")
+
+        # === Uniform Post-Initialization / Loading Pipeline ===
+        logging.info("Syncing processor state engines with database index layout...")
+        self.processor.fetch_section_sequence_from_db()
+        self.tile_ids = self.processor.get_largest_tile_id_map()
+
+
+    def initialize_empty_coarse_offsets_db(self, progress_cb=None):
+        """
+        Creates a structural placeholder database containing all experiment section numbers
+        and tile IDs. Fills all vector displacement fields with float NaN values.
+        """
+        logging.info("Initializing fallback structural database with NaN placeholder matrices...")
+
+        tile_id_maps_dict, _ = utils.aggregate_parallel(
+            section_dirs=self.inspection.section_dirs,
+            target_filename=self.inspection.fn_tile_id_map,
+            processing_func=utils.get_tile_id_map,
+            progress_cb=progress_cb,
+            max_workers=20
+        )
+
+        if not tile_id_maps_dict:
+            raise RuntimeError("Database initialization aborted: Zero valid tile_id_maps resolved.")
+
+        all_rows = []
+        nan_val = float('nan')
+
+        for sec_num_str, tile_map in tile_id_maps_dict.items():
+            sec_num = int(sec_num_str)
+            y_indices, x_indices = np.where(tile_map > 0)
+
+            for y, x in zip(y_indices, x_indices):
+                tid = str(int(tile_map[y, x]))
+                all_rows.append((tid, sec_num, nan_val, nan_val, nan_val, nan_val))
+
+        if not all_rows:
+            raise RuntimeError("No valid tile mappings were generated inside matrix dictionaries.")
+
+        self.processor.repo.bulk_insert_rows_atomic(all_rows, suffix="_duckdb_fallback")
+
+
+    def backup_coarse_offsets_to_duckdb(self, progress_cb=None) -> bool:
+        """
+        Aggregates raw file data from disk and passes it to the processor layer.
+        Returns True if data was found and backed up, False otherwise.
+        """
+        offsets, _ = utils.aggregate_parallel(
+            section_dirs=self.inspection.section_dirs,
+            target_filename=self.inspection.fn_coarse_offsets,
+            processing_func=utils.process_offsets,
+            progress_cb=progress_cb,
+            max_workers=20
+        )
+
+        if not offsets:
+            return False
+
+        tile_id_maps_dict, _ = utils.aggregate_parallel(
+            section_dirs=self.inspection.section_dirs,
+            target_filename=self.inspection.fn_tile_id_map,
+            processing_func=utils.get_tile_id_map,
+            progress_cb=progress_cb,
+            max_workers=20
+        )
+
+        if not tile_id_maps_dict:
+            logging.error("Coarse offsets existed, but corresponding tile_id_maps are missing.")
+            return False
+
+        self.processor.flatten_and_save_coarse_offsets(offsets, tile_id_maps_dict)
+        return True
+
+
+    def run_offsets_backup_thread(self, overwrite: bool = False):
+        """Compiles spatial arrays and saves them directly into DuckDB stores via background worker."""
         self.backup_status = {"active": True, "progress": 1, "message": "Initializing...", "error": None}
         try:
             if not self.inspection:
-                raise ValueError("No inspection object. Please load an experiment first.")
+                raise ValueError("No inspection object loaded in execution context.")
 
-            # Ensure directories are initialized
-            if not self.inspection.section_dirs:
-                fs, ls = self.inspection.first_sec, self.inspection.last_sec
-                inspection_refactored.init_specific_section_dirs(
-                    self.inspection, list(range(fs, ls + 1)))
+            fs, ls = self.inspection.first_sec, self.inspection.last_sec
+            init_specific_section_dirs(self.inspection, list(range(fs, ls + 1)))
 
             if not self.inspection.section_dirs:
-                raise ValueError("No section directories found.")
+                raise ValueError("No valid section directories resolved on storage.")
 
-            # --- TASK 1: OFFSETS ---
-            self.inspection.backup_coarse_offsets(
-                progress_cb=lambda c, t: self._update_offsets_backup_stats(c, t, 0)
-            )
+            self.backup_status["message"] = "Task 1/1: Processing DuckDB lifecycle transaction..."
 
-            # --- TASK 2: TILE-ID MAPS ---
-            self.inspection.backup_tile_id_maps(
-                progress_cb=lambda c, t: self._update_offsets_backup_stats(c, t, 1)
-            )
+            # Execute unified controller
+            self.initialize_database_context(overwrite=overwrite)
 
             self.backup_status["progress"] = 100
-            self.backup_status["message"] = "Full Backup Complete: Offsets & Tile Maps saved."
+            self.backup_status["message"] = "Backup complete: Relational tables indexed and loaded."
             time.sleep(1.0)
 
         except Exception as e:
-            logging.error(f"Backup thread failed: {e}")
+            logging.error(f"Database ingestion thread failed: {e}")
             self.backup_status["error"] = str(e)
         finally:
             self.backup_status["active"] = False
-
-
-    def backup_coarse_offsets_app(self):
-        if self.inspection:
-            self.inspection.backup_coarse_offsets()
-        else:
-            raise ValueError("No experiment instance available to backup.")
 
 
     def get_trace(self, tid: str):
@@ -397,6 +484,7 @@ class DataService:
     def _get_overlap_context(
             self, tid_a: str, z: int, overlap_type: str
     ) -> Optional[OverlapContext]:
+
         z_str = str(z)
         tid_a_int = int(tid_a)
         ov_type = overlap_type.upper()
@@ -413,6 +501,7 @@ class DataService:
 
         # 3. Handle Vector Logic
         raw_vec = self.processor.get_shift_vec(z, axis, y, x)
+        logging.debug(f'get_overlap_context: raw_vec: {raw_vec}')
 
         # Check for INF or NaN to ensure plotting safety
         if not np.isfinite(raw_vec).all():
@@ -721,37 +810,42 @@ class DataService:
 
 
     def _resolve_overlap_context(
-            self, z_str: str, tid_a: int, ov_type: str
+            self, z_str: Any, tid_a: int, ov_type: str
     ) -> Optional[Tuple[int, int, int, int]]:
-        """Determines neighbor IDs and grid coordinates."""
-        lookup = self.processor.get_section_lookup(z_str)
-        if tid_a not in lookup:
-            logging.error(f"Tile {tid_a} missing in section {z_str} lookup.")
+
+        normalized_z = str(int(z_str)) if z_str is not None else ""
+        lookup: SectionIndex = self.processor.get_section_lookup(normalized_z)
+        if lookup is None or not hasattr(lookup, 'tile_to_coords'):
             return None
 
-        y, x = lookup[tid_a]
-        tid_map = self.processor.tile_id_maps_obj[z_str]
-
-        try:
-            if ov_type == 'H':
-                return y, x, int(tid_map[y, x + 1]), 0
-            return y, x, int(tid_map[y + 1, x]), 1
-        except IndexError:
-            logging.warning(f"Boundary hit: Tile {tid_a} has no {ov_type} neighbor.")
+        if tid_a not in lookup.tile_to_coords:
+            logging.debug(f'tile_id {tid_a} not found in the lookup coords: {lookup.tile_to_coords}')
             return None
+
+        y, x = lookup.tile_to_coords[tid_a]
+        target_y = y + 1 if ov_type == 'V' else y
+        target_x = x + 1 if ov_type == 'H' else x
+        axis_idx = 1 if ov_type == 'V' else 0
+
+        # Reverse lookup using the lean slotted SectionIndex cache
+        for potential_tid, coords in lookup.tile_to_coords.items():
+            if coords == (target_y, target_x):
+                return y, x, potential_tid, axis_idx
+
+        logging.warning(f"Boundary hit: Tile {tid_a} has no {ov_type} neighbor.")
+        return None
 
 
     def _get_initialized_section(self, z: int) -> Optional[Section]:
-        """Manages Section lifecycle and data injection."""
-
+        """Manages section lifecycle structures using DuckDB mapping coordinates."""
         sec_num_list = _prepare_sections(self.inspection, start=z, end=z)
         if sec_num_list is None:
-            logging.warning(f'Section number {z} not in experiment section range!')
+            logging.warning(f'Section number {z} falls outside experiment ranges.')
             return None
 
         sec_path = self.inspection.section_dicts.get(z)
         if not sec_path:
-            logging.warning(f"Section {z} path not found in configuration.")
+            logging.warning(f"Section {z} path missing from active parameters.")
             return None
 
         with self._lock:
@@ -762,14 +856,18 @@ class DataService:
                     logging.warning(e)
                     return None
 
-                # Data Injection from Processor Cache
-                z_str = str(z)
-                if z_str in self.processor.tile_id_maps_obj:
-                    section.tile_id_map = self.processor.tile_id_maps_obj[z_str]
-                else:
-                    section.read_tile_id_map()
+                # Generate the layout map dynamically using your lean section lookup cache
+                lookup = self.processor.get_section_lookup(str(z))
 
+                # Reconstruct a basic coordinate map array for the Section object if required
+                # by filling a grid shape with background (-1) and injecting cached IDs
+                grid = np.full(self.exp_config.grid_shape, -1, dtype=np.int32)
+                for tid, (y, x) in lookup.tile_to_coords.items():
+                    grid[y, x] = tid
+
+                section.tile_id_map = grid
                 self._section_cache[sec_path] = section
+
             return self._section_cache[sec_path]
 
 
@@ -797,7 +895,7 @@ class DataService:
             return "Context Error"
 
         section: Section = ctx.section
-        section.tile_dicts = utils.get_tile_dicts(section.path)  # Optimize
+        section.tile_dicts = utils.get_tile_dicts(section.path)  # TODO: Optimize
 
         if overlap_type.upper().startswith('H'):
             aligned_nudge = (initial_nudge[1], -initial_nudge[0])
@@ -831,7 +929,6 @@ class DataService:
                 except TypeError:
                     current_shift = (np.nan, np.nan)
                     continue
-
             if np.isnan(current_shift).any():
                 return "Refinement failed to converge."
 
@@ -843,16 +940,22 @@ class DataService:
                 "start_used": start_offset,
                 "refined": current_shift
             }
-
         except Exception as e:
             logging.error(f"Calculation failed: {e}")
             return str(e)
 
+    def store_offsets_to_cx_cy_json_files(self) -> None:
+        """Persists memory adjustments back down into individual slice JSON files."""
+        if not self.processor.modified_offset_entries:
+            return
 
-    def store_offsets_to_yamls(self):
-        """Stores updated coarse shift vectors into respective sections cx_cy.json files"""
-        store_cxyz_to_offset_files(self.inspection, self.processor.cxyz_obj)
-        return
+        modified_sections = sorted(list(
+            {int(sec_num) for (sec_num, _) in self.processor.modified_offset_entries.keys()}
+        ))
+
+        sec_paths_dict = {sec_num: self.get_sec_path(sec_num) for sec_num in modified_sections}
+        self.processor.store_cxyz_to_offset_files(sec_paths_dict, modified_sections)
+        return None
 
 
     @staticmethod
@@ -878,7 +981,6 @@ class DataService:
 
     def find_inf_offsets_for_tile(self, tile_id: str):
         """Pass-through to the processor logic."""
-        # Assuming 'self.inspection' is where your CoarseOffsetProcessor lives
         return self.processor.find_inf_offsets_for_tile(tile_id)
 
 
@@ -891,11 +993,11 @@ class DataService:
             return
 
         with self._lock:
-            # Avoid overlapping thread execution
             if self._worker and self._worker.is_alive():
                 return
 
             targets = selection_data[:DC.CACHED_BASKET_ITEMS]
+            logging.debug(f'targets: {targets}')
             self._worker = threading.Thread(
                 target=self._preload_loop,
                 args=(targets,),
@@ -907,15 +1009,23 @@ class DataService:
     def _preload_loop(self, items):
         """Background task for cluster I/O."""
         for item in items:
+            logging.debug(f'_preload_loop item: {item}')
             try:
-                ctx = self._get_overlap_context(item['tid'], item['z'], item['overlap'])
-                if not ctx:
+                # Defensive formatting checks prior to worker extraction
+                if not item or 'tid' not in item or 'z' not in item or 'overlap' not in item:
                     continue
 
-                # Ensure section dictionary is populated
+                ctx = self._get_overlap_context(item['tid'], item['z'], item['overlap'])
+
+                if not ctx or ctx.section is None:
+                    continue
+
                 sec = ctx.section
-                if sec.tile_dicts is None:
+                if getattr(sec, 'tile_dicts', None) is None:
                     sec.tile_dicts = utils.get_tile_dicts(sec.path)
+
+                if not sec.tile_dicts:
+                    continue
 
                 # Trigger reads into LRU cache
                 for tid in (ctx.tid_a, ctx.tid_b):
@@ -924,7 +1034,7 @@ class DataService:
                         cached_read_image(str(path))
 
             except Exception as e:
-                logging.debug(f"Preload skipped {item.get('tid')}: {e}")
+                logging.debug(f"Preload worker skipped tile {item.get('tid', 'unknown')}: {e}")
 
 
     def clear_cache(self):
@@ -937,30 +1047,26 @@ class DataService:
 
 
     def get_slider_metadata(self):
-        # Check if processor exists yet
-        if self.processor is None:
+        """Returns range bounds for UI navigation sliders using the database sequence."""
+
+        z_values = getattr(self.processor, 'section_sequence', [])
+
+        # FALLBACK: If database isn't built yet, populate boundaries from raw experiment configurations
+        if not z_values and self.exp_config is not None:
+            z_values = list(range(self.exp_config.first_sec, self.exp_config.last_sec + 1))
+
+        if not z_values:
             return {"min": 0, "max": 100, "marks": {0: "0", 100: "100"}, "initial_value": 0}
 
-        tile_maps = getattr(self.processor, 'tile_id_maps_obj', {})
-        z_values = [int(z) for z in tile_maps.keys()] if tile_maps else []
-
-        z_min = min(z_values) if z_values else 0
-        z_max = max(z_values) if z_values else 100
-
+        z_min, z_max = min(z_values), max(z_values)
         step_size = max(1, (z_max - z_min) // 5)
-        slider_marks = {
-            int(v): str(int((z_max + z_min) - v))
-            for v in range(z_min, z_max + 1, step_size)
-        }
+
+        slider_marks = {int(v): str(int((z_max + z_min) - v)) for v in range(z_min, z_max + 1, step_size)}
         slider_marks[z_max] = str(z_min)
         slider_marks[z_min] = str(z_max)
 
-        return {
-            "min": z_min,
-            "max": z_max,
-            "marks": slider_marks,
-            "initial_value": z_max
-        }
+        return {"min": z_min, "max": z_max, "marks": slider_marks, "initial_value": z_max}
+
 
     @staticmethod
     @functools.lru_cache(maxsize=32)
@@ -1151,9 +1257,8 @@ class DataService:
         failed_list.append(sec_num)
         self._log_status(f"❌ {sec_num}: {error_msg}", level)
 
-
+    @staticmethod
     def compute_auto_zoom_ranges(
-            self,
             shifts: npt.NDArray[np.float64],
             sec_nums: list[int]
     ) -> Tuple[list[int], list[int]]:
@@ -1172,16 +1277,19 @@ class DataService:
 
         range_h = get_range_for_indices([0, 1])
         range_v = get_range_for_indices([2, 3])
+
         return range_h, range_v
 
 
-    def get_inf_y_ceiling(self, data_row: npt.NDArray[np.float64]) -> float:
+    @staticmethod
+    def get_inf_y_ceiling(data_row: npt.NDArray[np.float64]) -> float:
         """
         Extracts the maximum finite position within a given vector trace component
         to serve as the canvas height ceiling for infinite tracking markers.
         """
         finite_data = data_row[np.isfinite(data_row)]
         return float(np.max(finite_data)) if finite_data.size > 0 else 0.0
+
 
 # Initialize single instances
 service = DataService()

@@ -1,10 +1,11 @@
 import gc
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 import logging
 import threading
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
-from typing import List
+from typing import List, Final
 
 from sofima.mesh import IntegrationConfig
 
@@ -12,6 +13,9 @@ from Section_refactored import CoarseStitchConfig, Section
 from constants import Task, UI
 from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img, get_tile_dicts
 from parameter_config import StitchingConfig, RegistrationConfig
+
+# Compile-time constants
+RESOURCE_INIT: Final[str] = "RESOURCE_INIT"
 
 
 class TaskHandler(ABC):
@@ -108,6 +112,12 @@ class DownscaleHandler(TaskHandler):
             section.load_image()
 
 
+# Custom exception to handle controlled worker failures
+class RuntimePipelineError(Exception):
+    """Raised when a section worker pipeline task fails downstream."""
+    pass
+
+
 class PipelineOrchestrator:
     def __init__(self, dat_service):
         self.ppln_service = dat_service
@@ -118,9 +128,6 @@ class PipelineOrchestrator:
             selected_tasks: list[Task],
             config: StitchingConfig,
     ):
-        """
-        Sequential execution - Section loading happens inside the wrapper.
-        """
         self.ppln_service.stitch_status.update({
             "active": True,
             "progress": 0,
@@ -129,11 +136,24 @@ class PipelineOrchestrator:
         })
         self.ppln_service.abort_requested = False
 
-        # Determine ordered tasks based on master pipeline logic
         ordered_tasks = [t for t in Task.get_master_order() if t in selected_tasks]
         total_work = len(section_numbers) * len(ordered_tasks)
         current_work = 0
-        sec_num = section_numbers[0]
+
+        # Track loop/error states safely across all execution blocks
+        pipeline_failed = False
+        last_error_msg = ""
+        sec_num = None
+
+        def handle_task_success(sec_path: str, task_name: str):
+            nonlocal current_work
+            current_work += 1
+            s_id = Path(sec_path).name
+            self.ppln_service.stitch_status["pending_messages"].append(
+                UI.log_row(f"✅ [{s_id}] {task_name} complete", type="info")
+            )
+            progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
+            self.ppln_service.stitch_status["progress"] = progress_pct
 
         try:
             for sec_num in section_numbers:
@@ -145,32 +165,98 @@ class PipelineOrchestrator:
                 if not section_path:
                     continue
 
-                self.ppln_service.stitch_status["message"] = f"s{sec_num}: Processing all tasks..."
+                self.ppln_service.stitch_status["message"] = f"s{sec_num}: Processing tasks..."
 
-                section_worker_wrapper(
+                _, success, message = section_worker_wrapper(
                     section_path=section_path,
                     task_keys=ordered_tasks,
-                    config=config
+                    config=config,
+                    on_task_complete=handle_task_success
                 )
 
-                current_work += len(ordered_tasks)
-                progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
-                self.ppln_service.stitch_status["progress"] = progress_pct
+                if not success:
+                    self.ppln_service.stitch_status["pending_messages"].append(
+                        UI.log_row(f"❌ [{Path(section_path).name}] {message}", type="error")
+                    )
+                    pipeline_failed = True
+                    last_error_msg = message
+                    break
 
-            # Final Success State
-            self.ppln_service.stitch_status.update({
-                "progress": 100,
-                "message": "Pipeline Finished Successfully."
-            })
-            self.ppln_service.stitch_status["pending_messages"].append(
-                UI.log_row("🏁 ALL STITCHING TASKS COMPLETE", type="success")
-            )
+            if pipeline_failed:
+                self.ppln_service.stitch_status.update({
+                    "error": last_error_msg,
+                    "message": f"Pipeline Failed at s{sec_num}"
+                })
+                self.ppln_service.stitch_status["pending_messages"].append(
+                    UI.log_row(f"PIPELINE HALTED AT SECTION {sec_num}", type="error")
+                )
+            else:
+                self.ppln_service.stitch_status.update({
+                    "progress": 100,
+                    "message": "Pipeline Finished Successfully."
+                })
+                self.ppln_service.stitch_status["pending_messages"].append(
+                    UI.log_row("🏁 ALL STITCHING TASKS COMPLETE", type="success")
+                )
 
         except Exception as e:
-            self._handle_failure(e, sec_num)
+            self._handle_failure(e, sec_num if sec_num is not None else "UNKNOWN")
 
         finally:
             self.ppln_service.stitch_status["active"] = False
+
+
+    def run_parallel_pipeline(
+            self,
+            section_numbers: list[int],
+            selected_tasks: list[Task],
+            stitch_config: StitchingConfig,
+    ):
+        """
+        Executes sections in parallel. Fixes the unfilled ParamSpec warning.
+        """
+        self.ppln_service.stitch_status["active"] = True
+        self.ppln_service.stitch_status["progress"] = 0
+
+        ordered_tasks = [t for t in Task.get_master_order() if t in selected_tasks]
+        num_workers = min(len(section_numbers), 20)
+
+        with ProcessPoolExecutor(max_workers=num_workers) as executor:
+            future_to_sec = {
+                executor.submit(
+                    section_worker_wrapper,
+                    self.ppln_service.get_sec_path(n),
+                    ordered_tasks,
+                    stitch_config,
+                    None  # Fills the on_task_complete positional/keyword slot
+                ): n for n in section_numbers
+            }
+
+            for i, future in enumerate(as_completed(future_to_sec)):
+                sec_num = future_to_sec[future]
+                try:
+                    res = future.result()
+                    if res is None:
+                        success, message = False, "Worker returned None"
+                    else:
+                        _, success, message = res
+
+                    if success:
+                        self.ppln_service.stitch_status["pending_messages"].append(
+                            UI.log_row(f"✅ Section {sec_num} finished", type="success")
+                        )
+                    else:
+                        self.ppln_service.stitch_status["pending_messages"].append(
+                            UI.log_row(f"❌ Section {sec_num} failed: {message}", type="error")
+                        )
+                except Exception as e:
+                    self.ppln_service.stitch_status["pending_messages"].append(
+                        UI.log_row(f"💥 Section {sec_num} crashed: {e}", type="error")
+                    )
+
+                self.ppln_service.stitch_status["progress"] = int(((i + 1) / len(section_numbers)) * 100)
+
+        self.ppln_service.stitch_status["active"] = False
 
 
     def _handle_abort(self):
@@ -179,14 +265,20 @@ class PipelineOrchestrator:
             UI.log_row("🛑 Pipeline Aborted", type="warning")
         )
 
+
     def _handle_failure(self, e, sec_num):
-        logging.error(f"Pipeline Failure at Section {sec_num}: {e}")
+        if isinstance(e, RuntimePipelineError):
+            error_details = str(e)
+        else:
+            error_details = f"Unexpected runtime crash: {str(e)}"
+
+        logging.error(f"Pipeline Failure at Section {sec_num}: {error_details}")
         self.ppln_service.stitch_status.update({
-            "error": str(e),
+            "error": error_details,
             "message": f"Pipeline Failed at s{sec_num}"
         })
         self.ppln_service.stitch_status["pending_messages"].append(
-            UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} - {e}", type="error")
+            UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} - {error_details}", type="error")
         )
 
 
@@ -249,58 +341,6 @@ class PipelineOrchestrator:
         return thread
 
 
-    def run_parallel_pipeline(
-            self,
-            section_numbers: List[int],
-            selected_tasks,
-            stitch_config: StitchingConfig,
-    ):
-        self.ppln_service.stitch_status["active"] = True
-        self.ppln_service.stitch_status["progress"] = 0
-
-        # Ensure tasks are ordered correctly before passing to workers
-        ordered_tasks = [t for t in Task.get_master_order() if t in selected_tasks]
-
-        # Limit workers to avoid OOM
-        num_workers = min(len(section_numbers), 20)
-
-        with ProcessPoolExecutor(max_workers=num_workers) as executor:
-            future_to_sec = {
-                executor.submit(
-                    section_worker_wrapper,
-                    self.ppln_service.get_sec_path(n),
-                    ordered_tasks,
-                    stitch_config,
-                ): n for n in section_numbers
-            }
-
-            for i, future in enumerate(as_completed(future_to_sec)):
-                sec_num = future_to_sec[future]
-                try:
-                    res = future.result()
-                    if res is None:
-                        success, message = False, "Worker returned None"
-                    else:
-                        _, success, message = res
-
-                    if success:
-                        self.ppln_service.stitch_status["pending_messages"].append(
-                            UI.log_row(f"✅ Section {sec_num} finished", type="success")
-                        )
-                    else:
-                        self.ppln_service.stitch_status["pending_messages"].append(
-                            UI.log_row(f"❌ Section {sec_num} failed: {message}", type="error")
-                        )
-                except Exception as e:
-                    self.ppln_service.stitch_status["pending_messages"].append(
-                        UI.log_row(f"💥 Section {sec_num} crashed: {e}", type="error")
-                    )
-
-                self.ppln_service.stitch_status["progress"] = int(((i + 1) / len(section_numbers)) * 100)
-
-        self.ppln_service.stitch_status["active"] = False
-
-
 def load_section(path: str | Path) -> Section:
     section = Section(Path(path))
     section.tile_dicts = get_tile_dicts(section.path)
@@ -312,41 +352,40 @@ def section_worker_wrapper(
         section_path: str,
         task_keys: list[Task],
         config: StitchingConfig,
+        on_task_complete: Callable[[str, str], None] | None = None,
 ) -> tuple[str, bool, str]:
 
     section = None
-    state = "RESOURCE_INIT"
+    task_name: str = RESOURCE_INIT
 
     try:
-        logging.debug(f"[{section_path}] Initializing section")
+        logging.debug("[%s] Initializing section resources", section_path)
         section = load_section(section_path)
 
         if section is None:
             return section_path, False, "CRITICAL: load_section returned None"
 
         for task in task_keys:
-            state = task.name if hasattr(task, 'name') else str(task)
-            logging.info(f"[{section_path}] Starting {state}")
-
+            task_name = getattr(task, "name", str(task))
+            logging.info("[%s] Starting task: %s", section_path, task_name)
             TaskRegistry.execute(task, section, config)
+            logging.debug("[%s] Completed task: %s", section_path, task_name)
 
-            logging.debug(f"[{section_path}] Completed {state}")
+            if on_task_complete:
+                on_task_complete(section_path, task_name)
 
         return section_path, True, "Success"
 
     except Exception as e:
-        # Capture full traceback in logs, but return concise string to parent
-        error_msg = f"Failure @ {state}: {str(e)}"
-        logging.exception(f"[{section_path}] {error_msg}")
+        error_msg = f"Failure @ Task [{task_name}]: {e}"
+        logging.exception("[%s] %s", section_path, error_msg)
         return section_path, False, error_msg
 
     finally:
         if section is not None:
             try:
                 section.close_resource()
-                del section
             except Exception as cleanup_err:
-                logging.error(f"[{section_path}] Cleanup leaked: {cleanup_err}")
-
+                msg = "[%s] Resource cleanup leaked: %s"
+                logging.critical(msg, section_path, cleanup_err, exc_info=True)
         gc.collect()
-        return section_path, True, "Pipeline finished"

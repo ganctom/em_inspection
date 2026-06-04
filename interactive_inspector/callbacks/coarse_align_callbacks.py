@@ -83,7 +83,8 @@ def handle_config_load(n_clicks, file_path):
 
         cfg = pcfg.StitchingConfig(**data)
 
-        reg, mesh, warp, mask = (
+        acq, reg, mesh, warp, mask = (
+            cfg.acquisition_config,
             cfg.registration_config,
             cfg.mesh_integration_config,
             cfg.warp_config,
@@ -107,8 +108,6 @@ def handle_config_load(n_clicks, file_path):
             reg.min_overlap,
             to_csv(reg.min_range),
             reg.filter_size,
-            # fmt_bool(reg.clahe),
-            # bool(reg.clahe),
             reg.clahe,
             reg.clip_limit,
             reg.kernel_size,
@@ -263,6 +262,7 @@ def handle_config_save(n_clicks, path, *args):
             output_dir=out_dir,
             start_section=start,
             end_section=end,
+            acquisition_config=service.acq_config,
             registration_config=reg_cfg,
             mesh_integration_config=mesh_cfg,
             warp_config=warp_cfg,
@@ -380,18 +380,15 @@ def handle_coarse_offset_backup(n_clicks):
         return [UI.log_row("Error: No active experiment.", type="error")], True, no_update
 
     thread = threading.Thread(
-        target=service.run_offsets_backup_thread,
-        daemon=True)
+        target=service.run_offsets_backup_thread(overwrite=True),
+        daemon=True
+    )
     thread.start()
 
     init_log = [
         UI.log_row("💾 Initializing Coarse Offset Backup...", type="info"),
-        UI.log_row("Exporting all cx_cy.json files to .npz container.")
+        UI.log_row("Exporting all cx_cy.json files to a .db container.")
     ]
-
-    # Re-load coarse offsets database and largest tile-id map
-    service.processor.load_all_offsets_and_tile_id_maps_from_npz()
-    service.tile_ids = service.processor.get_largest_tile_id_map()
 
     return init_log, False, {"display": "block", "height": "10px"}
 
@@ -408,7 +405,6 @@ def handle_coarse_offset_backup(n_clicks):
 )
 def unified_progress_poller(n, current_log):
     # 1. Determine which process is currently active in the ppln_service
-    # We check Backup first, then Coarse Alignment
     if service.backup_status["active"] or service.backup_status["progress"] > 0:
         status = service.backup_status
         is_backup = True

@@ -6,6 +6,7 @@ from dash import Input, Output, State, callback, html, ctx, no_update, ALL
 from data_service import service
 from experiment_configs import get_experiment_configurations, ExpConfig, ExperimentRegistryError
 from constants import UI
+from os.path import isdir
 from pydantic import ValidationError
 from assets.dash_helpers import parse_form, create_alert
 from layouts.components_layouts import to_details_card, create_progress_view
@@ -30,17 +31,46 @@ def handle_load_experiment(n_clicks, sel_name):
         cfg = configs.get(sel_name)
 
         if not cfg:
-            return create_alert("Invalid Selection", "The chosen experiment could not be found."), no_update
+            title = "Invalid Selection"
+            msg = "The chosen experiment could not be found."
+            return create_alert(title, msg), no_update
 
+        # Load into core data service memory state
         service.load_experiment(cfg)
 
+        # 1. Primary Success Alert
+        feedback_components = [
+            create_alert("Success!", f"Experiment '{cfg.name}' loaded successfully.", color="success")
+        ]
+
+        # 2. Defensive I/O check against the infrastructure volume
+        acq_dir_path = service.exp_config.acq_dir
+
+        # Verify both path existence and that it's actually a directory
+        if not acq_dir_path or not isdir(acq_dir_path):
+            warning_alert = dbc.Alert([
+                html.H5("⚠️ Infrastructure Warning", className="alert-heading font-weight-bold"),
+                html.P([
+                    f"The processing directory does not exist or is inaccessible: ",
+                    html.Code(str(acq_dir_path), className="bg-light p-1 rounded small text-break")
+                ], className="mb-0"),
+                html.Hr(),
+                html.P(
+                    "Downstream actions will fail until this volume is mounted or created.",
+                    className="small mb-0 text-muted"
+                )
+            ], color="warning", className="mt-2 shadow-sm")
+
+            feedback_components.append(warning_alert)
+
+        # Wrap multiple components in a standard HTML container div
         return (
-            create_alert("Success!", f"Experiment '{cfg.name}' loaded successfully.", color="success"),
+            html.Div(feedback_components),
             service.stitch_config.model_dump()
         )
 
     except Exception as e:
-        logging.error(f"Error loading experiment: {e}", exc_info=True)
+        logging.error("Error loading experiment: %s", e, exc_info=True)
         return create_alert("Initialization Error", color="danger", exception=e), no_update
 
 
