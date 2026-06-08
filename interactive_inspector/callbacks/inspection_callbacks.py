@@ -1,19 +1,14 @@
 import logging
-import numpy as np
-import numpy.typing as npt
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 from dash import html, Input, Output, State, ctx, no_update, ALL
 
 from app import app
 from data_service import service
-from interactive_inspector.layouts.components_layouts import selection_card, create_grid_navigator
-from interactive_inspector.constants import UIConstants, OverlapType, KeyboardShortcuts, UI
-from parameter_config import RegistrationConfig
+from interactive_inspector.constants import UIConstants
+from workflows.inspection_workflow import AlignmentWorkflowManager
 
 
 # =============================================================================
-# 1. PLOT TILE OVERLAP
+# PLOT TILE OVERLAP
 # =============================================================================
 @app.callback(
     [Output('integrated-overlap-graph', 'figure'),
@@ -24,36 +19,15 @@ from parameter_config import RegistrationConfig
     prevent_initial_call=True
 )
 def replot_overlap_view(active_idx, nudge_trigger, selection_data):
-
-    if not selection_data or active_idx is None or active_idx >= len(selection_data):
-        return no_update, "Waiting for selection..."
-
-    nudge_dict = nudge_trigger if isinstance(nudge_trigger, dict) else {}
-    nudge = (nudge_dict.get('dx', 0), nudge_dict.get('dy', 0))
-
-    item = selection_data[active_idx]
-    tile_id = item.get('tid')
-    sec_num = item.get('z')
-    ov_type = item.get('overlap')
-
-    try:
-        # Generate the figure context using the backend service
-        fig = service.get_overlap_figure(tile_id, sec_num, ov_type, nudge)
-
-        # Enforce responsive layout behavior on the returned graph
-        if fig is not None:
-            fig.update_layout(autosize=True, uirevision=True)
-
-        status = f"Inspecting overlap: t{tile_id} | s{sec_num} | Nudge: {nudge}"
-        return fig, status
-
-    except Exception as e:
-        error_msg = f"Rendering Error: {str(e)}"
-        return no_update, html.Div(error_msg, className="text-danger")
+    return AlignmentWorkflowManager.handle_tile_overlap_replot(
+        active_idx=active_idx,
+        nudge_trigger=nudge_trigger,
+        selection_data=selection_data
+    )
 
 
 # =============================================================================
-# 2. OVERLAP FLOW FIELD VISUALIZATION
+# OVERLAP FLOW FIELD VISUALIZATION
 # =============================================================================
 @app.callback(
     [Output('integrated-overlap-graph', 'figure', allow_duplicate=True),
@@ -66,41 +40,18 @@ def replot_overlap_view(active_idx, nudge_trigger, selection_data):
     prevent_initial_call=True
 )
 def render_flow_visualizations(_flow_clicks, _clean_clicks, selection_data, settings_data):
-
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    trig = ctx.triggered_id
-    trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
-    if not trig_val or trig_val == 0:
-        return no_update, no_update, no_update
-
-    trig_type = trig.get('type') if isinstance(trig, dict) else trig
-    clicked_idx = trig.get('index') if isinstance(trig, dict) else None
-
-    if clicked_idx is None or clicked_idx >= len(selection_data):
-        return no_update, "Index out of bounds.", no_update
-
-    item = selection_data[clicked_idx]
-    item_tid, item_z = item['tid'], item['z']
-
-    ui_config = None
-    do_clean_flow = False
-    if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
-        ui_config = RegistrationConfig(**settings_data)
-        do_clean_flow = True
-
-    fig = service.get_flow_fig(item_z, item_tid, ui_config, do_clean_flow)
-    if fig is None:
-        error_msg = service.message_queue.pop() if service.message_queue else "Unknown Error"
-        return no_update, "Flow Error", html.Div(error_msg, className="text-danger")
-
-    fig.update_layout(autosize=True, uirevision=True)
-    return fig, f"Inspecting flow: t{item_tid} | z{item_z}", no_update
-
+    return AlignmentWorkflowManager.handle_flow_visualization(
+        triggered_id=ctx.triggered_id,
+        triggered_events=ctx.triggered,
+        selection_data=selection_data,
+        settings_data=settings_data
+    )
 
 # =============================================================================
-# 2. RANGE MASKS VISUALIZATION CALLBACK
+# RANGE MASKS VISUALIZATION CALLBACK
 # =============================================================================
 @app.callback(
     [Output('integrated-overlap-graph', 'figure', allow_duplicate=True),
@@ -111,37 +62,18 @@ def render_flow_visualizations(_flow_clicks, _clean_clicks, selection_data, sett
     prevent_initial_call=True
 )
 def render_range_mask_visualizations(_range_clicks, selection_data):
-
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    trig = ctx.triggered_id
-    trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
-    if not trig_val or trig_val == 0:
-        return no_update, no_update, no_update
-
-    clicked_idx = trig.get('index') if isinstance(trig, dict) else None
-
-    if clicked_idx is None or clicked_idx >= len(selection_data):
-        return no_update, "Index out of bounds.", no_update
-
-    item = selection_data[clicked_idx]
-    item_tid, item_z = item['tid'], item['z']
-
-    fig = service.get_range_masks_fig(
-        section_num=int(item_z),
-        tile_id_num=int(item_tid),
+    return AlignmentWorkflowManager.handle_range_masks_visualization(
+        triggered_id=ctx.triggered_id,
+        triggered_events=ctx.triggered,
+        selection_data=selection_data
     )
-    if fig is None:
-        error_msg = service.message_queue.pop() if service.message_queue else "Unknown Error"
-        return no_update, "Dynamic Range Masks Visualization Error", html.Div(error_msg, className="text-danger")
-
-    fig.update_layout(autosize=True, uirevision=True)
-    return fig, f"Inspecting range masks: t{item_tid} | z{item_z}", no_update
 
 
 # =============================================================================
-# 3. RAW TILE IMAGE VISUALIZATION CALLBACK
+# RAW TILE IMAGE VISUALIZATION CALLBACK
 # =============================================================================
 @app.callback(
     [Output('integrated-overlap-graph', 'figure', allow_duplicate=True),
@@ -152,47 +84,18 @@ def render_range_mask_visualizations(_range_clicks, selection_data):
     prevent_initial_call=True
 )
 def render_raw_tile_image_visualizations(_tile_clicks, selection_data):
-    # 1. Structural Lifecycle Guards
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    trig = ctx.triggered[0] if ctx.triggered else None
-    trig_val = trig['value'] if trig else None
-    if not trig_val or trig_val == 0:
-        return no_update, no_update, no_update
-
-    # 2. Extract Index Pointer
-    clicked_idx = ctx.triggered_id.get('index') if isinstance(ctx.triggered_id, dict) else None
-    if clicked_idx is None or clicked_idx >= len(selection_data):
-        return no_update, "Index out of bounds.", no_update
-
-    # 3. Data Key Selection
-    item = selection_data[clicked_idx]
-    item_tid, item_z = item.get('tid'), item.get('z')
-
-    try:
-        # 4. Invoke Isolated Backend Call
-        fig = service.get_tile_image_fig(
-            section_num=int(item_z),
-            tile_id_num=int(item_tid),
-        )
-
-        if fig is None:
-            error_msg = service.message_queue.pop() if getattr(service, 'message_queue', None) else "Unknown Error"
-            return no_update, "Tile Image Load Error", html.Div(error_msg, className="text-danger")
-
-        # 5. Enforce Standard Responsive Layout Parameters
-        fig.update_layout(autosize=True, uirevision=True)
-        status = f"Inspecting raw tile image: t{item_tid} | z{item_z}"
-        return fig, status, no_update
-
-    except Exception as e:
-        # Prevent runtime stack exceptions from altering DOM component properties
-        return no_update, f"Visualizer Crash: {str(e)}", html.Div(str(e), className="text-danger")
+    return AlignmentWorkflowManager.handle_raw_tile_visualization(
+        triggered_id=ctx.triggered_id,
+        triggered_events=ctx.triggered,
+        selection_data=selection_data
+    )
 
 
 # =============================================================================
-# 3. BATCH COARSE OFFSETS CALCULATION CALLBACK
+# BATCH COARSE OFFSETS CALCULATION CALLBACK
 # =============================================================================
 @app.callback(
     [Output('registration-log', 'children', allow_duplicate=True),
@@ -208,39 +111,24 @@ def render_raw_tile_image_visualizations(_tile_clicks, selection_data):
      State(UIConstants.ID_INP_SEARCH_RAD, "value")],
     prevent_initial_call=True
 )
-def execute_batch_processing(n_clicks, selection_data, active_idx, nudge_trigger, guess_mode, m_dx, m_dy, search_rad):
-
-    if not n_clicks or not selection_data or active_idx is None or active_idx >= len(selection_data):
-        return "Waiting for selection...", no_update, no_update
-
-    safe_nudge = nudge_trigger if isinstance(nudge_trigger, dict) else {'dx': 0, 'dy': 0}
-    nudge = (safe_nudge.get('dx', 0), safe_nudge.get('dy', 0))
-    manual_ref = (m_dx or 0, m_dy or 0)
-    is_manual = (guess_mode == "manual")
-
-    results = []
-    for s_item in selection_data:
-        res = service.compute_coarse_shift(
-            s_item['tid'], s_item['z'], s_item['overlap'],
-            initial_nudge=nudge if not is_manual else (0, 0),
-            override_vector=manual_ref if is_manual else None,
-            max_ext=search_rad,
-        )
-        results.append((s_item, res))
-
-    log_entries = [
-        html.Div(f"T{s[0]['tid']}: {s[1]['refined']}" if isinstance(s[1], dict) else f"T{s[0]['tid']}: FAILED",
-                 className="text-success small" if isinstance(s[1], dict) else "text-danger small")
-        for s in results
-    ]
-
-    item = selection_data[active_idx]
-    fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
-    return html.Div(log_entries), fig, "Batch Complete"
+def execute_batch_processing(
+        n_clicks, selection_data, active_idx, nudge_trigger,
+        guess_mode, m_dx, m_dy, search_rad
+):
+    return AlignmentWorkflowManager.handle_batch_calculation(
+        n_clicks=n_clicks,
+        selection_data=selection_data,
+        active_idx=active_idx,
+        nudge_trigger=nudge_trigger,
+        guess_mode=guess_mode,
+        m_dx=m_dx,
+        m_dy=m_dy,
+        search_rad=search_rad
+    )
 
 
 # =============================================================================
-# 4. SINGLE CALCULATION CALLBACK
+# SINGLE CALCULATION CALLBACK
 # =============================================================================
 @app.callback(
     [Output('registration-log', 'children', allow_duplicate=True),
@@ -257,99 +145,39 @@ def execute_single_calculation(single_clicks, selection_data, active_idx, nudge_
     if not ctx.triggered_id or not selection_data or active_idx is None or active_idx >= len(selection_data):
         return "Waiting for selection...", no_update, no_update
 
-    trig = ctx.triggered_id
-    trig_val = ctx.triggered[0]['value'] if ctx.triggered else None
-    if not trig_val or trig_val == 0:
-        return no_update, no_update, no_update
-
-    btn_idx = trig.get('index')
-    calc_item = selection_data[btn_idx]
-    item_tid, item_z, item_ov = calc_item['tid'], calc_item['z'], calc_item['overlap']
-
-    safe_nudge = nudge_trigger if isinstance(nudge_trigger, dict) else {'dx': 0, 'dy': 0}
-    nudge = (safe_nudge.get('dx', 0), safe_nudge.get('dy', 0))
-    current_nudge = nudge if btn_idx == active_idx else (0, 0)
-
-    result = service.compute_coarse_shift(
-        item_tid, item_z, item_ov, initial_nudge=current_nudge, max_ext=search_rad
+    return AlignmentWorkflowManager.handle_single_calculation(
+        triggered_id=ctx.triggered_id,
+        triggered_events=ctx.triggered,
+        selection_data=selection_data,
+        active_idx=active_idx,
+        nudge_trigger=nudge_trigger,
+        search_rad=search_rad
     )
-
-    if isinstance(result, str):
-        return html.Div(result, className="text-danger"), no_update, "Refinement Failed"
-
-    item = selection_data[active_idx]
-
-    fig = service.get_overlap_figure(item['tid'], item['z'], item['overlap'])
-
-    return html.P(f"T{calc_item['tid']} Refined: {result['refined']}",
-                  className="text-success small"), fig, "Refinement Applied"
 
 
 @app.callback(
     Output('selection-store', 'data'),
     [Input('quad-plot', 'selectedData'),
      Input('clear-selection', 'n_clicks'),
-     Input('import-inf-btn', 'n_clicks'),
+     Input(UIConstants.ID_BTN_IMPORT_INF, 'n_clicks'),
      Input({'type': 'remove-btn', 'index': ALL}, 'n_clicks')],
     [State('selection-store', 'data'),
      State('master-grid', 'clickData')],
     prevent_initial_call=True
 )
 def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store, grid_click):
-    if service.processor is None or not ctx.triggered:
+    if not ctx.triggered:
         return no_update
 
-    trigger = ctx.triggered_id
-
-    # 1. Handle Clear All
-    if trigger == 'clear-selection':
-        service.clear_cache()
-        return []
-
-    # 2. Handle Individual Removal
-    if isinstance(trigger, dict) and trigger.get('type') == 'remove-btn':
-        return [item for i, item in enumerate(current_store) if i != trigger.get('index')]
-
-    # Ensure we know which tile we are working with
-    active_tid = grid_click['points'][0]['text'] if grid_click else None
-    if not active_tid:
-        return current_store
-
-    new_store = list(current_store)
-
-    # 3. Import of INF offsets
-    if trigger == 'import-inf-btn':
-        inf_failures = service.processor.find_inf_offsets_for_tile(str(active_tid))
-        for err in inf_failures:
-            entry = {
-                'tid': active_tid,
-                'z': err['z'],
-                'overlap': err['overlap'],
-                'type': 'INF_ERROR'
-            }
-            if entry not in new_store:
-                new_store.append(entry)
-        return new_store
-
-    # 4. Handle Graphical Selection (Lasso/Box/Click)
-    if trigger == 'quad-plot' and sel_data and 'points' in sel_data:
-        for p in sel_data['points']:
-            if 'customdata' not in p or not p['customdata']:
-                continue
-
-            overlap, entry_type = p['customdata']
-            entry = {
-                'tid': active_tid,
-                'z': p['x'],
-                'overlap': overlap,
-                'type': entry_type
-            }
-
-            if entry not in new_store:
-                new_store.append(entry)
-        return new_store
-
-    return no_update
+    return AlignmentWorkflowManager.handle_selection_state_mutation(
+        triggered_id=ctx.triggered_id,
+        sel_data=sel_data,
+        clear_n=clear_n,
+        import_n=import_n,
+        remove_n=remove_n,
+        current_store=current_store,
+        grid_click=grid_click
+    )
 
 
 @app.callback(
@@ -357,11 +185,7 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
     Input('selection-store', 'data')
 )
 def sync_selection_ui(data):
-    """Updates the 'Basket' UI whenever the store changes."""
-    if not data:
-        return html.Div("No vectors selected.", className="text-muted small italic p-2")
-    return [selection_card(i, item) for i, item in enumerate(data)]
-
+    return AlignmentWorkflowManager.sync_basket_ui_container(data)
 
 
 @app.callback(
@@ -371,126 +195,14 @@ def sync_selection_ui(data):
      Input('theme-switch', 'value')]
 )
 def render_main_visuals(grid_click, selection_store, dark_mode):
-
-    if service.processor is None or not ctx.triggered:
+    if not ctx.triggered:
         return no_update
 
-    # 1. Early exit if zero interaction data present
-    raw_tid = grid_click['points'][0]['text'] if grid_click else None
-    if not raw_tid:
-        return go.Figure()
-
-    # 2. Delegated Data Ingestion via Service layer
-    trace_data = service.get_trace(str(raw_tid))
-    if not trace_data or trace_data.shift_vectors is None:
-        return go.Figure()
-
-    sec_nums = trace_data.section_numbers
-    shifts = trace_data.shift_vectors
-
-    # 3. Request calculated layout metadata from service layer
-    range_h, range_v = service.compute_auto_zoom_ranges(shifts, sec_nums)
-    inf_failures = service.processor.find_inf_offsets_for_tile(str(raw_tid))
-
-    # 4. Generate Core Canvas Structure
-    fig = make_subplots(
-        rows=2, cols=2,
-        shared_xaxes=True,
-        vertical_spacing=0.08,
-        subplot_titles=UI.QUAD_PLOT_TITLES
+    return AlignmentWorkflowManager.handle_main_quad_visualization(
+        grid_click=grid_click,
+        selection_store=selection_store,
+        dark_mode=dark_mode
     )
-
-    configs = [
-        (1, 1, 0, "H-dx"), (2, 1, 1, "H-dy"),
-        (1, 2, 2, "V-dx"), (2, 2, 3, "V-dy")
-    ]
-
-    # --- SECTION A: Main Continuous Data Plotting ---
-    for r, c, idx, label in configs:
-        ov_type = OverlapType.HORIZONTAL if c == 1 else OverlapType.VERTICAL
-        c_data = [[ov_type, "MANUAL"]] * len(sec_nums)
-
-        fig.add_trace(go.Scatter(
-            x=sec_nums, y=shifts[idx, :],
-            mode='lines+markers', name=label,
-            customdata=c_data,
-            marker=dict(size=4, color=UIConstants.TRACE_COLOR),
-            line=dict(width=1), hoverinfo='x+y'
-        ), row=r, col=c)
-
-    # --- SECTION B: Integrated INF Solver Failures ---
-    for ov_type, col in [(OverlapType.HORIZONTAL, 1), (OverlapType.VERTICAL, 2)]:
-        axis_errors = [e for e in inf_failures if e['overlap'] == ov_type]
-        if not axis_errors:
-            continue
-
-        inf_x = [e['z'] for e in axis_errors]
-        inf_c_data = [[ov_type, "INF_ERROR"]] * len(inf_x)
-
-        for row_pos, comp_idx in ([(1, 0), (2, 1)] if col == 1 else [(1, 2), (2, 3)]):
-            y_ceil = service.get_inf_y_ceiling(shifts[comp_idx, :])
-
-            fig.add_trace(go.Scatter(
-                x=inf_x, y=[y_ceil] * len(inf_x),
-                mode='markers',
-                marker=dict(color='red', symbol='x', size=10),
-                name=f"INF-{ov_type}",
-                customdata=inf_c_data,
-                hovertext=f"Solver Fail: {ov_type}"
-            ), row=row_pos, col=col)
-
-    # --- SECTION C: User Selection Highlights ---
-    current_tid_selections = [s for s in selection_store if str(s['tid']) == str(raw_tid)]
-    for pt in current_tid_selections:
-        try:
-            z_val = int(pt['z'])
-            if z_val not in sec_nums:
-                continue
-
-            data_idx = list(sec_nums).index(z_val)
-            pt_ov = pt.get('overlap')
-            is_h = (pt_ov == OverlapType.HORIZONTAL or str(pt_ov).endswith('HORIZONTAL'))
-
-            col = 1 if is_h else 2
-            idx_x, idx_y = (0, 1) if is_h else (2, 3)
-
-            is_inf = pt.get('type') == 'INF_ERROR'
-            h_color = "#FF851B" if is_inf else UIConstants.HIGHLIGHT_COLOR
-            marker_style = dict(size=14, color=h_color, symbol='circle-open', line=dict(width=2))
-
-            for row_num, shift_idx in [(1, idx_x), (2, idx_y)]:
-                y_val = shifts[shift_idx, data_idx]
-                if np.isinf(y_val):
-                    y_val = service.get_inf_y_ceiling(shifts[shift_idx, :])
-
-                fig.add_trace(go.Scatter(
-                    x=[z_val], y=[y_val],
-                    mode='markers', marker=marker_style, hoverinfo='skip'
-                ), row=row_num, col=col)
-        except (ValueError, IndexError, KeyError):
-            continue
-
-    # --- SECTION D: Execution of Isolated Dynamic Axis Scaling Utility ---
-    apply_padded_y_ranges(fig, shifts, UI.QUAD_PLOT_PAD_FCT)
-
-    # --- SECTION E: Global Final Layout Attributes ---
-    is_dark = len(dark_mode) > 0
-    fig.update_layout(
-        template="plotly_dark" if is_dark else "plotly_white",
-        paper_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-        plot_bgcolor='rgba(0,0,0,0)' if is_dark else 'white',
-        hovermode='x unified',
-        xaxis=dict(range=range_h, autorange=False),
-        xaxis3=dict(range=range_h, autorange=False),
-        xaxis2=dict(range=range_v, autorange=False),
-        xaxis4=dict(range=range_v, autorange=False),
-        margin=dict(l=40, r=10, t=50, b=30),
-        showlegend=False,
-        uirevision=str(raw_tid)
-    )
-
-    return fig
-
 
 @app.callback(
     Output('registration-log', 'children', allow_duplicate=True),
@@ -553,54 +265,13 @@ def handle_export_sections(n_clicks):
     prevent_initial_call=False
 )
 def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
-    trigger = ctx.triggered_id
-
-    # 0. Handle the "Nothing happened yet" case
-    if not trigger:
-        return slider_val, no_update, no_update
-
-    # 1. Setup bounds from the processor's clean sequence array
-    z_keys = getattr(service.processor, 'section_sequence', [])
-    if not z_keys:
-        logging.warning("Grid Navigator: No section sequence found in processor state.")
-        return no_update, no_update, no_update
-
-    z_min, z_max = min(z_keys), max(z_keys)
-
-    # 2. Resolve Current Z logic
-    if trigger == 'manual-z-input' and manual_z is not None:
-        current_z = max(z_min, min(z_max, int(manual_z)))
-        slider_val = (z_max + z_min) - current_z
-    elif trigger == 'section-filter-slider' and slider_val is not None:
-        current_z = (z_max + z_min) - slider_val
-    else:
-        current_z = (z_max + z_min) - slider_val if slider_val is not None else z_min
-
-    # 3. Generate the Grid Figure
-    active_tid: str = click_data['points'][0]['text'] if click_data else None
-
-    # Query your updated memory-lean inf-registry tracking errors
-    registry = getattr(service.processor, '_inf_registry', {})
-    dirty_tids = set(registry.keys())
-
-    # Get available tile IDs for this slice via the lookup dictionary
-    try:
-        z_str = str(int(current_z))
-        lookup = service.processor.get_section_lookup(z_str)
-        available_tids = set(lookup.tile_to_coords.keys())
-    except Exception as e:
-        logging.warning(f"Failed to extract active coordinates map for slice {current_z}: {e}")
-        available_tids = set()
-
-    fig = create_grid_navigator(
-        tile_ids=service.tile_ids,
-        active_tid=active_tid,
-        dirty_tids=dirty_tids,
-        available_tids=available_tids
+    return AlignmentWorkflowManager.handle_grid_navigation(
+        triggered_id=ctx.triggered_id,
+        slider_val=slider_val,
+        click_data=click_data,
+        manual_z=manual_z,
+        basket_data=basket_data
     )
-
-    # 4. Sync the UI
-    return slider_val, fig, int(current_z)
 
 
 @app.callback(
@@ -611,34 +282,11 @@ def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     prevent_initial_call=True
 )
 def handle_keyboard_nav(n_events, event, current_slider_val):
-    if service.processor is None:  # Add this check!
-        return no_update
-
-    if not event or current_slider_val is None:
-        return no_update
-
-    z_keys = getattr(service.processor, 'section_sequence', [])
-    if not z_keys:
-        logging.debug("Keyboard Navigation: Action aborted due to uninitialized section keys sequence.")
-        return no_update
-
-    # Normalize key to lowercase to handle 'W' and 'w'
-    key = event.get("key", "").lower()
-
-    # Logic:
-    # 'w' -> Move slider handle UP (Increase slice number)
-    # 's' -> Move slider handle DOWN (Decrease slice number)
-    if key == KeyboardShortcuts.KEY_GRID_NAV_SLIDER_PLUS:
-        new_val = min(current_slider_val + 1, max(z_keys))
-        return new_val
-    elif key == KeyboardShortcuts.KEY_GRID_NAV_SLIDER_MINUS:
-        new_val = max(current_slider_val - 1, min(z_keys))
-        return new_val
-
-    return no_update
+    return AlignmentWorkflowManager.handle_keyboard_slice_navigation(
+        n_events=n_events, event=event, current_slider_val=current_slider_val
+    )
 
 
-# --- CALLBACK 1: MANAGE THE NUDGE STATE ---
 @app.callback(
     [Output('manual-nudge-store', 'data'),
      Output('active-item-index', 'data')],
@@ -647,80 +295,23 @@ def handle_keyboard_nav(n_events, event, current_slider_val):
      Input({'type': 'plot-ov-btn', 'index': ALL}, 'n_clicks'),
      Input('keyboard-listener', 'n_events')],
     [State('keyboard-listener', 'event'),
-     State({'type': 'nudge-stitch_config', 'index': ALL}, 'value'), # Changed to ALL
+     State({'type': 'nudge-stitch_config', 'index': ALL}, 'value'),
      State('manual-nudge-store', 'data'),
      State('active-item-index', 'data'),
      State('selection-store', 'data')],
     prevent_initial_call=True
 )
 def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
-                   key_event, step_list, current_nudge, current_active, selection_store):
-    # 1. Boilerplate Safety
-    if service.processor is None or not ctx.triggered:
-        return no_update, no_update
-
-    trig = ctx.triggered_id
-
-    # 2. Handle Pattern Matched Buttons (Nudge & Nav)
-    # Extract the step value safely from the list
-    step = step_list[0] if step_list else 10
-
-    if isinstance(trig, dict):
-        btn_type = trig.get('type')
-        btn_index = trig.get('index')
-
-        # --- A. NUDGE LOGIC ---
-        if btn_type == 'nudge-btn':
-            if current_active is None: return no_update, no_update
-            dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
-            s = step
-
-            if btn_index == 'left':  dx -= s
-            if btn_index == 'right': dx += s
-            if btn_index == 'up':    dy -= s
-            if btn_index == 'down':  dy += s
-            return {'dx': dx, 'dy': dy}, no_update
-
-        # --- B. NAVIGATION LOGIC ---
-        if btn_type == 'nav-btn':
-            if not selection_store: return {'dx': 0, 'dy': 0}, None
-            list_len = len(selection_store)
-            idx = current_active if current_active is not None else 0
-
-            if btn_index == 'first':
-                idx = 0
-            elif btn_index == 'last':
-                idx = list_len - 1
-            elif btn_index == 'prev':
-                idx = (idx - 1) % list_len
-            elif btn_index == 'next':
-                idx = (idx + 1) % list_len
-            return {'dx': 0, 'dy': 0}, idx
-
-        # --- C. OVERLAP PLOT BUTTONS (Already pattern matched) ---
-        if btn_type == 'plot-ov-btn':
-            return {'dx': 0, 'dy': 0}, btn_index
-
-    # 3. Handle Keyboard Nudging
-    if trig == 'keyboard-listener' and key_event and current_active is not None:
-        dx, dy = current_nudge.get('dx', 0), current_nudge.get('dy', 0)
-        s = step if step else 10
-        key = key_event.get('key')
-
-        if key == "ArrowLeft":
-            dx -= s
-        elif key == "ArrowRight":
-            dx += s
-        elif key == "ArrowUp":
-            dy -= s
-        elif key == "ArrowDown":
-            dy += s
-        else:
-            return no_update, no_update
-
-        return {'dx': dx, 'dy': dy}, no_update
-
-    return no_update, no_update
+                   key_event, step_list, current_nudge, current_active,
+                   selection_store):
+    return AlignmentWorkflowManager.handle_nudge_and_basket_navigation(
+        triggered_id=ctx.triggered_id,
+        key_event=key_event,
+        step_list=step_list,
+        current_nudge=current_nudge,
+        current_active=current_active,
+        selection_store=selection_store
+    )
 
 
 @app.callback(
@@ -738,21 +329,9 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
     prevent_initial_call=True
 )
 def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data):
-    # If the store is empty, initialize it
-    data = current_data or {}
-
-    # Update the dictionary with the current UI values
-    data.update({
-        "min_peak_ratio": pkr,
-        "min_peak_sharpness": pks,
-        "max_deviation": max_dev,
-        "max_magnitude": max_mag,
-        "min_patch_size": min_ps,
-        "max_gradient": max_grad,
-        "reconcile_flow_max_deviation": rf_grad
-    })
-
-    return data
+    return AlignmentWorkflowManager.sync_ui_parameters_to_store(
+        pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data
+    )
 
 
 @app.callback(
@@ -776,69 +355,7 @@ def handle_background_preload(selection_data):
 )
 def handle_clear_basket(n):
     if n:
-        service.clear_cache() # Clear RAM
+        service.clear_cache()
         return [], None
     return no_update, no_update
 
-
-
-def apply_padded_y_ranges(
-        fig: go.Figure,
-        shifts: npt.NDArray[np.float64],
-        padding_factor: float
-) -> None:
-    """
-    Calculates the finite bounding boxes for each row in the shifts matrix
-    and applies a fractional headroom/footroom padding to the figure's y-axes.
-
-    Mutates the layout of the provided fig object in place.
-    """
-    # Map layout (row, col) coordinates to raw 'shifts' matrix indices
-    subplot_matrix_mapping: dict[tuple[int, int], int] = {
-        (1, 1): 0,  # H-dx
-        (2, 1): 1,  # H-dy
-        (1, 2): 2,  # V-dx
-        (2, 2): 3,  # V-dy
-    }
-
-    grid_ref = getattr(fig, "_grid_ref", None)
-
-    for (r, c), matrix_idx in subplot_matrix_mapping.items():
-        data_row = shifts[matrix_idx, :]
-        finite_data = data_row[np.isfinite(data_row)]
-
-        if finite_data.size == 0:
-            continue
-
-        y_min = finite_data.min()
-        y_max = finite_data.max()
-        y_range = y_max - y_min
-
-        # Prevent arithmetic collapse on invariant/flatline inputs
-        if y_range == 0.0:
-            y_range = 1.0
-
-        y_lower = y_min - (y_range * padding_factor)
-        y_upper = y_max + (y_range * padding_factor)
-
-        if grid_ref is not None:
-            try:
-                subplot_refs = grid_ref[r - 1][c - 1]
-                if subplot_refs:
-                    ref = subplot_refs[0]
-
-                    if hasattr(ref, 'layout_keys') and len(ref.layout_keys) >= 2:
-                        y_axis_key = ref.layout_keys[1]  # Index 1 is always the y-axis
-                    else:
-                        axis_id = ref.id.replace('x', '')
-                        y_axis_key = f"yaxis{axis_id.replace('y', '')}" if axis_id != 'y' else 'yaxis'
-
-                    fig.layout[y_axis_key].update(range=[y_lower, y_upper])
-                else:
-                    raise KeyError("Empty subplot reference list.")
-
-            except (IndexError, AttributeError, KeyError) as e:
-                logging.debug(f"Grid reference extraction failed, falling back to update. Error: {e}")
-                fig.update_yaxes(range=[y_lower, y_upper], row=r, col=c)
-        else:
-            fig.update_yaxes(range=[y_lower, y_upper], row=r, col=c)

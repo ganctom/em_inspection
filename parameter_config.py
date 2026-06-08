@@ -220,6 +220,30 @@ class RegistrationConfig(BaseModel):
         }
         return StitchParams(**self.model_dump(include=stitch_fields))
 
+    @classmethod
+    def from_form_data(cls, raw_data: dict[str, any]):
+        """Parses and serializes raw interface strings into schema fields."""
+        cleaned = {}
+        for k, v in raw_data.items():
+            if v == "" or v is None:
+                cleaned[k] = None
+                continue
+
+            # Unpack comma-delimited UI parameters to integer arrays
+            if k in ("overlaps_x", "overlaps_y", "min_range"):
+                if isinstance(v, str):
+                    cleaned[k] = [int(i.strip()) for i in v.split(",") if i.strip()]
+                else:
+                    cleaned[k] = v
+            # Flatten Checklist value wrappers down to native booleans
+            elif k == "clahe":
+                cleaned[k] = bool(v) if not isinstance(v, list) else (True in v)
+            else:
+                cleaned[k] = v
+
+        return cls(**cleaned)
+
+
 class MeshIntegrationConfig(BaseModel):
     dt: float = 0.001
     gamma: float = 0.05
@@ -274,8 +298,6 @@ class StitchingConfig(BaseModel):
     warp_config: WarpConfigStitching = WarpConfigStitching()
     mask_config: MaskingConfig = MaskingConfig()
     pipeline_config: PipelineConfig = PipelineConfig()
-
-
 
     @field_validator('output_dir', mode='before')
     @classmethod

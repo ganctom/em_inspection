@@ -206,6 +206,9 @@ class UIConstants:
     LBL_BTN_REMOVE_OV = "×"
     ID_BTN_TILE_IMAGE = "plot-tile-btn"
     LBL_BTN_TILE_IMAGE = "Tile Image"
+    ID_BTN_IMPORT_INF = "import-inf-btn"
+    LBL_BTN_IMPORT_INF = "Import INF"
+
 
 
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
@@ -214,6 +217,12 @@ class UIConstants:
 
     TYPE_EXP_FIELD = "exp-field"
     TYPE_DYN_RANGE_FIELD = "dyn-range-field"
+    TYPE_ACQ_CFG_FIELD = "acq-cfg-field"
+    TYPE_MASK_CFG_FIELD = "mask-cfg-field"
+    TYPE_REG_CFG_FIELD = "reg-cfg-field"
+    TYPE_STITCH_CFG_FIELD = "stitch-cfg-field"
+    TYPE_MESH_CFG_FIELD = "mesh-cfg-field"
+    TYPE_WARP_CFG_FIELD = "warp-cfg-field"
 
 
     # --- Messages ---
@@ -492,10 +501,9 @@ class UIConstants:
     @classmethod
     def TAB_ACQUISITION(cls, active_service=None):
         """Generates the Acquisition & Range tab with dynamic initial values."""
-        # Calculate dynamic values from ppln_service
         initial_output_dir = cls.get_proj_dir(active_service)
+        TYPE_TAG = UI.TYPE_ACQ_CFG_FIELD
 
-        # Pull defaults from the ppln_service stitch_config if available
         if active_service and active_service.exp_config:
             start_val = active_service.exp_config.first_sec
             end_val = active_service.exp_config.last_sec
@@ -503,23 +511,25 @@ class UIConstants:
             start_val = None
             end_val = None
 
-        # Define the inner content
         content = [
             cls.label_factory(cls.LBL_OUT_DIR),
-            dbc.Input(id="conf-output-dir", value=initial_output_dir, size="sm"),
+            dbc.Input(id=cls.field_id(name="output_dir", id_type=TYPE_TAG), value=initial_output_dir, size="sm"),
             dbc.Row([
                 dbc.Col([
                     cls.label_factory("Start Section"),
-                    dbc.Input(**cls.numeric_factory("conf-start", value=start_val, is_int=True))
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="start_section", id_type=TYPE_TAG), value=start_val,
+                                              is_int=True))
                 ], width=6),
                 dbc.Col([
                     cls.label_factory("End Section"),
-                    dbc.Input(**cls.numeric_factory("conf-end", value=end_val, is_int=True))
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="end_section", id_type=TYPE_TAG), value=end_val,
+                                              is_int=True))
                 ], width=6),
             ], className="mt-2"),
         ]
 
-        # Wrap in your existing tab_factory
         return cls.tab_factory(
             label=cls.LBL_ACQ_RNG,
             tab_id="tab-acq",
@@ -548,18 +558,22 @@ class UIConstants:
     @classmethod
     def TAB_MASKING(cls, params: MaskingConfig):
         """Unified Mesh Integration and Warping configuration tab."""
+        TYPE_TAG = UI.TYPE_MASK_CFG_FIELD
 
         content = [
             html.H6("Margin masks parameters", className="small fw-bold mt-2 mb-3 text-primary"),
 
-            # Row 1: Core Physics Params
             dbc.Row([
-              dbc.Col([cls.label_factory("Margin"),
-                       dbc.Input(**cls.numeric_factory(cls.ID_CONF_MASK_MARGIN, value=params.mask_margin))],
-                      width=3),
-              dbc.Col([cls.label_factory("Rim size"),
-                       dbc.Input(**cls.numeric_factory(cls.ID_CONF_MASK_RIM_SIZE, value=params.rim_size))],
-                      width=3),
+                dbc.Col([
+                    cls.label_factory("Margin"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="mask_margin", id_type=TYPE_TAG),
+                                                    value=params.mask_margin))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("Rim size"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="rim_size", id_type=TYPE_TAG),
+                                                    value=params.rim_size))
+                ], width=3),
             ], className="mb-3"),
         ]
 
@@ -569,20 +583,24 @@ class UIConstants:
             children=content
         )
 
+
     @classmethod
     def TAB_REGISTRATION(cls, params: CoarseParams):
-        """Generates the Registration (SOFIMA) tab using defaults from RegistrationConfig."""
+        """Generates the Registration (SOFIMA) tab using pattern-matching IDs."""
 
         # Helper to convert list defaults to CSV strings for placeholders
         def to_csv(val_list):
             return ", ".join(map(str, val_list))
+
+        # Explicitly using your type tag constant for layout fields
+        TYPE_TAG = UI.TYPE_REG_CFG_FIELD
 
         content = [
             dbc.Row([
                 dbc.Col([
                     cls.label_factory(cls.LBL_CONF_OVERLAPS_X),
                     dbc.Input(**cls.text_factory(
-                        id=cls.ID_CONF_OVERLAPS_X,
+                        id=cls.field_id(name="overlaps_x", id_type=TYPE_TAG),
                         placeholder="e.g. 200, 300, 400",
                         value=to_csv(params.overlaps_x)
                     ))
@@ -591,7 +609,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_CONF_OVERLAPS_Y),
                     dbc.Input(**cls.text_factory(
-                        cls.ID_CONF_OVERLAPS_Y,
+                        id=cls.field_id(name="overlaps_y", id_type=TYPE_TAG),
                         placeholder="e.g. 200, 300, 400",
                         value=to_csv(params.overlaps_y)
                     ))
@@ -600,7 +618,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_CONF_MIN_RANGE),
                     dbc.Input(**cls.text_factory(
-                        id=cls.ID_CONF_MIN_RANGE,
+                        id=cls.field_id(name="min_range", id_type=TYPE_TAG),
                         value=to_csv(params.min_range),
                         placeholder="10, 100, 0",
                     ))
@@ -609,7 +627,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_CONF_FILTER_SIZE),
                     dbc.Input(**cls.numeric_factory(
-                        id=cls.ID_CONF_FILTER_SIZE,
+                        id=cls.field_id(name="filter_size", id_type=TYPE_TAG),
                         value=str(params.filter_size),
                         placeholder="10",
                         is_int=True
@@ -619,7 +637,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_CONF_MIN_OVERLAP),
                     dbc.Input(**cls.numeric_factory(
-                        cls.ID_CONF_MIN_OVERLAP,
+                        id=cls.field_id(name="min_overlap", id_type=TYPE_TAG),
                         placeholder="20",
                         value=str(params.min_overlap),
                         is_int=True
@@ -628,7 +646,7 @@ class UIConstants:
 
                 dbc.Col([
                     dbc.Checklist(
-                        id=cls.ID_REG_CLAHE,
+                        id=cls.field_id(name="clahe", id_type=TYPE_TAG),
                         options=[{"label": UI.LBL_REG_CLAHE, "value": True}],
                         value=[True] if params.clahe else [],
                         switch=True,
@@ -639,7 +657,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_REG_CLAHE_CLIP),
                     dbc.Input(**cls.numeric_factory(
-                        cls.ID_REG_CLAHE_CLIP,
+                        id=cls.field_id(name="clip_limit", id_type=TYPE_TAG),
                         placeholder="2.0",
                         value=str(params.clip_limit),
                         is_int=True
@@ -649,7 +667,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory(cls.LBL_REG_CLAHE_KERNEL),
                     dbc.Input(**cls.numeric_factory(
-                        cls.ID_REG_CLAHE_KERNEL,
+                        id=cls.field_id(name="kernel_size", id_type=TYPE_TAG),
                         placeholder="128",
                         value=str(params.kernel_size),
                         is_int=True
@@ -672,13 +690,15 @@ class UIConstants:
         def to_csv(val_list):
             return ", ".join(map(str, val_list))
 
+        TYPE_TAG = UI.TYPE_STITCH_CFG_FIELD
+
         content = [
             dbc.Row([
                 # Row 1
                 dbc.Col([
                     cls.label_factory("Patch Size (csv)"),
                     dbc.Input(**cls.text_factory(
-                        id=cls.ID_CONF_PATCH,
+                        id=cls.field_id(name="patch_size", id_type=TYPE_TAG),
                         placeholder="e.g. 120, 120",
                         value=to_csv(params.patch_size)
                     ))
@@ -687,7 +707,7 @@ class UIConstants:
                 dbc.Col([
                     cls.label_factory("Batch Size"),
                     dbc.Input(**cls.numeric_factory(
-                        id=cls.ID_CONF_BATCH,
+                        id=cls.field_id(name="batch_size", id_type=TYPE_TAG),
                         placeholder="512",
                         value=params.batch_size,
                         is_int=True
@@ -695,54 +715,68 @@ class UIConstants:
                 ], width=6),
 
                 # Row 2
-                dbc.Col([cls.label_factory("Min Peak Ratio"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MIN_PKR,
-                             placeholder="",
-                             value=params.min_peak_ratio))
-                         ], width=6),
-                dbc.Col([cls.label_factory("Min Peak Sharpness"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MIN_PKS,
-                             placeholder="",
-                             value=params.min_peak_sharpness))
-                         ],width=6),
+                dbc.Col([
+                    cls.label_factory("Min Peak Ratio"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="min_peak_ratio", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.min_peak_ratio
+                    ))
+                ], width=6),
+                dbc.Col([
+                    cls.label_factory("Min Peak Sharpness"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="min_peak_sharpness", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.min_peak_sharpness
+                    ))
+                ], width=6),
                 # Row 3
-                dbc.Col([cls.label_factory("Max Deviation"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MAX_DEV,
-                             placeholder="",
-                             value=params.max_deviation,
-                             is_int=True))
-                         ], width=6),
-                dbc.Col([cls.label_factory("Max Magnitude"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MAX_MAG,
-                             placeholder="",
-                             value=params.max_magnitude,
-                             is_int=True))
-                         ], width=6),
+                dbc.Col([
+                    cls.label_factory("Max Deviation"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="max_deviation", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.max_deviation,
+                        is_int=True
+                    ))
+                ], width=6),
+                dbc.Col([
+                    cls.label_factory("Max Magnitude"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="max_magnitude", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.max_magnitude,
+                        is_int=True
+                    ))
+                ], width=6),
                 # Row 4
-                dbc.Col([cls.label_factory("Min Patch Size"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MIN_PATCH,
-                             placeholder="",
-                             value=params.min_patch_size,
-                             is_int=True))
-                         ], width=6),
-                dbc.Col([cls.label_factory("Max Gradient"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_MAX_GRAD,
-                             placeholder="",
-                             value=params.max_gradient))
-                         ], width=6),
+                dbc.Col([
+                    cls.label_factory("Min Patch Size"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="min_patch_size", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.min_patch_size,
+                        is_int=True
+                    ))
+                ], width=6),
+                dbc.Col([
+                    cls.label_factory("Max Gradient"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="max_gradient", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.max_gradient
+                    ))
+                ], width=6),
                 # Row 5
-                dbc.Col([cls.label_factory("Rec. Flow Max Dev"),
-                         dbc.Input(**cls.numeric_factory(
-                             id=cls.ID_CONF_RECON_FLOW_MAX_DEV,
-                             placeholder="",
-                             value=params.reconcile_flow_max_deviation))
-                         ],width=12),
+                dbc.Col([
+                    cls.label_factory("Rec. Flow Max Dev"),
+                    dbc.Input(**cls.numeric_factory(
+                        id=cls.field_id(name="reconcile_flow_max_deviation", id_type=TYPE_TAG),
+                        placeholder="",
+                        value=params.reconcile_flow_max_deviation
+                    ))
+                ], width=12),
             ], className="g-2")
         ]
 
@@ -761,60 +795,95 @@ class UIConstants:
         """Unified Mesh Integration and Warping configuration tab."""
         m_p = mesh_params
         w_p = warp_params
+        TYPE_MESH = UI.TYPE_MESH_CFG_FIELD
+        TYPE_WARP = UI.TYPE_WARP_CFG_FIELD
 
         content = [
             html.H6("Mesh Integration (Elastic Solver)", className="small fw-bold mt-2 mb-3 text-primary"),
 
             # Row 1: Core Physics Params
             dbc.Row([
-                dbc.Col([cls.label_factory("dt"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_DT, value=m_p.dt))], width=3),
-                dbc.Col([cls.label_factory("gamma"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_GAMMA, value=m_p.gamma))], width=3),
-                dbc.Col([cls.label_factory("k0"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_K0, value=m_p.k0))], width=3),
-                dbc.Col([cls.label_factory("k"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_K, value=m_p.k))], width=3),
+                dbc.Col([
+                    cls.label_factory("dt"),
+                    dbc.Input(
+                        **cls.numeric_factory(
+                            id=cls.field_id(name="dt", id_type=TYPE_MESH),
+                            value=m_p.dt)
+                    )
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("gamma"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="gamma", id_type=TYPE_MESH), value=m_p.gamma))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("k0"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="k0", id_type=TYPE_MESH), value=m_p.k0))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("k"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="k", id_type=TYPE_MESH), value=m_p.k))
+                ], width=3),
             ], className="mb-3"),
 
             # Row 2: Iteration & Step Control
             dbc.Row([
-                dbc.Col([cls.label_factory("Stride"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_STRIDE, value=m_p.stride, is_int=True))],
-                        width=3),
-                dbc.Col([cls.label_factory("Num Iters"),
-                         dbc.Input(
-                             **cls.numeric_factory(cls.ID_CONF_MESH_NUM_ITERS, value=m_p.num_iters, is_int=True))],
-                        width=3),
-                dbc.Col([cls.label_factory("Max Iters"),
-                         dbc.Input(
-                             **cls.numeric_factory(cls.ID_CONF_MESH_MAX_ITERS, value=m_p.max_iters, is_int=True))],
-                        width=3),
-                dbc.Col([cls.label_factory("Stop v Max"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_STOP_V, value=m_p.stop_v_max))], width=3),
+                dbc.Col([
+                    cls.label_factory("Stride"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="stride", id_type=TYPE_MESH), value=m_p.stride,
+                                                    is_int=True))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("Num Iters"),
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="num_iters", id_type=TYPE_MESH), value=m_p.num_iters,
+                                              is_int=True))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("Max Iters"),
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="max_iters", id_type=TYPE_MESH), value=m_p.max_iters,
+                                              is_int=True))
+                ], width=3),
+                dbc.Col([
+                    cls.label_factory("Stop v Max"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="stop_v_max", id_type=TYPE_MESH),
+                                                    value=m_p.stop_v_max))
+                ], width=3),
             ], className="mb-3"),
 
-            # Row 3: Limits & Caps (The Missing Entries)
+            # Row 3: Limits & Caps
             dbc.Row([
-                dbc.Col([cls.label_factory("DT Max"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_DT_MAX, value=m_p.dt_max))], width=4),
-                dbc.Col([cls.label_factory("Start Cap"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_START_CAP, value=m_p.start_cap))], width=4),
-                dbc.Col([cls.label_factory("Final Cap"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_MESH_FINAL_CAP, value=m_p.final_cap))], width=4),
+                dbc.Col([
+                    cls.label_factory("DT Max"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="dt_max", id_type=TYPE_MESH), value=m_p.dt_max))
+                ], width=4),
+                dbc.Col([
+                    cls.label_factory("Start Cap"),
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="start_cap", id_type=TYPE_MESH), value=m_p.start_cap))
+                ], width=4),
+                dbc.Col([
+                    cls.label_factory("Final Cap"),
+                    dbc.Input(
+                        **cls.numeric_factory(id=cls.field_id(name="final_cap", id_type=TYPE_MESH), value=m_p.final_cap))
+                ], width=4),
             ], className="mb-3"),
 
             # Row 4: Switches
             dbc.Row([
                 dbc.Col([
-                    dbc.Checklist(id=cls.ID_CONF_MESH_ORIG_ORDER,
-                                  options=[{"label": "Prefer Orig Order", "value": True}],
-                                  value=[True] if m_p.prefer_orig_order else [], switch=True, className="small")
+                    dbc.Checklist(
+                        id=cls.field_id(name="prefer_orig_order", id_type=TYPE_MESH),
+                        options=[{"label": "Prefer Orig Order", "value": True}],
+                        value=[True] if m_p.prefer_orig_order else [], switch=True, className="small"
+                    )
                 ], width=4),
                 dbc.Col([
-                    dbc.Checklist(id=cls.ID_CONF_MESH_REMOVE_DRIFT,
-                                  options=[{"label": "Remove Drift", "value": True}],
-                                  value=[True] if m_p.remove_drift else [], switch=True, className="small")
+                    dbc.Checklist(
+                        id=cls.field_id(name="remove_drift", id_type=TYPE_MESH),
+                        options=[{"label": "Remove Drift", "value": True}],
+                        value=[True] if m_p.remove_drift else [], switch=True, className="small"
+                    )
                 ], width=4),
             ], className="mb-3"),
 
@@ -822,25 +891,40 @@ class UIConstants:
             html.Hr(),
             html.H6("Warping (Image Rendering)", className="small fw-bold mt-2 mb-3 text-primary"),
             dbc.Row([
-                dbc.Col([cls.label_factory("Margin"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_MARGIN, value=w_p.margin, is_int=True))],
-                        width=4),
-                dbc.Col([cls.label_factory("Parallelism"), dbc.Input(
-                    **cls.numeric_factory(cls.ID_CONF_WARP_PARALLEL, value=w_p.warp_parallelism, is_int=True))],
-                        width=4),
-                dbc.Col([cls.label_factory("Kernel Size"), dbc.Input(
-                    **cls.numeric_factory(cls.ID_CONF_WARP_KERNEL, value=w_p.kernel_size, is_int=True))], width=4),
+                dbc.Col([
+                    cls.label_factory("Margin"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="margin", id_type=TYPE_WARP), value=w_p.margin,
+                                                    is_int=True))
+                ], width=4),
+                dbc.Col([
+                    cls.label_factory("Parallelism"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="warp_parallelism", id_type=TYPE_WARP),
+                                                    value=w_p.warp_parallelism, is_int=True))
+                ], width=4),
+                dbc.Col([
+                    cls.label_factory("Kernel Size"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="kernel_size", id_type=TYPE_WARP),
+                                                    value=w_p.kernel_size, is_int=True))
+                ], width=4),
             ], className="mb-3"),
 
             dbc.Row([
-                dbc.Col([cls.label_factory("Clip Limit"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_CLIP, value=w_p.clip_limit))], width=4),
-                dbc.Col([cls.label_factory("nbins"),
-                         dbc.Input(**cls.numeric_factory(cls.ID_CONF_WARP_NBINS, value=w_p.nbins, is_int=True))],
-                        width=4),
                 dbc.Col([
-                    dbc.Checklist(id=cls.ID_CONF_WARP_CLAHE, options=[{"label": "Use CLAHE", "value": True}],
-                                  value=[True] if w_p.use_clahe else [], switch=True, className="small")
+                    cls.label_factory("Clip Limit"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="clip_limit", id_type=TYPE_WARP),
+                                                    value=w_p.clip_limit))
+                ], width=4),
+                dbc.Col([
+                    cls.label_factory("nbins"),
+                    dbc.Input(**cls.numeric_factory(id=cls.field_id(name="nbins", id_type=TYPE_WARP), value=w_p.nbins,
+                                                    is_int=True))
+                ], width=4),
+                dbc.Col([
+                    dbc.Checklist(
+                        id=cls.field_id(name="use_clahe", id_type=TYPE_WARP),
+                        options=[{"label": "Use CLAHE", "value": True}],
+                        value=[True] if w_p.use_clahe else [], switch=True, className="small"
+                    )
                 ], width=4),
             ])
         ]

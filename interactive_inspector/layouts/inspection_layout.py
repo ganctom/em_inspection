@@ -1,5 +1,7 @@
 from dash import html, dcc
 import dash_bootstrap_components as dbc
+
+from constants import UIConstants
 from data_service import service
 from .components_layouts import create_grid_navigator
 
@@ -138,9 +140,9 @@ def layout():
                                     dbc.Input(
                                         id="search-radius-input",
                                         type="number",
-                                        value=25,  # Your default value
-                                        min=1,  # Logic guard: radius must be positive
-                                        step=1,  # Integer increments
+                                        value=25,
+                                        min=1,
+                                        step=1,
                                         size="sm"
                                     ),
                                 ]),
@@ -152,8 +154,13 @@ def layout():
                     html.Div([
                         html.Div([
                             html.H6("Log", className="m-0 small text-uppercase text-muted"),
-                            dbc.Button("Import INF", id='import-inf-btn', color="danger", size="sm",
-                                       className="py-0 px-1", style={"fontSize": "10px"}),
+                            dbc.Button(
+                                UIConstants.LBL_BTN_IMPORT_INF,
+                                id=UIConstants.ID_BTN_IMPORT_INF,
+                                color="danger", size="sm",
+                                className="py-0 px-1",
+                                style={"fontSize": "10px"}
+                            ),
                         ], className="d-flex justify-content-between align-items-center mt-3 mb-1"),
                         html.Div(id='registration-log',
                                  className="p-2 border rounded bg-dark text-success font-monospace flex-grow-1",

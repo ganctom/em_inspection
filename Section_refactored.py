@@ -2226,24 +2226,25 @@ class FlowFieldOrchestrator:
         for attempt in range(max_attempts):
             if ps < cfg.min_patch_size:
                 break
-
             try:
                 logging.info(f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}")
-                flow_x: tuple[TileFlow, TileOffset] = self._execute_sofima_call(cfg, stride, axis=0)
-                flow_y: tuple[TileFlow, TileOffset] = self._execute_sofima_call(cfg, stride, axis=1)
+                flow_x = self._execute_sofima_call(cfg, stride, axis=0)
+                flow_y = self._execute_sofima_call(cfg, stride, axis=1)
                 return flow_x, flow_y
-
             except ValueError:
                 logging.warning(
-                    f"Iterative fine flow computation failed at patch size {ps}. Reducing patch size.")
-                ps -= ps_step
+                    f"Iterative fine flow computation failed at patch size {ps}. Reducing patch size."
+                )
 
+                ps -= ps_step
         raise RuntimeError(f"Flow estimation exhausted all attempts for s{self.section.section_num}")
 
-    def _execute_sofima_call(self, cfg: RegistrationConfig, stride: int, axis: int):
+    def _execute_sofima_call(
+            self,
+            cfg: RegistrationConfig,
+            stride: int, axis: int
+    )-> tuple[TileFlow, TileOffset]:
         """Wrapper for the external library call."""
-
-        logging.info(f'tile_map keys: {list(self.section.tile_map.keys())}')
 
         return stitch_elastic.compute_flow_map(
             tile_map=self.section.tile_map,

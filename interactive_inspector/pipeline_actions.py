@@ -281,14 +281,12 @@ class PipelineOrchestrator:
             UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} - {error_details}", type="error")
         )
 
-
     def validate_and_prepare(
             self,
             range_str: str,
             config_path,
-            ui_params_raw: dict | None = None
+            stitch_config: StitchingConfig | None = None
     ) -> tuple[list[int], StitchingConfig]:
-
         """Logic-only: Validates sections and prepares params."""
         if not self.ppln_service.exp_config:
             raise ValueError("No active experiment found.")
@@ -305,12 +303,14 @@ class PipelineOrchestrator:
         if not sec_nums:
             raise ValueError("No valid sections selected.")
 
-        # 2. Param Prep
-        hashable_ui = make_hashable_params(ui_params_raw)
+        # 2. Param Prep: If we already have a pre-hydrated model from the UI, use it directly
+        if stitch_config and isinstance(stitch_config, StitchingConfig):
+            return sec_nums, stitch_config
 
+        # Fallback to legacy path only if no pre-validated schema context is passed
         stitching_config = self.ppln_service.prepare_stitching_params(
             config_path=config_path,
-            ui_params=hashable_ui
+            ui_params=None
         )
         return sec_nums, stitching_config
 

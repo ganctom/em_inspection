@@ -12,7 +12,6 @@ from typing import Optional, Tuple, Any
 
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import numpy as np
 import numpy.typing as npt
 import gc
@@ -30,13 +29,15 @@ from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationCo
 from Tile_refactored import Tile
 from constants import DataConstants as DC
 from constants import UIConstants as UI
+from presenters.flow_presenter import FlowPresenter
+from presenters.overlap_presenter import OverlapPresenter
 from schema import InspectionSchema as IS
 from inspection_utils_refactor import get_missing_stitched_sections
 from pipeline_actions import PipelineOrchestrator
 from inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils, cached_read_image, init_specific_section_dirs,
 )
-from Section_refactored import TileFlow, SectionInfrastructureError
+from Section_refactored import SectionInfrastructureError
 from dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
 
 
@@ -539,6 +540,7 @@ class DataService:
 
         return section
 
+
     def get_flow_fig(
             self,
             section_num: int,
@@ -546,25 +548,20 @@ class DataService:
             reg_config: RegistrationConfig | None = None,
             do_clean_flow: bool = False
     ) -> Optional[go.Figure]:
-        """
-            Retrieves and processes flow data for a specific tile to generate a Plotly figure.
+        """Retrieves scientific flow field data matrices and hands them off to the FlowPresenter.
 
             This method ensures the necessary resources are loaded, determines the spatial
             coordinates for the tile, and optionally performs flow cleaning and reconciliation.
             The colormap range is locked to the raw data values to ensure visual consistency
             between raw and cleaned states.
 
-            Args:
-                section_num: The index of the section to visualize.
-                tile_id: The string identifier for the specific tile.
-                reg_config: Configuration for cleaning; defaults to self.reg_config if None.
-                do_clean_flow: If True, applies cleaning and reconciliation to the flow fields.
+           Args:
+            section_num: The index of the section to visualize.
+            tile_id: The string identifier for the specific tile.
+            reg_config: Configuration for cleaning; defaults to self.reg_config if None.
+            do_clean_flow: If True, applies cleaning and reconciliation to the flow fields.
 
-            Returns:
-                A 2x2 Plotly Figure if data exists, otherwise None.
-            """
-
-        # If reg_config is passed, we use it, otherwise fallback to instance default
+        """
         cfg = reg_config or self.reg_config
 
         try:
@@ -582,33 +579,28 @@ class DataService:
             return None
 
         try:
-            # Grab raw data first to establish the baseline colormap range
             fine_x_raw = section.fflows[0][0]
             fine_y_raw = section.fflows[1][0]
 
-            # Resolving spatial context for tile-key access
             sec_lookup = self.processor.get_section_lookup(str(section_num))
             tile_row_idx, tile_col_idx = sec_lookup[int(tile_id)]
             xy = (tile_col_idx, tile_row_idx)
 
-            # Establish fixed colormap range based on raw data for visual consistency
             z_lims = None
             if xy in fine_x_raw and xy in fine_y_raw:
                 all_vals = np.concatenate([fine_x_raw[xy][:2].flatten(),
                                            fine_y_raw[xy][:2].flatten()])
                 z_lims = (np.nanmin(all_vals), np.nanmax(all_vals))
 
-            # Switch to reconstructed data if cleaning is requested
             fine_x, fine_y = fine_x_raw, fine_y_raw
 
-            # Perform cleaning if requested
             if do_clean_flow:
                 section.clean_and_reconcile_fflows(cfg)
                 fine_x, _ = section.fflows_recon[0]
                 fine_y, _ = section.fflows_recon[1]
 
-            return self.plot_all_flow_components_plotly(
-                fine_x, fine_y, xy=xy, z_range=z_lims
+            return FlowPresenter.render_diagnostic_grid(
+                fine_x=fine_x, fine_y=fine_y, xy=xy, z_range=z_lims, transpose=False
             )
 
         except Exception as e:
@@ -617,90 +609,6 @@ class DataService:
             logging.warning(err_msg)
             return None
 
-
-    @staticmethod
-    def plot_all_flow_components_plotly(
-            fine_x: TileFlow,
-            fine_y: TileFlow,
-            xy: tuple[int, int],
-            transpose: bool = False,
-            z_range: tuple[float, float] | None = None
-    ) -> go.Figure:
-        """
-        Generates a 2x2 Plotly grid of flow components with specific spatial alignments.
-
-        Fine Flow X (Row 1): Transposed by default, then rotated 180 degrees.
-        Fine Flow Y (Row 2): Standard orientation (transposed only if requested).
-        """
-
-        if xy not in fine_x and xy not in fine_y:
-            return go.Figure()
-
-        fig: go.Figure = make_subplots(
-            rows=2, cols=2,
-            subplot_titles=(
-                UI.LBL_FLOW_XH, UI.LBL_FLOW_XV,
-                UI.LBL_FLOW_YH, UI.LBL_FLOW_YV
-            ),
-            horizontal_spacing=0.1,
-            vertical_spacing=0.3
-        )
-
-        def _add_trace(row: int, col: int, data: np.ndarray) -> None:
-            fig.add_trace(
-                go.Heatmap(
-                    z=data,
-                    colorscale='Viridis',
-                    # Explicitly set bounds to prevent colormap shifting
-                    zmin=z_range[0] if z_range else None,
-                    zmax=z_range[1] if z_range else None,
-                    colorbar=dict(
-                        thickness=15, len=0.45, yanchor='top',
-                        y=1.0 if row == 1 else 0.45,
-                        x=0.46 if col == 1 else 1.0
-                    )
-                ),
-                row=row, col=col
-            )
-
-        # --- Data Processing & Plotting ---
-        spatial_ndim = 2  # for removing non-spatial channels in fine-flow arrays
-
-        if xy in fine_x:
-            # X Row: Logic requires a 180-degree flip (inverted indexing)
-            d_x: np.ndarray = fine_x[xy][:spatial_ndim, :]
-            do_T_x: bool = not transpose
-            _add_trace(1, 1, (d_x[0].T if do_T_x else d_x[0])[::-1, ::-1])
-            _add_trace(1, 2, (d_x[1].T if do_T_x else d_x[1])[::-1, ::-1])
-
-        if xy in fine_y:
-            d_y: np.ndarray = fine_y[xy][:spatial_ndim, :]
-            do_T_y: bool = transpose
-            _add_trace(2, 1, d_y[0].T if do_T_y else d_y[0])
-            _add_trace(2, 2, d_y[1].T if do_T_y else d_y[1])
-
-        # --- Global Styling ---
-        fig.update_layout(
-            template="plotly_dark",
-            height=250,
-            margin=dict(l=20, r=0, b=20, t=50),
-            paper_bgcolor='black',
-            plot_bgcolor='black',
-            font=dict(size=10),
-            showlegend=False
-        )
-
-        # White boundary box style
-        axis_style: dict = dict(
-            showticklabels=False, showgrid=False, zeroline=False,
-            mirror=True, ticks='outside', ticklen=0,
-            showline=True, linecolor='white', linewidth=1
-        )
-
-        fig.update_xaxes(**axis_style)
-        fig.update_yaxes(**axis_style, autorange='reversed')
-
-        return fig
 
     def _resolve_tile(self, section_num: int, tile_id_num: int) -> Optional[Tile]:
         """Internal domain helper to safely fetch and instantiate a Tile entity."""
@@ -713,6 +621,7 @@ class DataService:
             return None
 
         return Tile(section.tile_dicts[tile_id_num])
+
 
     def get_range_masks_fig(
             self,
@@ -774,10 +683,11 @@ class DataService:
             z: int,
             overlap_type: str,
             manual_nudge: Tuple[int, int] = (0, 0)
-    ) -> Optional[px.imshow]:
-
+    ) -> Optional[go.Figure]:
+        """Brokers pixel registration arrays to the OverlapPresenter canvas."""
         ctx = self._get_overlap_context(tid_a, z, overlap_type)
-        if not ctx: return None
+        if not ctx:
+            return None
 
         dx, dy = manual_nudge
         if overlap_type.upper().startswith('H'):
@@ -801,8 +711,14 @@ class DataService:
                 return_img=True,
                 show_plot=False,
             )
-            return self._build_plotly_figure(
-                img_array, tid_a, ctx.tid_b, overlap_type.upper(), z
+
+            return OverlapPresenter.render_overlap_view(
+                img_array=img_array,
+                build_figure_fn=self._build_plotly_figure,
+                tid_a=ctx.tid_a,
+                tid_b=ctx.tid_b,
+                overlap_type=overlap_type.upper(),
+                z=z
             )
         except Exception as e:
             logging.error(f"Nudge plot failed: {e}")
@@ -904,13 +820,13 @@ class DataService:
 
         if override_vector is not None:
             start_offset = override_vector
-            print(f"BATCH MODE: Using override vector {start_offset}")
+            logging.info(f"BATCH MODE: Using override vector {start_offset}")
         else:
             start_offset: Vector = (
                 ctx.shift_vec[0] + aligned_nudge[0],
                 ctx.shift_vec[1] + aligned_nudge[1]
             )
-            print(f"NUDGE MODE: {ctx.shift_vec} + {aligned_nudge} = {start_offset}")
+            logging.info(f"NUDGE MODE: {ctx.shift_vec} + {aligned_nudge} = {start_offset}")
 
         try:
             current_shift = start_offset
@@ -932,9 +848,8 @@ class DataService:
             if np.isnan(current_shift).any():
                 return "Refinement failed to converge."
 
-            # Commit to memory/processor
             self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
-            print(f'REFINED VECTOR: {current_shift}')
+            logging.info(f'REFINED VECTOR: {current_shift}')
             return {
                 "initial": ctx.shift_vec,
                 "start_used": start_offset,
