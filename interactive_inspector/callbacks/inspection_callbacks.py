@@ -4,7 +4,7 @@ from dash import html, Input, Output, State, ctx, no_update, ALL
 from app import app
 from data_service import service
 from interactive_inspector.constants import UIConstants
-from workflows.inspection_workflow import AlignmentWorkflowManager
+from workflows.inspection_workflow import InspectionWorkflowManager
 
 
 # =============================================================================
@@ -19,7 +19,7 @@ from workflows.inspection_workflow import AlignmentWorkflowManager
     prevent_initial_call=True
 )
 def replot_overlap_view(active_idx, nudge_trigger, selection_data):
-    return AlignmentWorkflowManager.handle_tile_overlap_replot(
+    return InspectionWorkflowManager.handle_tile_overlap_replot(
         active_idx=active_idx,
         nudge_trigger=nudge_trigger,
         selection_data=selection_data
@@ -43,7 +43,7 @@ def render_flow_visualizations(_flow_clicks, _clean_clicks, selection_data, sett
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    return AlignmentWorkflowManager.handle_flow_visualization(
+    return InspectionWorkflowManager.handle_flow_visualization(
         triggered_id=ctx.triggered_id,
         triggered_events=ctx.triggered,
         selection_data=selection_data,
@@ -65,7 +65,7 @@ def render_range_mask_visualizations(_range_clicks, selection_data):
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    return AlignmentWorkflowManager.handle_range_masks_visualization(
+    return InspectionWorkflowManager.handle_range_masks_visualization(
         triggered_id=ctx.triggered_id,
         triggered_events=ctx.triggered,
         selection_data=selection_data
@@ -87,7 +87,7 @@ def render_raw_tile_image_visualizations(_tile_clicks, selection_data):
     if not ctx.triggered_id or not selection_data:
         return no_update, no_update, no_update
 
-    return AlignmentWorkflowManager.handle_raw_tile_visualization(
+    return InspectionWorkflowManager.handle_raw_tile_visualization(
         triggered_id=ctx.triggered_id,
         triggered_events=ctx.triggered,
         selection_data=selection_data
@@ -115,7 +115,7 @@ def execute_batch_processing(
         n_clicks, selection_data, active_idx, nudge_trigger,
         guess_mode, m_dx, m_dy, search_rad
 ):
-    return AlignmentWorkflowManager.handle_batch_calculation(
+    return InspectionWorkflowManager.handle_batch_calculation(
         n_clicks=n_clicks,
         selection_data=selection_data,
         active_idx=active_idx,
@@ -145,7 +145,7 @@ def execute_single_calculation(single_clicks, selection_data, active_idx, nudge_
     if not ctx.triggered_id or not selection_data or active_idx is None or active_idx >= len(selection_data):
         return "Waiting for selection...", no_update, no_update
 
-    return AlignmentWorkflowManager.handle_single_calculation(
+    return InspectionWorkflowManager.handle_single_calculation(
         triggered_id=ctx.triggered_id,
         triggered_events=ctx.triggered,
         selection_data=selection_data,
@@ -169,7 +169,7 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
     if not ctx.triggered:
         return no_update
 
-    return AlignmentWorkflowManager.handle_selection_state_mutation(
+    return InspectionWorkflowManager.handle_selection_state_mutation(
         triggered_id=ctx.triggered_id,
         sel_data=sel_data,
         clear_n=clear_n,
@@ -185,7 +185,7 @@ def handle_selection_state(sel_data, clear_n, import_n, remove_n, current_store,
     Input('selection-store', 'data')
 )
 def sync_selection_ui(data):
-    return AlignmentWorkflowManager.sync_basket_ui_container(data)
+    return InspectionWorkflowManager.sync_basket_ui_container(data)
 
 
 @app.callback(
@@ -198,7 +198,7 @@ def render_main_visuals(grid_click, selection_store, dark_mode):
     if not ctx.triggered:
         return no_update
 
-    return AlignmentWorkflowManager.handle_main_quad_visualization(
+    return InspectionWorkflowManager.handle_main_quad_visualization(
         grid_click=grid_click,
         selection_store=selection_store,
         dark_mode=dark_mode
@@ -244,7 +244,7 @@ def handle_export_sections(n_clicks):
         service.store_offsets_to_cx_cy_json_files()
 
         return html.Div([
-            html.P("🚀 Storing coarse offsets to section cx_cy files", className="text-info mb-0 fw-bold"),
+            html.P("Storing coarse offsets to section cx_cy files", className="text-info mb-0 fw-bold"),
             html.Small("Coarse offsets have been stored.", className="text-white-50")
         ])
     except Exception as e:
@@ -265,7 +265,7 @@ def handle_export_sections(n_clicks):
     prevent_initial_call=False
 )
 def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
-    return AlignmentWorkflowManager.handle_grid_navigation(
+    return InspectionWorkflowManager.handle_grid_navigation(
         triggered_id=ctx.triggered_id,
         slider_val=slider_val,
         click_data=click_data,
@@ -282,7 +282,7 @@ def grid_navigator_callback(slider_val, click_data, manual_z, basket_data):
     prevent_initial_call=True
 )
 def handle_keyboard_nav(n_events, event, current_slider_val):
-    return AlignmentWorkflowManager.handle_keyboard_slice_navigation(
+    return InspectionWorkflowManager.handle_keyboard_slice_navigation(
         n_events=n_events, event=event, current_slider_val=current_slider_val
     )
 
@@ -304,33 +304,13 @@ def handle_keyboard_nav(n_events, event, current_slider_val):
 def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
                    key_event, step_list, current_nudge, current_active,
                    selection_store):
-    return AlignmentWorkflowManager.handle_nudge_and_basket_navigation(
+    return InspectionWorkflowManager.handle_nudge_and_basket_navigation(
         triggered_id=ctx.triggered_id,
         key_event=key_event,
         step_list=step_list,
         current_nudge=current_nudge,
         current_active=current_active,
         selection_store=selection_store
-    )
-
-
-@app.callback(
-    Output(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data', allow_duplicate=True),
-    [
-        Input(UIConstants.ID_CONF_MIN_PKR, 'value'),
-        Input(UIConstants.ID_CONF_MIN_PKS, 'value'),
-        Input(UIConstants.ID_CONF_MAX_DEV, 'value'),
-        Input(UIConstants.ID_CONF_MAX_MAG, 'value'),
-        Input(UIConstants.ID_CONF_MIN_PATCH, 'value'),
-        Input(UIConstants.ID_CONF_MAX_GRAD, 'value'),
-        Input(UIConstants.ID_CONF_RECON_FLOW_MAX_DEV, 'value'),
-    ],
-    State(UIConstants.ID_GLOBAL_SETTINGS_STORE, 'data'),
-    prevent_initial_call=True
-)
-def sync_ui_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data):
-    return AlignmentWorkflowManager.sync_ui_parameters_to_store(
-        pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data
     )
 
 

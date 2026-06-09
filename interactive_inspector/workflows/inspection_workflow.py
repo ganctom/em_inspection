@@ -13,7 +13,7 @@ from parameter_config import RegistrationConfig
 from data_service import service
 
 
-class AlignmentWorkflowManager:
+class InspectionWorkflowManager:
     """
     Orchestration layer separating Dash UI state evaluation from
     scientific domain execution.
@@ -532,22 +532,6 @@ class AlignmentWorkflowManager:
             return {'dx': dx, 'dy': dy}, no_update
 
         return no_update, no_update
-
-    @staticmethod
-    def sync_ui_parameters_to_store(pkr, pks, max_dev, max_mag, min_ps, max_grad, rf_grad, current_data: dict) -> dict:
-        """Serializes live input fields down into JSON parameters."""
-        data = current_data or {}
-        data.update({
-            "min_peak_ratio": pkr,
-            "min_peak_sharpness": pks,
-            "max_deviation": max_dev,
-            "max_magnitude": max_mag,
-            "min_patch_size": min_ps,
-            "max_gradient": max_grad,
-            "reconcile_flow_max_deviation": rf_grad
-        })
-        return data
-
 
 
 def apply_padded_y_ranges(
