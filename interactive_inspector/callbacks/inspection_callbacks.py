@@ -1,4 +1,3 @@
-import logging
 from dash import html, Input, Output, State, ctx, no_update, ALL
 
 from app import app
@@ -321,7 +320,6 @@ def handle_nudging(nudge_clicks, nav_clicks, ov_clicks, n_events,
 )
 def handle_background_preload(selection_data):
     if selection_data and len(selection_data) > 0:
-        logging.debug(f'selection data: {selection_data}')
         service.preload_source_images(selection_data)
         return "true"
     return "false"

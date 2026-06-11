@@ -209,8 +209,6 @@ class UIConstants:
     ID_BTN_IMPORT_INF = "import-inf-btn"
     LBL_BTN_IMPORT_INF = "Import INF"
 
-
-
     ID_BTN_FETCH_GLOBAL = "stitch-fetch-global"
     ID_GLOBAL_SETTINGS_STORE = "global-settings-store"
     ID_PARSE_PROGRESS_BAR = "progress-bar-container"
@@ -220,7 +218,6 @@ class UIConstants:
     TYPE_ACQ_CFG_FIELD = "acq-cfg-field"
     TYPE_MASK_CFG_FIELD = "mask-cfg-field"
     TYPE_REG_CFG_FIELD = "reg-cfg-field"
-    TYPE_STITCH_CFG_FIELD = "stitch-cfg-field"
     TYPE_MESH_CFG_FIELD = "mesh-cfg-field"
     TYPE_WARP_CFG_FIELD = "warp-cfg-field"
 
@@ -660,7 +657,7 @@ class UIConstants:
                         id=cls.field_id(name="clip_limit", id_type=TYPE_TAG),
                         placeholder="2.0",
                         value=str(params.clip_limit),
-                        is_int=True
+                        is_int=False
                     ))
                 ], width=4),
 
@@ -690,7 +687,7 @@ class UIConstants:
         def to_csv(val_list):
             return ", ".join(map(str, val_list))
 
-        TYPE_TAG = UI.TYPE_STITCH_CFG_FIELD
+        TYPE_TAG = UI.TYPE_REG_CFG_FIELD
 
         content = [
             dbc.Row([

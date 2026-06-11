@@ -1,3 +1,5 @@
+import logging
+
 from dash import html, dcc
 import dash_bootstrap_components as dbc
 
@@ -12,8 +14,6 @@ def layout():
     meta = service.get_slider_metadata()
 
     return dbc.Container([
-
-        # dcc.Store(id='global-settings-store', storage_type='session'),
 
         # --- MAIN UI STRUCTURE ---
         dbc.Row([

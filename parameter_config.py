@@ -223,14 +223,17 @@ class RegistrationConfig(BaseModel):
     @classmethod
     def from_form_data(cls, raw_data: dict[str, any]):
         """Parses and serializes raw interface strings into schema fields."""
+
+        comma_params = ("overlaps_x", "overlaps_y", "min_range", "patch_size")
         cleaned = {}
+
         for k, v in raw_data.items():
             if v == "" or v is None:
                 cleaned[k] = None
                 continue
 
             # Unpack comma-delimited UI parameters to integer arrays
-            if k in ("overlaps_x", "overlaps_y", "min_range"):
+            if k in comma_params:
                 if isinstance(v, str):
                     cleaned[k] = [int(i.strip()) for i in v.split(",") if i.strip()]
                 else:

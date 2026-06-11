@@ -67,7 +67,7 @@ class InspectionWorkflowManager:
         do_clean_flow = False
         ui_config = None
         if trig_type == UIConstants.ID_BTN_CLEAN_FLOW:
-            ui_config = RegistrationConfig(**settings_data)
+            ui_config = RegistrationConfig(**settings_data['registration_config'])  # TODO
             do_clean_flow = True
 
         # 4. Backend Processing Ingestion

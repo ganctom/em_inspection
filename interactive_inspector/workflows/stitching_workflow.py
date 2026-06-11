@@ -5,7 +5,7 @@ from dash.exceptions import PreventUpdate
 from constants import UI, MSG
 from data_service import service, orchestrator
 from inspection_refactored import init_specific_section_dirs
-from parameter_config import RegistrationConfig
+from parameter_config import StitchingConfig
 
 
 class StitchingWorkflowManager:
@@ -17,7 +17,8 @@ class StitchingWorkflowManager:
     @classmethod
     def run_pipeline(
             cls, n_clicks: int, parallel_value: any, range_str: str,
-            selected_steps: list, config_path: str, scl_fct: float, settings_data: dict
+            selected_steps: list, config_path: str,
+            scl_fct: float, settings_data: dict
     ):
         """Validates configuration parameters, initializes directories, and dispatches processing threads."""
         if not n_clicks:
@@ -26,17 +27,17 @@ class StitchingWorkflowManager:
         if not selected_steps:
             return [UI.log_row(MSG.NO_STEPS_ERROR, type="error")], 0, True
 
-        is_par = bool(parallel_value) if not isinstance(parallel_value, list) else 'parallel' in parallel_value
+        if not isinstance(parallel_value, list):
+            is_par = bool(parallel_value)
+        else:
+            is_par = 'parallel' in parallel_value
 
-        ui_config = RegistrationConfig(**settings_data)
+        stitch_config = StitchingConfig(**settings_data)
+        stitch_config.pipeline_config.downscale_factor = float(scl_fct)
+
         try:
             sec_nums, final_config = orchestrator.validate_and_prepare(
-                range_str,
-                config_path,
-                ui_params_raw={
-                    UI.ID_RESCALE_FCT: scl_fct,
-                    UI.ID_CONF_PATCH: tuple(ui_config.patch_size)
-                }
+                range_str, config_path, stitch_config
             )
         except Exception as e:
             return [UI.log_row(MSG.SETUP_ERROR.format(error=e), type="error")], 0, True

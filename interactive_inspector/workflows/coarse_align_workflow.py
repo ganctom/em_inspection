@@ -1,6 +1,4 @@
-import os
 import threading
-import dash
 from dash import no_update
 import yaml
 from pydantic import ValidationError
@@ -84,6 +82,7 @@ class CoarseAlignManager:
         new_cfg = service.stitch_config.model_copy(
             update={
                 "registration_config": stitch_config.registration_config,
+                "acquisition_config": stitch_config.acquisition_config,
                 "mesh_integration_config": stitch_config.mesh_integration_config,
                 "warp_config": stitch_config.warp_config,
                 "mask_config": stitch_config.mask_config,

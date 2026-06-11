@@ -1,4 +1,4 @@
-import os
+from os.path import basename
 from dash import Input, Output, State, callback, no_update, clientside_callback, ctx, ALL
 from pydantic import ValidationError
 
@@ -38,7 +38,7 @@ def handle_config_load(n_clicks, file_path, *layout_ids_lists):
 
     try:
         layout_payloads = CoarseAlignManager.load_yaml_config(file_path, layout_ids_lists)
-        filename = os.path.basename(file_path) if file_path else "Unknown Source"
+        filename = basename(file_path) if file_path else "Unknown Source"
 
         success_log = [
             UI.log_row(f"Configuration loaded successfully from: {filename}", type="info")
@@ -231,8 +231,10 @@ def unified_progress_poller(n, current_log_components):
 )
 @parse_stitch_configuration(param_name="stitch_config")
 def fetch_to_global_store(n_clicks, *args, stitch_config: StitchingConfig = None):
+
     if not n_clicks or isinstance(stitch_config, ValidationError) or stitch_config is None:
         return no_update
+
     return CoarseAlignManager.build_and_serialize_global_store(stitch_config)
 
 
