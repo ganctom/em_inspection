@@ -188,7 +188,7 @@ def cross_platform_path(path: str) -> str:
 
     TUNGSTEN_PREFIX = r'\\nas.company.internal\tungsten'
     TACHYON_PREFIX = r'\\storage.company.internal\tachyon'
-    TACHYON_PREFIX_MAC = "/Volumes/storage/groups/"
+    TACHYON_PREFIX_MAC = "/Volumes/storage/"
 
     PREFIXES = FS, TUNGSTEN_PREFIX, TACHYON_PREFIX
 
