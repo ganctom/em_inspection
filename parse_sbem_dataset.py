@@ -28,14 +28,13 @@ class Validator:
         self.root = Path(root)
         self.first_sec = first_sec
         self.last_sec = last_sec
-
         self.dir_sections = self.root / "sections"
-        self.section_dirs = [
-            Path(p) for p in filter_and_sort_sections(self.dir_sections)
-        ]
+        self.section_dirs = [Path(p) for p in filter_and_sort_sections(self.dir_sections)]
+        self.missing_sections: list[int] = []
+        self.invalid_tile_id_maps: list[str] = []
 
 
-    def validate_parsed_sbem_acquisition(self) -> List[int]:
+    def validate_parsed_sbem_acquisition(self) -> list[int]:
         section_nums = [
             int(Path(d).name.split("_")[0].strip("s")) for d in self.section_dirs
         ]
@@ -49,11 +48,12 @@ class Validator:
         return missing_sections
 
 
-    def get_missing_sections(self, section_nums: List[int]) -> List[int]:
+    def get_missing_sections(self, section_nums: list[int]) -> list[int]:
         """Identify section numbers discontinuities in section folder"""
 
         section_range = set(range(self.first_sec, self.last_sec + 1))
         missing_nums = sorted(list(section_range - set(section_nums)))
+        self.missing_sections = missing_nums
 
         if len(missing_nums) > 0:
             fp = str(Path(self.dir_sections) / "missing_section_folders.yaml")
@@ -66,7 +66,7 @@ class Validator:
         return missing_nums
 
 
-    def validate_tile_id_maps(self) -> List[str]:
+    def validate_tile_id_maps(self) -> list[str]:
         invalid_tile_id_maps = []
         for section in tqdm(self.section_dirs):
             if not valid_tile_id_map(section):
@@ -80,6 +80,7 @@ class Validator:
             f"There are {len(invalid_tile_id_maps)} invalid tile-id maps!\n"
             f"Check {output_path}."
         )
+        self.invalid_tile_id_maps = invalid_tile_id_maps
         return invalid_tile_id_maps
 
 
@@ -334,6 +335,7 @@ def main(
     start_section: int = 0,
     end_section: int = 10,
 ):
+
     parse_data(
         output_dir=output_dir,
         sbem_root_dir=acquisition_conf.sbem_root_dir,
@@ -369,3 +371,5 @@ if __name__ == "__main__":
     exp = Validator(root, first, last)
     exp.validate_parsed_sbem_acquisition()
     exp.validate_tile_id_maps()
+
+

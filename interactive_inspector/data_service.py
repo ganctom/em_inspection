@@ -19,7 +19,7 @@ import threading
 import yaml
 
 import parameter_config
-import parse_sbem_dataset as parse
+import parse_sbem_dataset
 
 from Section_refactored import CoarseStitchConfig
 from coarse_offset_processor import SectionIndex
@@ -211,7 +211,7 @@ class DataService:
             self.exp_config = config
             self.acq_config = AcquisitionConfig().from_experiment(config)
 
-            parse.main(
+            parse_sbem_dataset.main(
                 str(self.inspection.dir_sections),
                 self.acq_config,
                 self.inspection.first_sec,
@@ -247,7 +247,7 @@ class DataService:
 
     def validate_parsed(self) -> dict:
         # Check parsed section folders
-        validator = parse.Validator(
+        validator = parse_sbem_dataset.Validator(
             self.inspection.root,
             self.inspection.first_sec,
             self.inspection.last_sec

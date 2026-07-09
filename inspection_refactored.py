@@ -12,6 +12,7 @@ import numpy as np
 
 import experiment_configs as cfg
 import inspection_utils_refactor as utils
+import parse_sbem_dataset
 
 from Section_refactored import Section, fine_align_section, Vector, cached_read_image
 from coarse_offset_processor import CoarseOffsetProcessor
@@ -1130,7 +1131,7 @@ def parse_acquisition(
         f"Output dir: {output_dir}"
     )
 
-    import s01_parse_data
+
     from em_inspection.parameter_config import AcquisitionConfig
 
     conf: AcquisitionConfig = AcquisitionConfig()
@@ -1140,9 +1141,9 @@ def parse_acquisition(
     conf.thickness = 25
     conf.resolution_xy = 10
 
-    s01_parse_data.main(output_dir, conf, start, end)
+    parse_sbem_dataset.main(output_dir, conf, start, end)
 
-    validator = s01_parse_data.Validator(conf.sbem_root_dir, start, end)
+    validator = parse_sbem_dataset.Validator(conf.sbem_root_dir, start, end)
     validator.validate_parsed_sbem_acquisition()
     validator.validate_tile_id_maps()
 
