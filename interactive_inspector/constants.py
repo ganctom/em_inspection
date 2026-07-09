@@ -192,6 +192,15 @@ class UIConstants:
     ID_TAB_PPLN = "stitch_config-ppln-cfg"
     ID_TAB_PPLN_CFG = "tab-ppln-cfg"
     ID_RESCALE_FCT = "resize-fct"
+    ID_BTN_STORE_INDIVIDUAL = "export-sections-btn"
+    LBL_BTN_STORE_INDIVIDUAL = "Store (Individual offset files)"
+
+    ID_BTN_STORE_GLOB = "save-cxyz-btn"
+    LBL_BTN_STORE_GLOB = "Store (Global database)"
+
+    ID_BTN_CLR_BASKET = "clear-selection"
+    LBL_BTN_CLR_BASKET = "Clear Basket"
+
     ID_BTN_RANGE_MASKS = "range-masks-ov-btn"
     LBL_BTN_RANGE_MASKS = "RangeMasks"
     ID_BTN_FLOW = "flow-ov-btn"

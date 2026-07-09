@@ -80,12 +80,21 @@ def layout():
                         html.Div([
                             html.H6("Basket", className="mb-0 small text-uppercase text-muted"),
                             html.Div([
-                                dbc.Button("JSON", id='export-sections-btn', color="info", size="sm",
-                                           className="me-1 py-0"),
-                                dbc.Button("NPZ", id='save-cxyz-btn', color="warning", size="sm",
-                                           className="me-1 py-0"),
-                                dbc.Button("Clear", id='clear-selection', color="link", size="sm",
-                                           className="p-0 small"),
+                                dbc.Button(
+                                    UIConstants.LBL_BTN_STORE_INDIVIDUAL,
+                                    id=UIConstants.ID_BTN_STORE_INDIVIDUAL,
+                                    color="info", size="sm", className="me-1 py-0"
+                                ),
+                                dbc.Button(
+                                    UIConstants.LBL_BTN_STORE_GLOB,
+                                    id=UIConstants.ID_BTN_STORE_GLOB ,
+                                    color="warning", size="sm",className="me-1 py-0"
+                                ),
+                                dbc.Button(
+                                    UIConstants.LBL_BTN_CLR_BASKET,
+                                    id=UIConstants.ID_BTN_CLR_BASKET,
+                                    color="link", size="sm", className="p-0 small"
+                                ),
                             ])
                         ], className="d-flex justify-content-between align-items-center mb-2 mt-4"),
 
