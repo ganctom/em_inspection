@@ -2,6 +2,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 import functools as ft
 import gc
+from math import isclose
 from zipfile import BadZipFile
 
 import jax
@@ -236,6 +237,8 @@ class Section:
             return None
 
         try:
+            if isclose(factor, 1.0):
+                return self.image
             self.thumb = utils.downscale_image(self.image, factor)
             logging.debug(f"Thumbnail shape: {self.thumb.shape}")
             return self.thumb
