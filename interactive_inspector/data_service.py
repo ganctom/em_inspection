@@ -849,7 +849,9 @@ class DataService:
                 return "Refinement failed to converge."
 
             self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
-            logging.info(f'REFINED VECTOR: {current_shift}')
+
+            logging.info(f's{ctx.section.section_num} t{ctx.tid_a}-t{ctx.tid_b} REFINED VECTOR: {current_shift}')
+
             return {
                 "initial": ctx.shift_vec,
                 "start_used": start_offset,

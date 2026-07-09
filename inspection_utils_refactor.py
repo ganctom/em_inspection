@@ -1450,7 +1450,7 @@ def interp_coarse_grid(
     fine_grid_xyz = (fgx, fgy, fgz)
     refined_data = coarse_grid_xyz, fine_grid_xyz
 
-    logging.info(f'estimated offset: {min_coord}')
+    logging.debug(f'estimated offset: {min_coord}')
     return min_coord, refined_data
 
 
