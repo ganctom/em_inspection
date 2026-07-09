@@ -1360,30 +1360,31 @@ class Section:
         is_vert = utils.pair_is_vertical(
             self.tile_id_map, tile_a.tile_id, tile_b.tile_id)
 
+        # Pre-process images
         if tile_a.img_data is None:
-            tile_a.load_image(clahe=True)
+            tile_a.load_image(clahe=False)
         if tile_b.img_data is None:
-            tile_b.load_image(clahe=True)
+            tile_b.load_image(clahe=False)
+
+        tile_a.denoise().clahe()
+        tile_b.denoise().clahe()
+
+        # Use processed images for evaluation
+        img_a = tile_a.processed
+        img_b = tile_b.processed
 
         # Rotate vertical tile-pair to work with horizontal stripe
+        axis = 0
         if is_vert:
-            img_a = np.rot90(tile_a.img_data, k=1)
-            img_b = np.rot90(tile_b.img_data, k=1)
+            img_a = np.rot90(img_a, k=1)
+            img_b = np.rot90(img_b, k=1)
             offset = (-offset[0], offset[1])
             axis = 1
-        else:
-            axis = 0
-            img_a = tile_a.img_data
-            img_b = tile_b.img_data
 
         # Crop common area
-        logging.debug(f'image a shape: {np.shape(img_a)}')
-        logging.debug(f'image b shape: {np.shape(img_b)}')
         h, _ = np.shape(img_a)
-
         ov_a = img_a[max(0, offset[1 - axis]):min(h, h + offset[1 - axis])]
         ov_a = ov_a[:, -abs(offset[axis]):]
-
         ov_b = img_b[max(0, -offset[1 - axis]):min(h, h - offset[1 - axis])]
         ov_b = ov_b[:, :abs(offset[axis])]
 
