@@ -211,12 +211,12 @@ def cross_platform_path(path: str) -> str:
     OS_WIN = "Windows"
     OS_UX = "Linux"
     OS_MAC = "Darwin"
-    FS = r"/tungstenfs"
-    TACH = "/tachyon/"
+    FS = os.environ.get("EM_FS_PREFIX", r"/mnt/storage")
+    TACH = os.environ.get("EM_TACH_PREFIX", "/storage/")
 
-    TUNGSTEN_PREFIX = r"\\nas.company.internal\tungsten"
-    TACHYON_PREFIX = r"\\storage.company.internal\tachyon"
-    TACHYON_PREFIX_MAC = "/Volumes/storage/"
+    TUNGSTEN_PREFIX = os.environ.get("EM_TUNGSTEN_PREFIX", r"\\nas.company.internal\storage")
+    TACHYON_PREFIX = os.environ.get("EM_TACHYON_PREFIX", r"\\storage.company.internal\storage")
+    TACHYON_PREFIX_MAC = os.environ.get("EM_TACHYON_PREFIX_MAC", "/Volumes/storage/")
 
     PREFIXES = FS, TUNGSTEN_PREFIX, TACHYON_PREFIX
 

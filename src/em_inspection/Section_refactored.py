@@ -2502,7 +2502,7 @@ def main_fine_align_sections(config: cfg.ExpConfig, sec_nums: Union[list[int], i
 
 
 def debug_cxcy():
-    section_path = "/Volumes/storage/scratch/team/project/tgan/Stack_alignments/roli-f1/test_align/sections/s1240_g0"
+    section_path = "/data/scratch/test_align/sections/s1240_g0"
     section = Section(section_path)
 
     coarse_mat = section.get_coarse_mat()
@@ -2515,7 +2515,7 @@ def debug_margin_masks():
     rim_size = 30  # Safety margin to custom overlaps
     margin = max(10, rim_size // 3)  # Cut all tile edges by 'margin'
 
-    section_path = "/Volumes/storage/groups/scratch/team/project/_processing/SOFIMA/nextflow/ganctoma/gfriedri-em-alignment-flows/runs/roli-f1/run-01/sections/s1250_g0"
+    section_path = "/data/scratch/runs/roli-f1/run-01/sections/s1250_g0"
     section = Section(section_path)
     grid_shape = (30, 25)
 

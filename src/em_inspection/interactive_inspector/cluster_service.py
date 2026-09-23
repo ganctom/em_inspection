@@ -1,10 +1,11 @@
+import os
 import paramiko
 
 
 class ClusterService:
-    def __init__(self, host="cluster.internal", user="ganctoma"):
-        self.host = host
-        self.user = user
+    def __init__(self, host=None, user=None):
+        self.host = host or os.environ.get("EM_CLUSTER_HOST", "cluster.internal")
+        self.user = user or os.environ.get("EM_CLUSTER_USER", "user")
 
     def submit_sbatch(self, script_content, remote_path):
         """Uploads script via SFTP and executes sbatch via SSH."""
