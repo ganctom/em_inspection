@@ -1,0 +1,58 @@
+[project]
+name = "em_inspection"
+version = "0.1.0"
+description = "A Python application for interactive inspection and processing of Serial Block-Face Electron Microscopy datasets."
+authors = [{ name = "Tomáš Gancarčik" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">= 3.11"
+dependencies = ["requests>=2.32.5,<3"]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+[tool.pixi.pypi-dependencies]
+mkdocs-material = "*"
+
+[tool.pixi.tasks]
+test = "pytest"
+docs-serve = "mkdocs serve"
+docs-build = "mkdocs build"
+
+[tool.pixi.dependencies]
+python = "3.13.*"
+pixi-pycharm = ">=0.0.10,<0.0.11"
+matplotlib = ">=3.10.8,<4"
+scikit-image = ">=0.25.2,<0.26"
+jax = ">=0.7.2,<0.8"
+numpy = ">=2.3.5,<3"
+scipy = ">=1.16.3,<2"
+yaml = ">=0.2.5,<0.3"
+tqdm = ">=4.67.1,<5"
+opencv = ">=4.12.0,<5"
+ruyaml = ">=0.91.0,<0.92"
+numcodecs = ">=0.16.5,<0.17"
+ome-zarr = ">=0.12.2,<0.13"
+pydantic = ">=2.12.5,<3"
+pytest = ">=9.0.2,<10"
+ruff = "*"
+pre-commit = "*"
+
+[tool.pixi.feature.test.dependencies]
+pytest = "*"
+pytest-mock = "*"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/em_inspection"]
+
+[tool.pixi.environments]
+default = ["test"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
