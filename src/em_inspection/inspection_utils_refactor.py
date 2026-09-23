@@ -36,7 +36,7 @@ import yaml
 import zarr
 from zipfile import BadZipFile
 
-from schema import InspectionSchema as IS
+from .schema import InspectionSchema as IS
 
 SECTION_PATTERN = re.compile(r's(?P<num>\d+)_')
 

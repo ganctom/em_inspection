@@ -11,9 +11,9 @@ import numpy.typing as npt
 import pandas as pd
 from tqdm import tqdm
 
-import inspection_utils_refactor as utils
-import experiment_configs as cfg
-from interactive_inspector.constants import OverlapType
+import em_inspection.inspection_utils_refactor as utils
+import em_inspection.experiment_configs as cfg
+from em_inspection.interactive_inspector.constants import OverlapType
 
 TileXY = tuple[int, int]
 

@@ -18,27 +18,27 @@ import gc
 import threading
 import yaml
 
-import parameter_config
-import parse_sbem_dataset
+import em_inspection.parameter_config as parameter_config
+import em_inspection.parse_sbem_dataset as parse_sbem_dataset
 
-from Section_refactored import CoarseStitchConfig
-from coarse_offset_processor import SectionIndex
-from experiment_configs import ExperimentRegistry, ExpConfig
-from parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
+from em_inspection.Section_refactored import CoarseStitchConfig
+from em_inspection.coarse_offset_processor import SectionIndex
+from em_inspection.experiment_configs import ExperimentRegistry, ExpConfig
+from em_inspection.parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
                               MaskingConfig, WarpConfig)
-from Tile_refactored import Tile
-from constants import DataConstants as DC
-from constants import UIConstants as UI
-from presenters.flow_presenter import FlowPresenter
-from presenters.overlap_presenter import OverlapPresenter
-from schema import InspectionSchema as IS
-from inspection_utils_refactor import get_missing_stitched_sections
-from pipeline_actions import PipelineOrchestrator
-from inspection_refactored import (
+from em_inspection.Tile_refactored import Tile
+from em_inspection.interactive_inspector.constants import DataConstants as DC
+from em_inspection.interactive_inspector.constants import UIConstants as UI
+from em_inspection.interactive_inspector.presenters.flow_presenter import FlowPresenter
+from em_inspection.interactive_inspector.presenters.overlap_presenter import OverlapPresenter
+from em_inspection.schema import InspectionSchema as IS
+from em_inspection.inspection_utils_refactor import get_missing_stitched_sections
+from em_inspection.interactive_inspector.pipeline_actions import PipelineOrchestrator
+from em_inspection.inspection_refactored import (
     Inspection, Section, _prepare_sections, Vector, utils, cached_read_image, init_specific_section_dirs,
 )
-from Section_refactored import SectionInfrastructureError
-from dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
+from em_inspection.Section_refactored import SectionInfrastructureError
+from em_inspection.interactive_inspector.dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
 
 
 class DataServiceError(Exception):

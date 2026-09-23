@@ -9,10 +9,10 @@ from typing import List, Final
 
 from sofima.mesh import IntegrationConfig
 
-from Section_refactored import CoarseStitchConfig, Section
-from constants import Task, UI
-from inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img, get_tile_dicts
-from parameter_config import StitchingConfig, RegistrationConfig
+from em_inspection.Section_refactored import CoarseStitchConfig, Section
+from em_inspection.interactive_inspector.constants import Task, UI
+from em_inspection.inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img, get_tile_dicts
+from em_inspection.parameter_config import StitchingConfig, RegistrationConfig
 
 # Compile-time constants
 RESOURCE_INIT: Final[str] = "RESOURCE_INIT"

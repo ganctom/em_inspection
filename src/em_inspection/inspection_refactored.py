@@ -10,13 +10,13 @@ from functools import partial
 import jax
 import numpy as np
 
-import experiment_configs as cfg
-import inspection_utils_refactor as utils
-import parse_sbem_dataset
+import em_inspection.experiment_configs as cfg
+import em_inspection.inspection_utils_refactor as utils
+import em_inspection.parse_sbem_dataset
 
-from Section_refactored import Section, fine_align_section, Vector, cached_read_image
-from coarse_offset_processor import CoarseOffsetProcessor
-from schema import InspectionSchema as IS
+from em_inspection.Section_refactored import Section, fine_align_section, Vector, cached_read_image
+from em_inspection.coarse_offset_processor import CoarseOffsetProcessor
+from em_inspection.schema import InspectionSchema as IS
 
 UniPath = Union[str, Path]
 

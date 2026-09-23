@@ -2,7 +2,7 @@ import logging
 from typing import Dict
 import yaml
 
-from parameter_config import ExpConfig, AppConfig
+from .parameter_config import ExpConfig, AppConfig
 
 class ExperimentRegistryError(Exception):
     """Base exception for the entire experiment registry errors"""

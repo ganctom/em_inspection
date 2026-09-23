@@ -5,11 +5,11 @@ from dataclasses import dataclass
 
 import yaml
 from pydantic import BaseModel, field_validator, model_validator, Field
-from typing import Tuple, Dict, Any
-from interactive_inspector.constants import UIConstants as UI
-from interactive_inspector.constants import DataConstants as DC
+from typing import Tuple, Dict, Any, Optional, List
+from .interactive_inspector.constants import UIConstants as UI
+from .interactive_inspector.constants import DataConstants as DC
 
-from inspection_utils_refactor import cross_platform_path
+from .inspection_utils_refactor import cross_platform_path
 
 EXP_YAML_PATH = "/Users/ganctoma/SW/_projects/em_inspection/src/em_inspection/interactive_inspector/app_data/user_experiments.yaml"
 

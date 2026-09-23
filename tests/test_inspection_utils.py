@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Import both old and new names from your module
 # (Assuming you kept the old one briefly to compare)
-from em_inspection.inspection_utils import read_coarse_mat_new, read_coarse_mat, CoarseData
+from em_inspection.inspection_utils_refactor import read_coarse_mat, CoarseData
 
 
 # --- FIXTURES (Setup code) ---
@@ -38,8 +38,9 @@ def sample_json(tmp_path):
 def test_original_read_coarse_mat(sample_npz):
     """Verifies the old function still works as expected."""
     path, expected_data = sample_npz
-    mesh, cx, cy = read_coarse_mat_new(path)
+    res = read_coarse_mat(path)
+    cx, cy = res.cx, res.cy
 
     np.testing.assert_array_equal(cx, expected_data['cx'])
-    np.testing.assert_array_equal(mesh, expected_data['coarse_mesh'])
+    np.testing.assert_array_equal(res.coarse_mesh, expected_data['coarse_mesh'])
 

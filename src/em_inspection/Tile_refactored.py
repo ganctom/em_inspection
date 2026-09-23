@@ -4,7 +4,7 @@ import cv2
 from skimage.io import imread
 import numpy as np
 
-import inspection_utils_refactor as utils
+import em_inspection.inspection_utils_refactor as utils
 
 TileXY = tuple[int, int]
 

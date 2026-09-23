@@ -36,36 +36,35 @@ def sample_json(tmp_path):
 
 def test_read_real_gold_standard():
     # 1. Define the path (Read-Only)
-    json_path = "/Users/ganctoma/SW/_projects/em_inspection/tests/samples/s477_g0/cx_cy_tst.json"
-    gold_path = Path(json_path)
+    gold_path = Path(__file__).parent / "samples" / "s477_g0" / "cx_cy_tst.json"
 
     # 2. Guard clause: Don't run the test if the file is missing
     assert gold_path.exists(), f"Expected gold standard file at {gold_path}"
 
     # 3. Execute the read (NO writing here)
     data = read_coarse_mat(gold_path)
-    print(f"\n{data.cx[0][0][0][3]}")
+    print(f"\n{data.cx.shape}")
 
     # 4. Assertions
     # We check if the data matches the known 'Gold' values
-    assert data.cx.shape == (2, 1, 2, 6)
+    assert data.cx.shape == (2, 2, 6)
 
     # Safely check for NaN in the read-only data
     # (This assumes we fixed the reader to handle NaNs)
-    assert np.isnan(data.cx[0, 0, 0, 4])
+    assert np.isnan(data.cx[0, 0, 4])
 
     # Define as a real Python list of lists
-    x_cx = [[
+    x_cx = [
         [-220.0, -205.0, -211.0, -258.0, np.nan, np.nan],
         [-275.0, -206.0, -211.0, -207.0, -213.0, np.nan]
-    ]]
+    ]
 
-    y_cx = [[
+    y_cx = [
         [-31.0, -38.0, -46.0, 24.0, np.nan, np.nan],
         [27.0, -38.0, -42.0, -27.0, -30.0, np.nan]
-    ]]
+    ]
 
-    expected_list = [x_cx, y_cx]  # Result is (2, 1, 2, 6)
+    expected_list = [x_cx, y_cx]  # Result is (2, 2, 6)
     expected_cx = np.array(expected_list, dtype=np.float64)
 
     # Use atol (absolute tolerance) in addition to rtol for safer float comparison

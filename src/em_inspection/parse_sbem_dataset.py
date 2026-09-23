@@ -13,12 +13,12 @@ from typing import List, Union, Dict, Iterable, Optional
 from tqdm import tqdm
 import yaml
 
-from parameter_config import AcquisitionConfig
+from em_inspection.parameter_config import AcquisitionConfig
 from sbem.experiment.parse_utils import get_tile_metadata
 from sbem.record.Section import Section
 from sbem.record.Tile import Tile
 
-from inspection_utils_refactor import cross_platform_path
+from em_inspection.inspection_utils_refactor import cross_platform_path
 
 UniPath = Union[Path, str]
 

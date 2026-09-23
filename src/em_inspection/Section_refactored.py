@@ -22,12 +22,12 @@ from sofima import mesh, stitch_rigid, stitch_elastic, warp, flow_utils
 import time
 from typing import Union, Optional, Any, Dict, Tuple, Iterable
 
-import experiment_configs as cfg
-import inspection_utils_refactor as utils
-import mask_utils as mutils
-from parameter_config import WarpConfigStitching, MeshIntegrationConfig, RegistrationConfig
-from schema import InspectionSchema as IS
-from Tile_refactored import Tile
+import em_inspection.experiment_configs as cfg
+import em_inspection.inspection_utils_refactor as utils
+import em_inspection.mask_utils as mutils
+from em_inspection.parameter_config import WarpConfigStitching, MeshIntegrationConfig, RegistrationConfig
+from em_inspection.schema import InspectionSchema as IS
+from em_inspection.Tile_refactored import Tile
 
 
 ### Set up logging
