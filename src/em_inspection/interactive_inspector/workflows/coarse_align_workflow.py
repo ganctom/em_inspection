@@ -15,7 +15,9 @@ class CoarseAlignManager:
     """
 
     @classmethod
-    def load_yaml_config(cls, file_path: str, layout_ids_lists: tuple[list[dict], ...]) -> list[list]:
+    def load_yaml_config(
+        cls, file_path: str, layout_ids_lists: tuple[list[dict], ...]
+    ) -> list[list]:
         """
         Parses a YAML config from disk and maps it dynamically to layout ID sequences
         by evaluating their inner type and index values.
@@ -23,14 +25,16 @@ class CoarseAlignManager:
         if not file_path:
             raise ValueError("Please enter a valid path")
 
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             data = yaml.safe_load(f)
 
         cfg = pcfg.StitchingConfig(**data)
         service.stitch_config = cfg
         service.reg_config = cfg.registration_config
 
-        to_csv = lambda val: ", ".join(map(str, val)) if isinstance(val, (list, tuple)) else val
+        to_csv = lambda val: (
+            ", ".join(map(str, val)) if isinstance(val, (list, tuple)) else val
+        )
 
         flat_pool = {
             "output_dir": cfg.output_dir,
@@ -39,20 +43,24 @@ class CoarseAlignManager:
             **{k: to_csv(v) for k, v in cfg.acquisition_config.model_dump().items()},
             **{k: to_csv(v) for k, v in cfg.registration_config.model_dump().items()},
             **cfg.mesh_integration_config.model_dump(),
-            **{k: ([v] if isinstance(v, bool) else v) for k, v in cfg.warp_config.model_dump().items()},
-            **cfg.mask_config.model_dump()
+            **{
+                k: ([v] if isinstance(v, bool) else v)
+                for k, v in cfg.warp_config.model_dump().items()
+            },
+            **cfg.mask_config.model_dump(),
         }
 
         mapped_output_groups = []
         for id_list in layout_ids_lists:
-            group_values = [flat_pool.get(comp['index'], no_update) for comp in id_list]
+            group_values = [flat_pool.get(comp["index"], no_update) for comp in id_list]
             mapped_output_groups.append(group_values)
 
         return mapped_output_groups
 
-
     @classmethod
-    def save_yaml_config(cls, n_clicks: int, path: str, stitch_config: pcfg.StitchingConfig) -> str:
+    def save_yaml_config(
+        cls, n_clicks: int, path: str, stitch_config: pcfg.StitchingConfig
+    ) -> str:
         """Commits a pre-validated and hydrated StitchingConfig model instance to disk."""
         if not path:
             return "Error: No path specified."
@@ -67,9 +75,10 @@ class CoarseAlignManager:
         except Exception as e:
             return f"Save failed: {str(e)}"
 
-
     @classmethod
-    def build_and_serialize_global_store(cls, stitch_config: pcfg.StitchingConfig) -> dict:
+    def build_and_serialize_global_store(
+        cls, stitch_config: pcfg.StitchingConfig
+    ) -> dict:
         """
         Updates the runtime service layer singleton using model-copying semantics
         and serializes the outcome into a primitive dictionary.
@@ -88,9 +97,9 @@ class CoarseAlignManager:
                 "mask_config": stitch_config.mask_config,
                 "output_dir": stitch_config.output_dir,
                 "start_section": stitch_config.start_section,
-                "end_section": stitch_config.end_section
+                "end_section": stitch_config.end_section,
             },
-            deep=True
+            deep=True,
         )
 
         # 2. Sync core runtime reference
@@ -99,13 +108,9 @@ class CoarseAlignManager:
         # 3. Return primitive structures suitable for dcc.Store transit
         return new_cfg.model_dump()
 
-
     @classmethod
     def run_coarse_alignment_workflow(
-            cls,
-            range_str: str,
-            config_path: str,
-            stitch_config: pcfg.StitchingConfig
+        cls, range_str: str, config_path: str, stitch_config: pcfg.StitchingConfig
     ) -> tuple[list[int], any]:  # Returns raw data tokens instead of UI components
         """
         Validates the schema context and spins up the coarse alignment thread pipeline.
@@ -122,7 +127,6 @@ class CoarseAlignManager:
         orchestrator.start_coarse_align(sec_nums, reg_cfg)
         return sec_nums, reg_cfg.coarse_params
 
-
     @classmethod
     def execute_offset_backup(cls) -> None:
         """
@@ -135,13 +139,12 @@ class CoarseAlignManager:
         threading.Thread(
             target=service.run_offsets_backup_thread,
             kwargs={"overwrite": True},
-            daemon=True
+            daemon=True,
         ).start()
 
     @classmethod
     def poll_unified_progress(
-            cls,
-            raw_log_history: list[str]
+        cls, raw_log_history: list[str]
     ) -> tuple[int, str, bool, list[str]]:
         """
         Monitors progress state headlessly.
@@ -183,7 +186,6 @@ class CoarseAlignManager:
 
         return prog, msg, False, logs
 
-
     @classmethod
     def is_backup_ready(cls) -> bool:
         """
@@ -191,5 +193,3 @@ class CoarseAlignManager:
         offset backup sequence can be executed.
         """
         return service.exp_config is not None
-
-

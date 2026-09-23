@@ -161,9 +161,13 @@ def test_out_of_bounds_errors(temp_zarr_stores):
 
     # Exceeds total depth (total depth is 100)
     with pytest.raises(ValueError, match="exceeds volume depth"):
-        locate_zarr_section(store_path, section_number=350, z_offset=200)  # z_index = 150 >= 100
+        locate_zarr_section(
+            store_path, section_number=350, z_offset=200
+        )  # z_index = 150 >= 100
 
 
 def test_nonexistent_volume():
     with pytest.raises(FileNotFoundError):
-        locate_zarr_section("/path/does/not/exist/vol.zarr", section_number=10, z_offset=0)
+        locate_zarr_section(
+            "/path/does/not/exist/vol.zarr", section_number=10, z_offset=0
+        )

@@ -16,9 +16,14 @@ class StitchingWorkflowManager:
 
     @classmethod
     def run_pipeline(
-            cls, n_clicks: int, parallel_value: any, range_str: str,
-            selected_steps: list, config_path: str,
-            scl_fct: float, settings_data: dict
+        cls,
+        n_clicks: int,
+        parallel_value: any,
+        range_str: str,
+        selected_steps: list,
+        config_path: str,
+        scl_fct: float,
+        settings_data: dict,
     ):
         """Validates configuration parameters, initializes directories, and dispatches processing threads."""
         if not n_clicks:
@@ -30,7 +35,7 @@ class StitchingWorkflowManager:
         if not isinstance(parallel_value, list):
             is_par = bool(parallel_value)
         else:
-            is_par = 'parallel' in parallel_value
+            is_par = "parallel" in parallel_value
 
         stitch_config = StitchingConfig(**settings_data)
         stitch_config.pipeline_config.downscale_factor = float(scl_fct)
@@ -45,14 +50,17 @@ class StitchingWorkflowManager:
         # Decoupled Domain Operations
         init_specific_section_dirs(service.inspection, sec_nums)
 
-        target_method = (orchestrator.run_parallel_pipeline if is_par
-                         else orchestrator.run_sequential_pipeline)
+        target_method = (
+            orchestrator.run_parallel_pipeline
+            if is_par
+            else orchestrator.run_sequential_pipeline
+        )
 
         # Thread isolation proxy
         threading.Thread(
             target=target_method,
             args=(sec_nums, selected_steps, final_config),
-            daemon=True
+            daemon=True,
         ).start()
 
         mode_str = MSG.MODE_PARALLEL if is_par else MSG.MODE_SEQUENTIAL
@@ -61,7 +69,11 @@ class StitchingWorkflowManager:
         init_log = [
             UI.log_row(MSG.PPLN_START.format(mode=mode_str), type="info"),
             UI.log_row(MSG.PPLN_TASKS.format(tasks=tsk_lbl)),
-            UI.log_row(MSG.PPLN_SCOPE.format(count=len(sec_nums), first=sec_nums[0], last=sec_nums[-1])),
+            UI.log_row(
+                MSG.PPLN_SCOPE.format(
+                    count=len(sec_nums), first=sec_nums[0], last=sec_nums[-1]
+                )
+            ),
         ]
 
         if is_par:
@@ -69,7 +81,6 @@ class StitchingWorkflowManager:
 
         init_log.append(UI.log_row(MSG.PPLN_DIVIDER))
         return init_log, 2, False
-
 
     @classmethod
     def sync_progress(cls, n_intervals: int, current_logs: list):
@@ -88,10 +99,16 @@ class StitchingWorkflowManager:
             return updated_logs, 100, False, False, True, f"✅ {msg}"
 
         if not is_active and status.get("error"):
-            return updated_logs, progress, False, False, True, f"❌ Error: {status['error']}"
+            return (
+                updated_logs,
+                progress,
+                False,
+                False,
+                True,
+                f"❌ Error: {status['error']}",
+            )
 
         return updated_logs, progress, True, True, False, f"⏳ {msg}"
-
 
     @classmethod
     def locate_missing_indices(cls, n_clicks: int):
@@ -101,7 +118,13 @@ class StitchingWorkflowManager:
 
         missing_indices = service.get_missing_stitched_sections()
         if not missing_indices:
-            return [UI.log_row("✨ No missing sections found. Dataset is complete.", type="success")]
+            return [
+                UI.log_row(
+                    "✨ No missing sections found. Dataset is complete.", type="success"
+                )
+            ]
 
-        msg = f"Found {len(missing_indices)} missing sections: {missing_indices[:10]}..."
+        msg = (
+            f"Found {len(missing_indices)} missing sections: {missing_indices[:10]}..."
+        )
         return [UI.log_row(msg, type="warning")]

@@ -12,39 +12,47 @@ class FlowPresenter:
     """
 
     @staticmethod
-    def render_diagnostic_grid(fine_x: dict,
-                               fine_y: dict,
-                               xy: tuple[int, int],
-                               z_range: tuple[float, float] | None = None,
-                               transpose: bool = False) -> go.Figure:
+    def render_diagnostic_grid(
+        fine_x: dict,
+        fine_y: dict,
+        xy: tuple[int, int],
+        z_range: tuple[float, float] | None = None,
+        transpose: bool = False,
+    ) -> go.Figure:
         """Assembles a 2x2 multi-channel heatmap grid of fine vector displacements."""
         if xy not in fine_x and xy not in fine_y:
             return go.Figure()
 
         fig: go.Figure = make_subplots(
-            rows=2, cols=2,
+            rows=2,
+            cols=2,
             subplot_titles=(
-                UI.LBL_FLOW_XH, UI.LBL_FLOW_XV,
-                UI.LBL_FLOW_YH, UI.LBL_FLOW_YV
+                UI.LBL_FLOW_XH,
+                UI.LBL_FLOW_XV,
+                UI.LBL_FLOW_YH,
+                UI.LBL_FLOW_YV,
             ),
             horizontal_spacing=0.1,
-            vertical_spacing=0.3
+            vertical_spacing=0.3,
         )
 
         def _add_trace(row: int, col: int, data: np.ndarray) -> None:
             fig.add_trace(
                 go.Heatmap(
                     z=data,
-                    colorscale='Viridis',
+                    colorscale="Viridis",
                     zmin=z_range[0] if z_range else None,
                     zmax=z_range[1] if z_range else None,
                     colorbar=dict(
-                        thickness=15, len=0.45, yanchor='top',
+                        thickness=15,
+                        len=0.45,
+                        yanchor="top",
                         y=1.0 if row == 1 else 0.45,
-                        x=0.46 if col == 1 else 1.0
-                    )
+                        x=0.46 if col == 1 else 1.0,
+                    ),
                 ),
-                row=row, col=col
+                row=row,
+                col=col,
             )
 
         spatial_ndim = 2
@@ -65,18 +73,24 @@ class FlowPresenter:
             template="plotly_dark",
             height=250,
             margin=dict(l=20, r=0, b=20, t=50),
-            paper_bgcolor='black',
-            plot_bgcolor='black',
+            paper_bgcolor="black",
+            plot_bgcolor="black",
             font=dict(size=10),
-            showlegend=False
+            showlegend=False,
         )
 
         axis_style: dict = dict(
-            showticklabels=False, showgrid=False, zeroline=False,
-            mirror=True, ticks='outside', ticklen=0,
-            showline=True, linecolor='white', linewidth=1
+            showticklabels=False,
+            showgrid=False,
+            zeroline=False,
+            mirror=True,
+            ticks="outside",
+            ticklen=0,
+            showline=True,
+            linecolor="white",
+            linewidth=1,
         )
         fig.update_xaxes(**axis_style)
-        fig.update_yaxes(**axis_style, autorange='reversed')
+        fig.update_yaxes(**axis_style, autorange="reversed")
 
         return fig

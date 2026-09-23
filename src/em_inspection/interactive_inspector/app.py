@@ -12,7 +12,7 @@ makedirs(f"./{DIRNAME_APP_DATA}", exist_ok=True)
 app = dash.Dash(
     __name__,
     external_stylesheets=[UI.THEME_LIGHT, dbc.icons.BOOTSTRAP],
-    suppress_callback_exceptions=True  # CRITICAL for multi-page apps
+    suppress_callback_exceptions=True,  # CRITICAL for multi-page apps
 )
-app.config.suppress_callback_exceptions = True # Double-down on the stitch_config
+app.config.suppress_callback_exceptions = True  # Double-down on the stitch_config
 server = app.server

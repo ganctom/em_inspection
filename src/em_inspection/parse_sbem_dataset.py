@@ -29,10 +29,11 @@ class Validator:
         self.first_sec = first_sec
         self.last_sec = last_sec
         self.dir_sections = self.root / "sections"
-        self.section_dirs = [Path(p) for p in filter_and_sort_sections(self.dir_sections)]
+        self.section_dirs = [
+            Path(p) for p in filter_and_sort_sections(self.dir_sections)
+        ]
         self.missing_sections: list[int] = []
         self.invalid_tile_id_maps: list[str] = []
-
 
     def validate_parsed_sbem_acquisition(self) -> list[int]:
         section_nums = [
@@ -42,11 +43,8 @@ class Validator:
 
         logging.info(f"Number of parsed sections: {len(section_nums)}")
         logging.info(f"Number of missing section dirs: {len(missing_sections)}")
-        write_dict_to_yaml(
-            str(self.root / "missing_sections.yaml"), missing_sections
-        )
+        write_dict_to_yaml(str(self.root / "missing_sections.yaml"), missing_sections)
         return missing_sections
-
 
     def get_missing_sections(self, section_nums: list[int]) -> list[int]:
         """Identify section numbers discontinuities in section folder"""
@@ -64,7 +62,6 @@ class Validator:
                 f"There {is_are} {len(missing_nums)} missing sections in 'sections' folder!"
             )
         return missing_nums
-
 
     def validate_tile_id_maps(self) -> list[str]:
         invalid_tile_id_maps = []
@@ -164,15 +161,15 @@ def get_raw_tile_prefix(directory: Path) -> Optional[str]:
     for entry in scandir(directory):
         if entry.is_file() and entry.name.endswith(".tif"):
             p = entry.name
-            assert (
-                p[-22] == "g"
-            ), 'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
-            assert (
-                p[-16] == "t"
-            ), 'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
-            assert (
-                p[-10] == "s"
-            ), 'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
+            assert p[-22] == "g", (
+                'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
+            )
+            assert p[-16] == "t", (
+                'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
+            )
+            assert p[-10] == "s", (
+                'Error extracting tile filename (expected suffix pattern form: "g0001_t0902_s00296.tif")'
+            )
             return entry.name[:-22]
 
 
@@ -298,15 +295,15 @@ def parse_data(
                 )
                 sections[section_name] = section
 
-            assert (
-                tile_spec["tile_height"] == section.get_tile_height()
-            ), f"Tile height is off in section {section.get_name()}."
-            assert (
-                tile_spec["tile_width"] == section.get_tile_width()
-            ), f"Tile width is off in section {section.get_name()}."
-            assert (
-                tile_spec["overlap"] == section.get_tile_overlap()
-            ), f"Tile overlap is off in section {section.get_name()}."
+            assert tile_spec["tile_height"] == section.get_tile_height(), (
+                f"Tile height is off in section {section.get_name()}."
+            )
+            assert tile_spec["tile_width"] == section.get_tile_width(), (
+                f"Tile width is off in section {section.get_name()}."
+            )
+            assert tile_spec["overlap"] == section.get_tile_overlap(), (
+                f"Tile overlap is off in section {section.get_name()}."
+            )
             Tile(
                 section,
                 tile_id=tile_spec["tile_id"],
@@ -351,7 +348,9 @@ def main(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stitch_config", type=str, default="tile-stitching.stitch_config")
+    parser.add_argument(
+        "--stitch_config", type=str, default="tile-stitching.stitch_config"
+    )
     args = parser.parse_args()
 
     with open(args.config) as f:
@@ -371,5 +370,3 @@ if __name__ == "__main__":
     exp = Validator(root, first, last)
     exp.validate_parsed_sbem_acquisition()
     exp.validate_tile_id_maps()
-
-

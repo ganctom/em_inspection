@@ -9,6 +9,7 @@ import tests.test_get_largest_tile_id_map as this_module
 @pytest.fixture
 def sample_processor():
     """Create a minimal fake instance with controlled behavior"""
+
     class MockConfig:
         grid_shape = (7, 5)
 
@@ -27,7 +28,9 @@ def sample_processor():
     return TestProcessor()
 
 
-def test_calls_compute_tile_id_map_with_sorted_unique_ids(sample_processor, monkeypatch):
+def test_calls_compute_tile_id_map_with_sorted_unique_ids(
+    sample_processor, monkeypatch
+):
     """Verify that compute_tile_id_map is called with expected arguments"""
     fake_tile_ids = {3, 1, 8, 42, 7}
     expected_sorted = [1, 3, 7, 8, 42]
@@ -57,21 +60,22 @@ def test_returns_result_from_compute_tile_id_map(sample_processor, monkeypatch):
     sample_processor.get_unique_tile_ids = lambda: {10, 20, 30}
 
     monkeypatch.setattr(
-        this_module,
-        "compute_tile_id_map",
-        lambda shape, tids: expected_result
+        this_module, "compute_tile_id_map", lambda shape, tids: expected_result
     )
 
     result = sample_processor.get_largest_tile_id_map()
     assert_array_equal(result, expected_result)
 
 
-@pytest.mark.parametrize("grid_shape, n_tiles", [
-    ((1, 1), 1),
-    ((4, 4), 1),
-    ((6, 8), 10),
-    ((12, 12), 3),
-])
+@pytest.mark.parametrize(
+    "grid_shape, n_tiles",
+    [
+        ((1, 1), 1),
+        ((4, 4), 1),
+        ((6, 8), 10),
+        ((12, 12), 3),
+    ],
+)
 def test_various_grid_shapes(sample_processor, grid_shape, n_tiles):
     sample_processor.config.grid_shape = grid_shape
 

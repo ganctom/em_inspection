@@ -17,7 +17,7 @@ class ClusterService:
 
             # 1. Upload the script
             sftp = ssh.open_sftp()
-            with sftp.file(remote_path, 'w') as f:
+            with sftp.file(remote_path, "w") as f:
                 f.write(script_content)
             sftp.chmod(remote_path, 0o755)
             sftp.close()

@@ -25,6 +25,8 @@ dash-bootstrap-components = "*"
 
 [tool.pixi.tasks]
 test = "python -m pytest"
+lint = "ruff check ."
+format = "ruff format ."
 docs-serve = "mkdocs serve"
 docs-build = "mkdocs build"
 

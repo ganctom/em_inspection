@@ -7,14 +7,18 @@ from pydantic import ValidationError
 from typing import Optional, Union, List
 
 from constants import UIConstants
-from parameter_config import RegistrationConfig, MeshIntegrationConfig, WarpConfigStitching, MaskingConfig, \
-    StitchingConfig, AcquisitionConfig
+from parameter_config import (
+    RegistrationConfig,
+    MeshIntegrationConfig,
+    WarpConfigStitching,
+    MaskingConfig,
+    StitchingConfig,
+    AcquisitionConfig,
+)
 
 
 def parse_form(
-        type_tag: str,
-        target_model: type[BaseModel],
-        param_name: str = "form_model"
+    type_tag: str, target_model: type[BaseModel], param_name: str = "form_model"
 ):
     """Decorator to automatically inject a validated Pydantic model into a callback."""
 
@@ -24,15 +28,16 @@ def parse_form(
             # Automated extraction matching your unified IDs
             raw_data = {}
             for state_group in ctx.states_list:
-                if not state_group: continue
+                if not state_group:
+                    continue
                 items = state_group if isinstance(state_group, list) else [state_group]
                 for item in items:
-                    comp_id = item.get('id')
-                    if isinstance(comp_id, dict) and comp_id.get('type') == type_tag:
-                        raw_data[comp_id['index']] = item.get('value')
+                    comp_id = item.get("id")
+                    if isinstance(comp_id, dict) and comp_id.get("type") == type_tag:
+                        raw_data[comp_id["index"]] = item.get("value")
 
             try:
-                if hasattr(target_model, 'from_form_data'):
+                if hasattr(target_model, "from_form_data"):
                     kwargs[param_name] = target_model.from_form_data(raw_data)
                 else:
                     cleaned = {k: (None if v == "" else v) for k, v in raw_data.items()}
@@ -48,11 +53,11 @@ def parse_form(
 
 
 def create_alert(
-        title: str,
-        message: Optional[str] = None,
-        color: str = "danger",
-        exception: Optional[Union[Exception, str]] = None,
-        bullet_points: Optional[List[str]] = None
+    title: str,
+    message: Optional[str] = None,
+    color: str = "danger",
+    exception: Optional[Union[Exception, str]] = None,
+    bullet_points: Optional[List[str]] = None,
 ) -> dbc.Alert:
     """
     Unified component factory for all application alerts.
@@ -68,16 +73,22 @@ def create_alert(
     if exception:
         if isinstance(exception, ValidationError):
             # Automatically unpack Pydantic errors if the raw exception is passed
-            points = [err['msg'] for err in exception.errors()]
-            children.append(html.Ul([html.Li(pt) for pt in points], className="mt-2 mb-0"))
+            points = [err["msg"] for err in exception.errors()]
+            children.append(
+                html.Ul([html.Li(pt) for pt in points], className="mt-2 mb-0")
+            )
         else:
             # Handle standard Python Exceptions or raw strings
             err_msg = str(exception)
-            children.append(html.P(f"Details: {err_msg}", className="small text-muted mt-2 mb-0"))
+            children.append(
+                html.P(f"Details: {err_msg}", className="small text-muted mt-2 mb-0")
+            )
 
     # 3. Handle manual bullet points if explicitly passed instead of an exception
     if bullet_points:
-        children.append(html.Ul([html.Li(pt) for pt in bullet_points], className="mt-2 mb-0"))
+        children.append(
+            html.Ul([html.Li(pt) for pt in bullet_points], className="mt-2 mb-0")
+        )
 
     return dbc.Alert(children, color=color, className="mt-3")
 
@@ -88,6 +99,7 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
     type tags, hydrates them into a composite StitchingConfig target model, and
     injects the resulting instance as a named keyword argument.
     """
+
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
@@ -97,7 +109,7 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
                 UIConstants.TYPE_ACQ_CFG_FIELD: {},
                 UIConstants.TYPE_MESH_CFG_FIELD: {},
                 UIConstants.TYPE_WARP_CFG_FIELD: {},
-                UIConstants.TYPE_MASK_CFG_FIELD: {}
+                UIConstants.TYPE_MASK_CFG_FIELD: {},
             }
 
             # 2. Linear payload harvest loop
@@ -106,11 +118,11 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
                     continue
                 items = state_group if isinstance(state_group, list) else [state_group]
                 for item in items:
-                    comp_id = item.get('id')
+                    comp_id = item.get("id")
                     if isinstance(comp_id, dict):
-                        id_type = comp_id.get('type')
+                        id_type = comp_id.get("type")
                         if id_type in form_payloads:
-                            form_payloads[id_type][comp_id['index']] = item.get('value')
+                            form_payloads[id_type][comp_id["index"]] = item.get("value")
 
             try:
                 # 3. Data Cleansing & Normalization Utilities
@@ -142,7 +154,9 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
                 warp_instance = WarpConfigStitching(**raw_warp)
 
                 # Boundary Masking Context
-                mask_instance = MaskingConfig(**clean(form_payloads[UIConstants.TYPE_MASK_CFG_FIELD]))
+                mask_instance = MaskingConfig(
+                    **clean(form_payloads[UIConstants.TYPE_MASK_CFG_FIELD])
+                )
 
                 # Acquisition Context & Top-Level Field Separation
                 raw_acq = clean(form_payloads[UIConstants.TYPE_ACQ_CFG_FIELD])
@@ -163,7 +177,7 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
                     registration_config=reg_instance,
                     mesh_integration_config=mesh_instance,
                     warp_config=warp_instance,
-                    mask_config=mask_instance
+                    mask_config=mask_instance,
                 )
 
             except Exception as e:
@@ -176,4 +190,5 @@ def parse_stitch_configuration(param_name: str = "stitch_config"):
             return func(*args, **kwargs)
 
         return wrapper
+
     return decorator

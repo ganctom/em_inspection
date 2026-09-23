@@ -8,14 +8,15 @@ from em_inspection.inspection_utils_refactor import read_coarse_mat, CoarseData
 
 # --- FIXTURES (Setup code) ---
 
+
 @pytest.fixture
 def sample_npz(tmp_path):
     """Creates a temporary .npz file for testing."""
     path = tmp_path / "test_data.npz"
     data = {
-        'cx': np.array([1, 2]),
-        'cy': np.array([3, 4]),
-        'coarse_mesh': np.array([[10, 20], [30, 40]])
+        "cx": np.array([1, 2]),
+        "cy": np.array([3, 4]),
+        "coarse_mesh": np.array([[10, 20], [30, 40]]),
     }
     np.savez(path, **data)
     return path, data
@@ -25,8 +26,8 @@ def sample_npz(tmp_path):
 def sample_json(tmp_path):
     """Creates a temporary .json file for testing."""
     path = tmp_path / "test_data.json"
-    data = {'cx': [[1, 2]], 'cy': [[3, 4]]}
-    with open(path, 'w') as f:
+    data = {"cx": [[1, 2]], "cy": [[3, 4]]}
+    with open(path, "w") as f:
         json.dump(data, f)
     return path, data
 
@@ -56,19 +57,21 @@ def test_read_real_gold_standard():
     # Define as a real Python list of lists
     x_cx = [
         [-220.0, -205.0, -211.0, -258.0, np.nan, np.nan],
-        [-275.0, -206.0, -211.0, -207.0, -213.0, np.nan]
+        [-275.0, -206.0, -211.0, -207.0, -213.0, np.nan],
     ]
 
     y_cx = [
         [-31.0, -38.0, -46.0, 24.0, np.nan, np.nan],
-        [27.0, -38.0, -42.0, -27.0, -30.0, np.nan]
+        [27.0, -38.0, -42.0, -27.0, -30.0, np.nan],
     ]
 
     expected_list = [x_cx, y_cx]  # Result is (2, 2, 6)
     expected_cx = np.array(expected_list, dtype=np.float64)
 
     # Use atol (absolute tolerance) in addition to rtol for safer float comparison
-    np.testing.assert_allclose(data.cx, expected_cx, equal_nan=True, rtol=1e-7, atol=1e-8)
+    np.testing.assert_allclose(
+        data.cx, expected_cx, equal_nan=True, rtol=1e-7, atol=1e-8
+    )
 
 
 def test_solid_refactor_read_coarse_mat(sample_npz):
@@ -79,8 +82,8 @@ def test_solid_refactor_read_coarse_mat(sample_npz):
     result = read_coarse_mat(path)
 
     assert isinstance(result, CoarseData)
-    np.testing.assert_array_equal(result.cx, expected_data['cx'])
-    np.testing.assert_array_equal(result.coarse_mesh, expected_data['coarse_mesh'])
+    np.testing.assert_array_equal(result.cx, expected_data["cx"])
+    np.testing.assert_array_equal(result.coarse_mesh, expected_data["coarse_mesh"])
 
 
 def test_json_loading(sample_json):
@@ -90,4 +93,3 @@ def test_json_loading(sample_json):
 
     assert result.coarse_mesh is None
     assert result.cx.shape == (1, 2)
-

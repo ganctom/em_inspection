@@ -11,7 +11,13 @@ from sofima.mesh import IntegrationConfig
 
 from em_inspection.Section_refactored import CoarseStitchConfig, Section
 from em_inspection.interactive_inspector.constants import Task, UI
-from em_inspection.inspection_utils_refactor import parse_section_range, validate_section_numbers, make_hashable_params, save_img, get_tile_dicts
+from em_inspection.inspection_utils_refactor import (
+    parse_section_range,
+    validate_section_numbers,
+    make_hashable_params,
+    save_img,
+    get_tile_dicts,
+)
 from em_inspection.parameter_config import StitchingConfig, RegistrationConfig
 
 # Compile-time constants
@@ -24,6 +30,7 @@ class TaskHandler(ABC):
         """Standard execution interface for all pipeline steps."""
         pass
 
+
 class TaskRegistry:
     _registry: dict[Task, TaskHandler] = {}
 
@@ -32,6 +39,7 @@ class TaskRegistry:
         def decorator(handler_cls: type[TaskHandler]):
             cls._registry[task_key] = handler_cls()
             return handler_cls
+
         return decorator
 
     @classmethod
@@ -61,6 +69,7 @@ class CoarseMeshHandler(TaskHandler):
         )
         section.compute_coarse_mesh(conf=cfg, overwrite=True)
 
+
 @TaskRegistry.register(Task.MARGIN_MASKS)
 class MarginMasksHandler(TaskHandler):
     def run(self, section: Section, config: StitchingConfig):
@@ -68,8 +77,9 @@ class MarginMasksHandler(TaskHandler):
             grid_shape=config.acquisition_config.grid_shape,
             margin=config.mask_config.mask_margin,
             rim_size=config.mask_config.rim_size,
-            overwrite=True
+            overwrite=True,
         )
+
 
 @TaskRegistry.register(Task.FINE_FLOWS)
 class FineFlowsHandler(TaskHandler):
@@ -83,13 +93,15 @@ class FineFlowsHandler(TaskHandler):
             ext=None,
         )
 
+
 @TaskRegistry.register(Task.FINE_MESH)
 class FineMeshHandler(TaskHandler):
     def run(self, section: Section, config: StitchingConfig):
         section.compute_fine_mesh(
             reg_config=config.registration_config,
-            mesh_config=config.mesh_integration_config
+            mesh_config=config.mesh_integration_config,
         )
+
 
 @TaskRegistry.register(Task.WARP_SECTION)
 class WarpSectionHandler(TaskHandler):
@@ -98,6 +110,7 @@ class WarpSectionHandler(TaskHandler):
             stride=config.mesh_integration_config.stride,
             config=config.warp_config,
         )
+
 
 @TaskRegistry.register(Task.DOWNSCALE_SECTION)
 class DownscaleHandler(TaskHandler):
@@ -115,6 +128,7 @@ class DownscaleHandler(TaskHandler):
 # Custom exception to handle controlled worker failures
 class RuntimePipelineError(Exception):
     """Raised when a section worker pipeline task fails downstream."""
+
     pass
 
 
@@ -123,17 +137,19 @@ class PipelineOrchestrator:
         self.ppln_service = dat_service
 
     def run_sequential_pipeline(
-            self,
-            section_numbers: list[int],
-            selected_tasks: list[Task],
-            config: StitchingConfig,
+        self,
+        section_numbers: list[int],
+        selected_tasks: list[Task],
+        config: StitchingConfig,
     ):
-        self.ppln_service.stitch_status.update({
-            "active": True,
-            "progress": 0,
-            "error": None,
-            "message": "Initializing Pipeline..."
-        })
+        self.ppln_service.stitch_status.update(
+            {
+                "active": True,
+                "progress": 0,
+                "error": None,
+                "message": "Initializing Pipeline...",
+            }
+        )
         self.ppln_service.abort_requested = False
 
         ordered_tasks = [t for t in Task.get_master_order() if t in selected_tasks]
@@ -152,7 +168,9 @@ class PipelineOrchestrator:
             self.ppln_service.stitch_status["pending_messages"].append(
                 UI.log_row(f"✅ [{s_id}] {task_name} complete", type="info")
             )
-            progress_pct = int((current_work / total_work) * 100) if total_work > 0 else 0
+            progress_pct = (
+                int((current_work / total_work) * 100) if total_work > 0 else 0
+            )
             self.ppln_service.stitch_status["progress"] = progress_pct
 
         try:
@@ -165,36 +183,41 @@ class PipelineOrchestrator:
                 if not section_path:
                     continue
 
-                self.ppln_service.stitch_status["message"] = f"s{sec_num}: Processing tasks..."
+                self.ppln_service.stitch_status["message"] = (
+                    f"s{sec_num}: Processing tasks..."
+                )
 
                 _, success, message = section_worker_wrapper(
                     section_path=section_path,
                     task_keys=ordered_tasks,
                     config=config,
-                    on_task_complete=handle_task_success
+                    on_task_complete=handle_task_success,
                 )
 
                 if not success:
                     self.ppln_service.stitch_status["pending_messages"].append(
-                        UI.log_row(f"❌ [{Path(section_path).name}] {message}", type="error")
+                        UI.log_row(
+                            f"❌ [{Path(section_path).name}] {message}", type="error"
+                        )
                     )
                     pipeline_failed = True
                     last_error_msg = message
                     break
 
             if pipeline_failed:
-                self.ppln_service.stitch_status.update({
-                    "error": last_error_msg,
-                    "message": f"Pipeline Failed at s{sec_num}"
-                })
+                self.ppln_service.stitch_status.update(
+                    {
+                        "error": last_error_msg,
+                        "message": f"Pipeline Failed at s{sec_num}",
+                    }
+                )
                 self.ppln_service.stitch_status["pending_messages"].append(
                     UI.log_row(f"PIPELINE HALTED AT SECTION {sec_num}", type="error")
                 )
             else:
-                self.ppln_service.stitch_status.update({
-                    "progress": 100,
-                    "message": "Pipeline Finished Successfully."
-                })
+                self.ppln_service.stitch_status.update(
+                    {"progress": 100, "message": "Pipeline Finished Successfully."}
+                )
                 self.ppln_service.stitch_status["pending_messages"].append(
                     UI.log_row("🏁 ALL STITCHING TASKS COMPLETE", type="success")
                 )
@@ -205,12 +228,11 @@ class PipelineOrchestrator:
         finally:
             self.ppln_service.stitch_status["active"] = False
 
-
     def run_parallel_pipeline(
-            self,
-            section_numbers: list[int],
-            selected_tasks: list[Task],
-            stitch_config: StitchingConfig,
+        self,
+        section_numbers: list[int],
+        selected_tasks: list[Task],
+        stitch_config: StitchingConfig,
     ):
         """
         Executes sections in parallel. Fixes the unfilled ParamSpec warning.
@@ -228,8 +250,9 @@ class PipelineOrchestrator:
                     self.ppln_service.get_sec_path(n),
                     ordered_tasks,
                     stitch_config,
-                    None  # Fills the on_task_complete positional/keyword slot
-                ): n for n in section_numbers
+                    None,  # Fills the on_task_complete positional/keyword slot
+                ): n
+                for n in section_numbers
             }
 
             for i, future in enumerate(as_completed(future_to_sec)):
@@ -247,24 +270,26 @@ class PipelineOrchestrator:
                         )
                     else:
                         self.ppln_service.stitch_status["pending_messages"].append(
-                            UI.log_row(f"❌ Section {sec_num} failed: {message}", type="error")
+                            UI.log_row(
+                                f"❌ Section {sec_num} failed: {message}", type="error"
+                            )
                         )
                 except Exception as e:
                     self.ppln_service.stitch_status["pending_messages"].append(
                         UI.log_row(f"💥 Section {sec_num} crashed: {e}", type="error")
                     )
 
-                self.ppln_service.stitch_status["progress"] = int(((i + 1) / len(section_numbers)) * 100)
+                self.ppln_service.stitch_status["progress"] = int(
+                    ((i + 1) / len(section_numbers)) * 100
+                )
 
         self.ppln_service.stitch_status["active"] = False
-
 
     def _handle_abort(self):
         self.ppln_service.stitch_status["message"] = "Pipeline Aborted by User"
         self.ppln_service.stitch_status["pending_messages"].append(
             UI.log_row("🛑 Pipeline Aborted", type="warning")
         )
-
 
     def _handle_failure(self, e, sec_num):
         if isinstance(e, RuntimePipelineError):
@@ -273,19 +298,17 @@ class PipelineOrchestrator:
             error_details = f"Unexpected runtime crash: {str(e)}"
 
         logging.error(f"Pipeline Failure at Section {sec_num}: {error_details}")
-        self.ppln_service.stitch_status.update({
-            "error": error_details,
-            "message": f"Pipeline Failed at s{sec_num}"
-        })
+        self.ppln_service.stitch_status.update(
+            {"error": error_details, "message": f"Pipeline Failed at s{sec_num}"}
+        )
         self.ppln_service.stitch_status["pending_messages"].append(
-            UI.log_row(f"❌ CRITICAL ERROR: Section {sec_num} - {error_details}", type="error")
+            UI.log_row(
+                f"❌ CRITICAL ERROR: Section {sec_num} - {error_details}", type="error"
+            )
         )
 
     def validate_and_prepare(
-            self,
-            range_str: str,
-            config_path,
-            stitch_config: StitchingConfig | None = None
+        self, range_str: str, config_path, stitch_config: StitchingConfig | None = None
     ) -> tuple[list[int], StitchingConfig]:
         """Logic-only: Validates sections and prepares params."""
         if not self.ppln_service.exp_config:
@@ -294,7 +317,7 @@ class PipelineOrchestrator:
         # 1. Section Validation
         first = self.ppln_service.exp_config.first_sec
         last = self.ppln_service.exp_config.last_sec
-        if str(range_str).lower() == 'all':
+        if str(range_str).lower() == "all":
             sec_nums = list(range(first, last + 1))
         else:
             sec_nums_req = parse_section_range(range_str)
@@ -309,17 +332,11 @@ class PipelineOrchestrator:
 
         # Fallback to legacy path only if no pre-validated schema context is passed
         stitching_config = self.ppln_service.prepare_stitching_params(
-            config_path=config_path,
-            ui_params=None
+            config_path=config_path, ui_params=None
         )
         return sec_nums, stitching_config
 
-
-    def start_coarse_align(
-            self,
-            sec_nums: list[int],
-            reg_cfg: RegistrationConfig
-    ):
+    def start_coarse_align(self, sec_nums: list[int], reg_cfg: RegistrationConfig):
         """Launches the thread via DataService."""
 
         reg_params = CoarseStitchConfig(
@@ -335,7 +352,7 @@ class PipelineOrchestrator:
         thread = threading.Thread(
             target=self.ppln_service.run_coarse_align_thread,
             args=(sec_nums, reg_params),
-            daemon=True
+            daemon=True,
         )
         thread.start()
         return thread
@@ -349,10 +366,10 @@ def load_section(path: str | Path) -> Section:
 
 
 def section_worker_wrapper(
-        section_path: str,
-        task_keys: list[Task],
-        config: StitchingConfig,
-        on_task_complete: Callable[[str, str], None] | None = None,
+    section_path: str,
+    task_keys: list[Task],
+    config: StitchingConfig,
+    on_task_complete: Callable[[str, str], None] | None = None,
 ) -> tuple[str, bool, str]:
 
     section = None

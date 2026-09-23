@@ -25,7 +25,11 @@ from typing import Union, Optional, Any, Dict, Tuple, Iterable
 import em_inspection.experiment_configs as cfg
 import em_inspection.inspection_utils_refactor as utils
 import em_inspection.mask_utils as mutils
-from em_inspection.parameter_config import WarpConfigStitching, MeshIntegrationConfig, RegistrationConfig
+from em_inspection.parameter_config import (
+    WarpConfigStitching,
+    MeshIntegrationConfig,
+    RegistrationConfig,
+)
 from em_inspection.schema import InspectionSchema as IS
 from em_inspection.Tile_refactored import Tile
 
@@ -37,7 +41,9 @@ logging.basicConfig(level=logging.DEBUG)
 
 UniPath = Union[str, Path]
 TileXY = tuple[int, int]
-Vector = Union[tuple[int, int], tuple[int, int, int], Union[tuple[int], tuple[Any, ...]]]  # [z]yx order
+Vector = Union[
+    tuple[int, int], tuple[int, int, int], Union[tuple[int], tuple[Any, ...]]
+]  # [z]yx order
 GridXY = tuple[Any, Any, Any]
 TileFlow = Dict[TileXY, np.ndarray]
 TileOffset = Dict[TileXY, Vector]
@@ -51,10 +57,13 @@ MarginOverrides = Dict[TileXY, Tuple[int, int, int, int]]
 
 class DataServiceError(Exception):
     """Base exception for the entire data service domain."""
+
     pass
+
 
 class SectionInfrastructureError(DataServiceError):
     """Raised when critical section files are missing or corrupted."""
+
     def __init__(self, section_num: int, message: str):
         self.section_num = section_num
         super().__init__(f"[Section {section_num}] {message}")
@@ -66,9 +75,11 @@ def cached_read_image(path: str):
     # it returns the numpy array from RAM instantly.
     return skimage.io.imread(path)
 
+
 @dataclass(frozen=False)
 class CoarseStitchConfig:
     """Encapsulates hyper-parameters for rigid stitching alignment."""
+
     overlaps_xy: Tuple[Tuple[int, ...], Tuple[int, ...]] = ((200, 300), (200, 300))
     min_range: Tuple[int, ...] = (10, 100, 0)
     min_overlap: int = 20
@@ -83,6 +94,7 @@ class CoarseStitchConfig:
             "clip_limit": self.clip_limit,
             "kernel_size": self.kernel_size,
         }
+
 
 class Section:
     def __init__(self, path: Union[Path, str]):
@@ -109,7 +121,9 @@ class Section:
         self.mesh_offsets: Optional[np.ndarray[float]] = None
         self.cxy: Optional[np.ndarray[float]] = None
         self.coarse_mesh: Optional[np.ndarray[float]] = None
-        self.fflows: Optional[FineFlows] = None  # flow array is 4-dim (y, x, peak sharpness, peak ratio)
+        self.fflows: Optional[FineFlows] = (
+            None  # flow array is 4-dim (y, x, peak sharpness, peak ratio)
+        )
         self.fflows_recon: Optional[FineFlows] = None  # flow array is 2-dim (y, x)
         self.fmesh: Dict[TileXY, np.ndarray] | None = None
 
@@ -131,17 +145,16 @@ class Section:
             self.read_tile_id_map()
         return self.tile_id_map.shape
 
-
     def resolve_dir_stitched(self) -> Path:
-        return self.path.parent.parent / IS.DIR_STITCHED / (str(self.path.name) + ".zarr")
-
+        return (
+            self.path.parent.parent / IS.DIR_STITCHED / (str(self.path.name) + ".zarr")
+        )
 
     def feed_section_data(self):
         self.tile_dicts = utils.get_tile_dicts(self.path)
         self.read_tile_id_map()
         _ = self.get_coarse_mat()
         return
-
 
     def get_coarse_mat(self) -> Optional[np.ndarray]:
         """
@@ -157,7 +170,7 @@ class Section:
             data = utils.read_coarse_mat(path)
 
             # Most common failure modes guarded here
-            if not hasattr(data, 'cx') or not hasattr(data, 'cy'):
+            if not hasattr(data, "cx") or not hasattr(data, "cy"):
                 raise ValueError("Coarse data missing 'cx' or 'cy' attribute")
 
             cx = data.cx
@@ -174,15 +187,18 @@ class Section:
             )
             return None
 
-
     def resolve_path_thumb(self) -> str:
-        ext = f'_mini.jpg'
+        ext = f"_mini.jpg"
         name_end = "_" + str(self.path.name).split("_")[1]
         zfilled = str(self.section_num).zfill(5)
         new_name = "s" + zfilled + name_end
-        thumb_fn = self.path.parent.parent / IS.DIR_INSPECTION / IS.DIR_DOWNSCALED / (new_name + ext)
+        thumb_fn = (
+            self.path.parent.parent
+            / IS.DIR_INSPECTION
+            / IS.DIR_DOWNSCALED
+            / (new_name + ext)
+        )
         return str(thumb_fn)
-
 
     def verify_tile_id_map(self, print_ids: bool = False) -> bool:
 
@@ -190,7 +206,9 @@ class Section:
         yaml_tile_ids: set[int] = set(utils.get_tile_ids_from_yaml(self.path))
 
         if not yaml_tile_ids:
-            logging.warning(f'Verify tile_id_map: No tile IDs found in section .yaml file.')
+            logging.warning(
+                f"Verify tile_id_map: No tile IDs found in section .yaml file."
+            )
             return False
 
         # Get tile IDs form section tile_id_map.json
@@ -198,7 +216,9 @@ class Section:
             self.read_tile_id_map()
 
         if not isinstance(self.tile_id_map, np.ndarray):
-            logging.warning(f'Verify tile_id_map: No tile IDs found in section tile_id_map.json')
+            logging.warning(
+                f"Verify tile_id_map: No tile IDs found in section tile_id_map.json"
+            )
             return False
 
         map_ids = set(np.unique(self.tile_id_map))
@@ -210,22 +230,25 @@ class Section:
 
         return eq
 
-
     @staticmethod
     def _log_id_mismatch(sec_num, yaml_tile_ids, tile_id_map_ids):
         ids = yaml_tile_ids.symmetric_difference(tile_id_map_ids)
-        logging.warning(f'section s{sec_num} yaml tile IDs: {sorted(list(yaml_tile_ids))}')
-        logging.warning(f'section s{sec_num} tile_id_map IDs: {sorted(list(tile_id_map_ids))}')
-        logging.warning(f'missing s{sec_num} tile ids: {sorted(list(ids))}')
-
+        logging.warning(
+            f"section s{sec_num} yaml tile IDs: {sorted(list(yaml_tile_ids))}"
+        )
+        logging.warning(
+            f"section s{sec_num} tile_id_map IDs: {sorted(list(tile_id_map_ids))}"
+        )
+        logging.warning(f"missing s{sec_num} tile ids: {sorted(list(ids))}")
 
     def read_tile_id_map(self) -> None:
         fp = self.path / IS.FILE_TILE_ID_MAP
         try:
             self.tile_id_map = utils.get_tile_id_map(fp)
         except (FileNotFoundError, ValueError) as e:
-            logging.error(f"Failed to load tile-id map for section {self.section_num}: {e}")
-
+            logging.error(
+                f"Failed to load tile-id map for section {self.section_num}: {e}"
+            )
 
     def downscale_section(self, factor: float) -> Optional[np.ndarray]:
         """Downscale the section/image by the specified factor and store as thumbnail."""
@@ -246,47 +269,46 @@ class Section:
             logging.error(f"Downscaling failed: {e}")
             return None
 
-
     def load_image(self) -> Optional[np.ndarray]:
 
-        if self.path.resolve().suffix == '.tif':
+        if self.path.resolve().suffix == ".tif":
             data = cached_read_image(str(self.path))
 
-        elif self.path.resolve().suffix == '.zarr':
-            fp = self.path / '0'
-            logging.info(f'Loading: {fp}')
+        elif self.path.resolve().suffix == ".zarr":
+            fp = self.path / "0"
+            logging.info(f"Loading: {fp}")
             data = utils.read_zarr_volume(fp)
         else:
-            logging.info(f'Loading: {self.path_stitched}')
+            logging.info(f"Loading: {self.path_stitched}")
             data = utils.read_zarr_volume(self.path_stitched)
 
         if data is None:
-            logging.warning(f'Load image: failed to load s{self.section_num}.')
+            logging.warning(f"Load image: failed to load s{self.section_num}.")
             return None
 
-        self.image = np.asarray(data['0'])
+        self.image = np.asarray(data["0"])
 
         try:
             self.height, self.width = self.image.shape
         except ValueError as _:
-            logging.warning(f'Loading s{self.section_num} image-data failed: Wrong image dimensionality.')
+            logging.warning(
+                f"Loading s{self.section_num} image-data failed: Wrong image dimensionality."
+            )
             return None
 
-        logging.info(f'Image of section s{self.section_num} loaded.')
+        logging.info(f"Image of section s{self.section_num} loaded.")
         return self.image
-
 
     def close_resource(self):
         """Explicitly drop references to Zarr arrays to close background threads."""
         try:
-            if hasattr(self.image, 'store'):
+            if hasattr(self.image, "store"):
                 self.image.store.close()
         except:
             pass
         self.image = None
         # Force a small sleep to allow asyncio loop to heartbeat
         time.sleep(0.1)
-
 
     def get_coarse_mesh_offset(self, tile_id: int, axis: int = 0) -> Optional[Vector]:
         if self.tile_id_map is None:
@@ -302,15 +324,14 @@ class Section:
 
         # Convert to a tuple of integers, handling np.nans
         co = tuple(int(x) if not (np.isinf(x) | np.isnan(x)) else x for x in co)
-        logging.debug(f'tile_id_map: {self.tile_id_map}')
-        logging.debug(f'y, x: {y, x}')
-        logging.debug(f'loaded offset: {co}')
+        logging.debug(f"tile_id_map: {self.tile_id_map}")
+        logging.debug(f"y, x: {y, x}")
+        logging.debug(f"loaded offset: {co}")
         return co
-
 
     def load_coarse_mesh(self) -> None:
         try:
-            with open(self.path_cmesh, 'rb') as f:
+            with open(self.path_cmesh, "rb") as f:
                 self.coarse_mesh = pickle.load(f)
             logging.info(f"s{self.section_num} coarse mesh loaded")
         except EOFError:
@@ -320,16 +341,15 @@ class Section:
         except Exception as e:
             print(f"An error occurred while reading cmesh {self.path_cmesh}: {e}")
 
-
     def build_margin_masks(
-            self,
-            grid_shape: tuple[int, int],
-            margin: int = 20,
-            rim_size: int = 60,
-            overwrite: bool = False,
-            mesh_config: Optional[mesh.IntegrationConfig] = None
+        self,
+        grid_shape: tuple[int, int],
+        margin: int = 20,
+        rim_size: int = 60,
+        overwrite: bool = False,
+        mesh_config: Optional[mesh.IntegrationConfig] = None,
     ) -> None:
-        """ Creates masks for section rendering.
+        """Creates masks for section rendering.
 
         Margin masks allow to render overlap regions with better quality. Charging
         and deformations are most often related to multiple-exposed regions. Margin
@@ -344,12 +364,12 @@ class Section:
         """
 
         def _tile_mask_junction(
-                tile_id: int,
-                row_is_odd: bool,
-                grid: np.ndarray,
-                rim: int,
-                min_rim: int = 5,
-                n_smr_lines: int = 40
+            tile_id: int,
+            row_is_odd: bool,
+            grid: np.ndarray,
+            rim: int,
+            min_rim: int = 5,
+            n_smr_lines: int = 40,
         ) -> Optional[np.ndarray[bool]]:
             """Create tile mask for rendering
 
@@ -394,11 +414,11 @@ class Section:
                     if dy >= 0:
                         dyy = int(-dy - rim)
                         dyr = dyy if abs(dyy) > min_rim else -min_rim
-                        mask[:dyr, :abs(dx)] = False
+                        mask[:dyr, : abs(dx)] = False
                     else:
                         dyy = int(abs(dy) + rim)
                         dyr = dyy if dyy > min_rim else min_rim
-                        mask[dyr:, :abs(dx)] = False
+                        mask[dyr:, : abs(dx)] = False
 
             # Set the top tile-edges mask
 
@@ -431,12 +451,12 @@ class Section:
                 if dx >= 0:
                     dxr = int(dx + rim) if int(dx + rim) != 0 else min_rim
                     # print(f'tile_id: {tile_id} dxr-: {dxr} dxy: {dx},{dy}')
-                    mask[:abs(dy), :-dxr] = False
+                    mask[: abs(dy), :-dxr] = False
 
                 else:
                     dxr = int(abs(dx) + rim) if int(abs(dx) + rim) != 0 else min_rim
                     # print(f'tile_id: {tile_id} dxr-: {dxr} dxy: {dx},{dy}')
-                    mask[:abs(dy), dxr:] = False
+                    mask[: abs(dy), dxr:] = False
 
             return mask
 
@@ -457,20 +477,26 @@ class Section:
                 row, col = indices[0][0], indices[1][0]
                 odd_row = row % 2 != 0  # Checking for odd row directly
 
-                self.margin_masks[tile_xy] = _tile_mask_junction(tile_id, odd_row, sbem_grid, rim)
+                self.margin_masks[tile_xy] = _tile_mask_junction(
+                    tile_id, odd_row, sbem_grid, rim
+                )
             return
 
         def _store_margin_masks():
             if self.margin_masks is None:
-                logging.warning(f's{self.section_num} skipping storing None margin masks.')
+                logging.warning(
+                    f"s{self.section_num} skipping storing None margin masks."
+                )
                 return
             data = {str(k): v for k, v in self.margin_masks.items()}
-            logging.debug(f'Storing margin masks to: {self.path_margin_masks}')
+            logging.debug(f"Storing margin masks to: {self.path_margin_masks}")
             np.savez_compressed(self.path_margin_masks, **data)
             return
 
         if Path(self.path_margin_masks).exists() and not overwrite:
-            print('Skipping margin mask computation. File exists and overwriting is disabled.')
+            print(
+                "Skipping margin mask computation. File exists and overwriting is disabled."
+            )
             self.margin_masks = utils.load_mapped_npz(self.path_margin_masks)
             return
 
@@ -484,7 +510,9 @@ class Section:
             self.build_mesh_offsets(mesh_config=mesh_config, overwrite=False)
 
         if self.mesh_offsets is None:
-            logging.warning(f'Section s{self.section_num} mesh offsets could not be computed.')
+            logging.warning(
+                f"Section s{self.section_num} mesh offsets could not be computed."
+            )
             return
 
         tile_space = utils.build_tiles_coords(self.tile_id_map)
@@ -492,11 +520,10 @@ class Section:
         _store_margin_masks()
         return
 
-
     def build_mesh_offsets(
-            self,
-            mesh_config: Optional[mesh.IntegrationConfig] = None,
-            overwrite: Optional[bool] = True
+        self,
+        mesh_config: Optional[mesh.IntegrationConfig] = None,
+        overwrite: Optional[bool] = True,
     ) -> None:
         """Creates coarse offset matrix from coarse mesh values
 
@@ -507,9 +534,15 @@ class Section:
 
         def diff_mat(mat: np.ndarray, row_mode=False) -> np.ndarray:
             if row_mode:
-                result = [[np.round(mat[i][j] - mat[i - 1][j]) for j in range(len(mat[i]))] for i in range(1, len(mat))]
+                result = [
+                    [np.round(mat[i][j] - mat[i - 1][j]) for j in range(len(mat[i]))]
+                    for i in range(1, len(mat))
+                ]
             else:
-                result = [[np.round(mat[i][j] - mat[i][j - 1]) for j in range(1, len(mat[i]))] for i in range(len(mat))]
+                result = [
+                    [np.round(mat[i][j] - mat[i][j - 1]) for j in range(1, len(mat[i]))]
+                    for i in range(len(mat))
+                ]
             return np.array(result)
 
         def make_mesh_offsets() -> Optional[np.ndarray]:
@@ -546,8 +579,9 @@ class Section:
         self.mesh_offsets = make_mesh_offsets()
         return
 
-
-    def compute_coarse_mesh(self, conf: Optional[mesh.IntegrationConfig] = None, store=True, overwrite=False) -> None:
+    def compute_coarse_mesh(
+        self, conf: Optional[mesh.IntegrationConfig] = None, store=True, overwrite=False
+    ) -> None:
 
         if conf is None:
             conf = mesh.IntegrationConfig(
@@ -565,11 +599,11 @@ class Section:
         if self.check_and_load_coarse_mesh() and not overwrite:
             return
 
-        logging.info('Computing coarse mesh ...')
+        logging.info("Computing coarse mesh ...")
         try:
             cx, cy = self.get_coarse_mat()
         except TypeError as _:
-            logging.warning(f's{self.section_num} coarse mesh not computed')
+            logging.warning(f"s{self.section_num} coarse mesh not computed")
             return
 
         if cx.ndim != 4:
@@ -579,14 +613,13 @@ class Section:
         self.coarse_mesh = stitch_rigid.optimize_coarse_mesh(cx, cy, conf)
 
         if self.coarse_mesh is None:
-            logging.warning(f'Section s{self.section_num} coarse mesh not computed.')
+            logging.warning(f"Section s{self.section_num} coarse mesh not computed.")
         elif store:
-            logging.info(f'Storing coarse mesh.')
-            with open(self.path_cmesh, 'wb') as f:
+            logging.info(f"Storing coarse mesh.")
+            with open(self.path_cmesh, "wb") as f:
                 pickle.dump(self.coarse_mesh, f)
 
         return
-
 
     def check_and_load_coarse_mesh(self) -> bool:
         try:
@@ -597,9 +630,10 @@ class Section:
                 logging.info(f"File '{self.path_cmesh}' does not exist.")
                 return False
         except Exception as e:
-            logging.error(f"An error occurred while checking and loading '{self.path_cmesh}': {e}")
+            logging.error(
+                f"An error occurred while checking and loading '{self.path_cmesh}': {e}"
+            )
             return False
-
 
     def get_coarse_offset(self, tile_id: int, axis: int) -> Optional[Vector]:
         if self.tile_id_map is None:
@@ -611,33 +645,37 @@ class Section:
             y, x = int(coord[0][0]), int(coord[1][0])
             co = self.cxy[axis, :, y, x]
         except TypeError:
-            logging.warning(f'Coarse offset s{self.section_num} t{tile_id} not defined!')
+            logging.warning(
+                f"Coarse offset s{self.section_num} t{tile_id} not defined!"
+            )
             return None
         except IndexError:
-            logging.warning(f'Coarse offset could not be retrieved: s{self.section_num} t{tile_id} axis: {axis}')
+            logging.warning(
+                f"Coarse offset could not be retrieved: s{self.section_num} t{tile_id} axis: {axis}"
+            )
             return None
 
         # Convert to a tuple of integers, handling np.nans
         co = tuple(int(x) if not (np.isinf(x) | np.isnan(x)) else x for x in co)
 
-        logging.debug(f'tile_id_map: {self.tile_id_map}')
-        logging.debug(f'y, x: {y, x}')
-        logging.info(f'Loaded coarse offset: {co}')
+        logging.debug(f"tile_id_map: {self.tile_id_map}")
+        logging.debug(f"y, x: {y, x}")
+        logging.info(f"Loaded coarse offset: {co}")
         return co
 
-    def plot_ov(self,
-                tid_a: int,
-                tid_b: int,
-                shift_vec: Optional[Vector] = None,
-                dir_out: Optional[UniPath] = None,
-                blur: float = 0,
-                show_plot=False,
-                clahe=False,
-                rotate_vert=False,
-                store_to_root=False,
-                return_img: bool = False
-        ) -> Optional[np.ndarray]:
-
+    def plot_ov(
+        self,
+        tid_a: int,
+        tid_b: int,
+        shift_vec: Optional[Vector] = None,
+        dir_out: Optional[UniPath] = None,
+        blur: float = 0,
+        show_plot=False,
+        clahe=False,
+        rotate_vert=False,
+        store_to_root=False,
+        return_img: bool = False,
+    ) -> Optional[np.ndarray]:
         """Visualize overlap region of a tile-pair. Shift vector must be
         computed in advance.
 
@@ -665,7 +703,7 @@ class Section:
             self.feed_section_data()
 
         if tid_a not in self.tile_dicts or tid_b not in self.tile_dicts:
-            logging.info('plot_ov: wrong tile_ids specification')
+            logging.info("plot_ov: wrong tile_ids specification")
             return None
 
         # Fix ordering of tiles
@@ -703,7 +741,7 @@ class Section:
         # Get shift vector if not specified in input
         if shift_vec is None or None in shift_vec:
             shift_vec = utils.get_shift(self.cxy, self.tile_id_map, tid_a, axis)
-            logging.info(f's{self.section_num} loaded coarse offset: {shift_vec}')
+            logging.info(f"s{self.section_num} loaded coarse offset: {shift_vec}")
 
         # Visualize and store overlap image
         if shift_vec is None:
@@ -713,20 +751,24 @@ class Section:
         path_plot = None  # Do not store the OV image to HDD
         if dir_out is not None:
             dir_ov = Path(dir_out)
-            str_tid_a, str_tid_b = f't{tid_a:04d}', f't{tid_b:04d}'
+            str_tid_a, str_tid_b = f"t{tid_a:04d}", f"t{tid_b:04d}"
             if not store_to_root:
-                dir_ov = Path(dir_out) / f'{str_tid_a}_{str_tid_b}'
+                dir_ov = Path(dir_out) / f"{str_tid_a}_{str_tid_b}"
                 utils.create_directory(dir_ov)
 
             # Create plot filename
-            plot_name = f's{self.section_num:04d}_{str_tid_a}_{str_tid_b}_ov.jpg'
+            plot_name = f"s{self.section_num:04d}_{str_tid_a}_{str_tid_b}_ov.jpg"
             path_plot = str(dir_ov / plot_name)
-            logging.info(f'plotting: {path_plot}')
+            logging.info(f"plotting: {path_plot}")
 
         # Get stitched image
         img_pair = utils.plot_tile_pair(
-            tile_map, shift_vec, show_plot=False,
-            path_plot=None, blur=1.0, img_only=True
+            tile_map,
+            shift_vec,
+            show_plot=False,
+            path_plot=None,
+            blur=1.0,
+            img_only=True,
         )
 
         # Crop overlap from stitched image and save it
@@ -738,18 +780,15 @@ class Section:
                 show_plot,
                 blur,
                 rotate_vert,
-                return_array=return_img
+                return_array=return_img,
             )
             if return_img:
                 return ov_img
         return None
 
-    def load_image_pair(self,
-                        id_a: int,
-                        id_b: int,
-                        clahe: bool = True,
-                        blur_fct: float = 1.0
-                        ) -> Optional[tuple[Tile, Tile]]:
+    def load_image_pair(
+        self, id_a: int, id_b: int, clahe: bool = True, blur_fct: float = 1.0
+    ) -> Optional[tuple[Tile, Tile]]:
 
         if self.tile_dicts is None:
             self.feed_section_data()
@@ -760,21 +799,28 @@ class Section:
                 tile = Tile(self.tile_dicts[tid])
                 tile.load_image(clahe)
                 if blur_fct > 1:
-                    tile.img_data = skimage.filters.gaussian(tile.img_data, sigma=blur_fct)
+                    tile.img_data = skimage.filters.gaussian(
+                        tile.img_data, sigma=blur_fct
+                    )
                 tiles.append(tile)
             except KeyError:
-                logging.warning(f'Tile t{tid} not present in s{self.section_num}')
+                logging.warning(f"Tile t{tid} not present in s{self.section_num}")
                 return None
 
         return tuple(tiles)
 
+    def plot_tile_pair(
+        self,
+        tid_a: int,
+        tid_b: int,
+        clahe: bool = True,
+        shift_vec: Optional[Vector] = None,
+        masking=False,
+        blur: float = 1.0,
+        img_only=False,
+    ) -> None:
 
-
-    def plot_tile_pair(self, tid_a: int, tid_b: int, clahe: bool = True,
-                       shift_vec: Optional[Vector] = None, masking=False,
-                       blur: float = 1.0, img_only=False) -> None:
-
-        logging.info(f'Plotting t{tid_a}-t{tid_b} tiles')
+        logging.info(f"Plotting t{tid_a}-t{tid_b} tiles")
 
         assert tid_a != tid_b
         if self.tile_dicts is None:
@@ -782,7 +828,7 @@ class Section:
 
         tiles = self.load_image_pair(tid_a, tid_b, clahe=clahe)
         if tiles is None:
-            logging.warning('Tile reading failed')
+            logging.warning("Tile reading failed")
             return None
 
         a, b = tiles
@@ -792,14 +838,17 @@ class Section:
         # Get shift vector if not specified in input
         if shift_vec is None or None in shift_vec:
             shift_vec = utils.get_shift(self.cxy, self.tile_id_map, tid_a, axis)
-            logging.info(f's{self.section_num} loaded coarse offset: {shift_vec}')
+            logging.info(f"s{self.section_num} loaded coarse offset: {shift_vec}")
 
         if shift_vec is None:
-            print(f's{self.section_num} t{tid_a}_t{tid_b}: shift vector contains Inf value.')
+            print(
+                f"s{self.section_num} t{tid_a}_t{tid_b}: shift vector contains Inf value."
+            )
             shift_vec = (np.inf, np.inf)
 
         # Load and apply masks
         if masking:
+
             def apply_mask(image, mask):
                 modified = image.copy()
                 modified = modified.astype(np.float32)
@@ -828,14 +877,14 @@ class Section:
             tile_map[(1, 0)] = b.img_data
 
         # Create plot filename
-        str_sec = 's' + str(self.section_num).zfill(4)
-        plot_name = str_sec + '_' + str(tid_a) + '_' + str(tid_b) + '_ov.jpg'
+        str_sec = "s" + str(self.section_num).zfill(4)
+        plot_name = str_sec + "_" + str(tid_a) + "_" + str(tid_b) + "_ov.jpg"
         path_plot = str(self.path / plot_name)
 
-        _ = utils.plot_tile_pair(tile_map, shift_vec, show_plot=False,
-                                  blur=blur, path_plot=path_plot)
+        _ = utils.plot_tile_pair(
+            tile_map, shift_vec, show_plot=False, blur=blur, path_plot=path_plot
+        )
         return
-
 
     def load_masks(self):
         """Loads binary masks associated to each tile within section"""
@@ -846,7 +895,7 @@ class Section:
         for fn, i_map in zip(fns, maps):
             path_mask = self.path / fn
             if not path_mask.exists():
-                logging.info(f's{self.section_num} {fn} does not exist!')
+                logging.info(f"s{self.section_num} {fn} does not exist!")
                 continue
             try:
                 data = np.load(path_mask, allow_pickle=True)
@@ -859,12 +908,21 @@ class Section:
         # self.margin_masks = utils.load_mapped_npz(self.path_margin_masks)
         return
 
-    def refine_pyramid(self, tid_a: int, tid_b: int, masking: bool,
-                       levels: int, max_ext: int, stride: int, clahe: bool, store: bool,
-                       plot: bool, show_plot: bool, est_vec: Optional[Vector] = None,
-                       custom_mask_params=(0, 0, 0, 0)
-                       ) -> Optional[Vector]:
-
+    def refine_pyramid(
+        self,
+        tid_a: int,
+        tid_b: int,
+        masking: bool,
+        levels: int,
+        max_ext: int,
+        stride: int,
+        clahe: bool,
+        store: bool,
+        plot: bool,
+        show_plot: bool,
+        est_vec: Optional[Vector] = None,
+        custom_mask_params=(0, 0, 0, 0),
+    ) -> Optional[Vector]:
         """Refine the coarse offset vector between two tiles.
 
         Args:
@@ -885,23 +943,30 @@ class Section:
             Optional[Vector]: Refined offset vector if successful, else None.
 
         """
-        fmsg = f's{self.section_num:04d} t{tid_a}-t{tid_b}'
+        fmsg = f"s{self.section_num:04d} t{tid_a}-t{tid_b}"
 
         # Load image data and original coarse shift vector
         try:
             tile_map, _, is_vert, orig_co = self.get_masked_img_pair(
-                tid_a, tid_b, masking=masking, blur_fct=6.0, clahe=clahe,
-                shift_vec=None, custom_params=custom_mask_params
+                tid_a,
+                tid_b,
+                masking=masking,
+                blur_fct=6.0,
+                clahe=clahe,
+                shift_vec=None,
+                custom_params=custom_mask_params,
             )
             axis = 1 if is_vert else 0
         except TypeError as _:
-            print(f'Refine pyramid for {fmsg} failed: masked tile-pair could not be loaded.')
+            print(
+                f"Refine pyramid for {fmsg} failed: masked tile-pair could not be loaded."
+            )
             return None
 
         t1, t2 = Tile(self.tile_dicts[tid_a]), Tile(self.tile_dicts[tid_b])
         t1.img_data, t2.img_data = tile_map.values()
 
-        msg = f'{fmsg}: original shift vector: {orig_co}'
+        msg = f"{fmsg}: original shift vector: {orig_co}"
         logging.info(msg), print(msg)
 
         # Treat non-reliable offsets and estimate mean shift vector from neighboring sections
@@ -927,7 +992,9 @@ class Section:
 
         # Treat non-reliable offsets and estimate mean shift vector from neighboring sections
         if est_vec is None:
-            est_vec = self.analyze_offset(orig_co, tid_a, axis, before=10, after=10, std_band=4)
+            est_vec = self.analyze_offset(
+                orig_co, tid_a, axis, before=10, after=10, std_band=4
+            )
 
             if est_vec is None:
                 shift_vec = orig_co
@@ -948,26 +1015,33 @@ class Section:
 
         # Terminate in case no mean shift vector could be estimated for Inf orig. coarse offset
         if np.inf in shift_vec:
-            logging.warning(f'{fmsg}: coarse offset refinement not performed.')
+            logging.warning(f"{fmsg}: coarse offset refinement not performed.")
             return None
 
         # Force using original vector
         # shift_vec = orig_co
 
         # Run refining using pyramidal search
-        for i, (max_ext, stride) in enumerate(utils.get_pyramid(
-                levels, max_ext, stride)
+        for i, (max_ext, stride) in enumerate(
+            utils.get_pyramid(levels, max_ext, stride)
         ):
             try:
                 shift_vec, interp_data = self.refine_coarse_offset(
-                    shift_vec, tid_a, tid_b, (t1, t2), is_vert,
-                    max_ext, stride, orig_co, tile_map
+                    shift_vec,
+                    tid_a,
+                    tid_b,
+                    (t1, t2),
+                    is_vert,
+                    max_ext,
+                    stride,
+                    orig_co,
+                    tile_map,
                 )
             except TypeError as _:
                 shift_vec = (np.nan, np.nan)  # Refining offset failed for some reason
                 continue
             if plot:
-                path_plot = str(self.path / str(f'refined_offsets_{fmsg}_{i}.jpg'))
+                path_plot = str(self.path / str(f"refined_offsets_{fmsg}_{i}.jpg"))
                 utils.plot_refined_grid(interp_data, path_plot, show_plot)
 
         # # Evaluate new seam quality
@@ -986,17 +1060,17 @@ class Section:
             # shift_vec = (-278, 20)  # To write custom offset into cxcy.json
             self.replace_coarse_offset(coord4d, shift_vec, store)
 
-        print(f'{fmsg}: orig. shift vec.: {orig_co}, new shift vec.: {shift_vec}')
+        print(f"{fmsg}: orig. shift vec.: {orig_co}, new shift vec.: {shift_vec}")
 
         # shift_vec = orig_co  # for inf plotting
         return shift_vec
 
-
-
-    def replace_coarse_offset(self,
-                              coord: tuple[int, ...],
-                              offset: Union[float, tuple[float, float]],
-                              store: bool) -> None:
+    def replace_coarse_offset(
+        self,
+        coord: tuple[int, ...],
+        offset: Union[float, tuple[float, float]],
+        store: bool,
+    ) -> None:
         """
         Replace coarse offsets in cx_cy.json at the specified coordinate
         with the given offset vector.
@@ -1009,7 +1083,7 @@ class Section:
         - None
         """
 
-        _ = self.path / 'cx_cy.json'
+        _ = self.path / "cx_cy.json"
         assert len(coord) == 4
 
         c, z, y, x = coord
@@ -1021,7 +1095,9 @@ class Section:
             tile_id_a = self.tile_id_map[y, x]
             tile_id_b = self.tile_id_map[y + 1, x]
 
-        logging.info(f"Section {self.section_num} tile-pair IDs: {int(tile_id_a), int(tile_id_b)}")
+        logging.info(
+            f"Section {self.section_num} tile-pair IDs: {int(tile_id_a), int(tile_id_b)}"
+        )
 
         # Read coarse mat if not already loaded
         if self.cxy is None and Path(self.path_cxy).exists():
@@ -1030,31 +1106,39 @@ class Section:
 
         # Check if there's anything to replace
         if self.cxy is None:
-            print('Nothing to replace. Coarse offsets .json is missing.')
+            print("Nothing to replace. Coarse offsets .json is missing.")
             return
 
         if len(offset) == 2:
             self.cxy[c, :, y, x] = offset
-            logging.info(f'Replacing original coarse offset with {offset}')
+            logging.info(f"Replacing original coarse offset with {offset}")
         else:
             self.cxy[coord] = offset
-            logging.info(f'Replacing coarse vector {self.cxy[coord]} at '
-                         f'coordinate: {coord}')
+            logging.info(
+                f"Replacing coarse vector {self.cxy[coord]} at coordinate: {coord}"
+            )
 
         # Save coarse mat
         if store:
-            utils.save_coarse_mat(self.cxy, Path(self.path_cxy).parent, file_format="json")
+            utils.save_coarse_mat(
+                self.cxy, Path(self.path_cxy).parent, file_format="json"
+            )
         else:
-            logging.warning('Storing is disabled. Coarse offset will not be written out.')
+            logging.warning(
+                "Storing is disabled. Coarse offset will not be written out."
+            )
         return
 
-    def get_masked_img_pair(self, tid_a: int, tid_b: int,
-                            masking: bool,
-                            clahe: bool = True,
-                            blur_fct: float = 1.0,
-                            shift_vec: Optional[Vector] = None,
-                            custom_params: tuple[int, int, int, int] = (0, 0, 0, 0)
-                            ) -> Optional[tuple[TileMap, TileXY, bool, Vector]]:
+    def get_masked_img_pair(
+        self,
+        tid_a: int,
+        tid_b: int,
+        masking: bool,
+        clahe: bool = True,
+        blur_fct: float = 1.0,
+        shift_vec: Optional[Vector] = None,
+        custom_params: tuple[int, int, int, int] = (0, 0, 0, 0),
+    ) -> Optional[tuple[TileMap, TileXY, bool, Vector]]:
 
         def get_mask(x, y, mask_map, default_mask, custom_mask):
             if custom_mask:
@@ -1068,11 +1152,9 @@ class Section:
             modified[mask] = np.nan
             return modified
 
-        def make_custom_mask(input_mask: np.ndarray,
-                             top: int,
-                             bottom: int,
-                             left: int,
-                             right: int):
+        def make_custom_mask(
+            input_mask: np.ndarray, top: int, bottom: int, left: int, right: int
+        ):
             """Mask lines or columns (for 'eval_ov' procedure)"""
             if all(custom_params):
                 if tid_b == utils.get_vert_tile_id(self.tile_id_map, tid_a):
@@ -1089,7 +1171,7 @@ class Section:
             return input_mask
 
         # Determine tile-pair orientation
-        msg = f'Specified tile_ids {tid_a}, {tid_b} are not neighbors!'
+        msg = f"Specified tile_ids {tid_a}, {tid_b} are not neighbors!"
         assert tid_a != tid_b, msg
         is_vert = utils.pair_is_vertical(self.tile_id_map, tid_a, tid_b)
         if is_vert is None:
@@ -1101,17 +1183,23 @@ class Section:
 
         tiles = self.load_image_pair(tid_a, tid_b, clahe, blur_fct)
         if tiles is None:
-            logging.warning(f'Unable to load tile image data (s{self.section_num}: t{tid_a}, t{tid_b}).')
+            logging.warning(
+                f"Unable to load tile image data (s{self.section_num}: t{tid_a}, t{tid_b})."
+            )
             return None
 
         # Get shift vector if not specified in input
         axis = 1 if is_vert else 0
         if shift_vec is None or None in shift_vec:
             shift_vec = self.get_coarse_offset(tid_a, axis)
-            logging.info(f's{self.section_num} t{tid_a}-t{tid_b} loaded coarse offset: {shift_vec}')
+            logging.info(
+                f"s{self.section_num} t{tid_a}-t{tid_b} loaded coarse offset: {shift_vec}"
+            )
 
         if shift_vec is None:
-            print(f's{self.section_num} t{tid_a}_t{tid_b}: shift vector contains Inf value.')
+            print(
+                f"s{self.section_num} t{tid_a}_t{tid_b}: shift vector contains Inf value."
+            )
             shift_vec = (np.inf, np.inf)
 
         a, b = tiles
@@ -1125,8 +1213,12 @@ class Section:
             default_mask = np.full_like(a.img_data, fill_value=False, dtype=np.bool_)
             ya, xa = np.where(tid_a == self.tile_id_map)
             yb, xb = np.where(tid_b == self.tile_id_map)
-            mask_a = get_mask(xa[0], ya[0], self.roi_mask_map, default_mask, custom_mask)
-            mask_b = get_mask(xb[0], yb[0], self.roi_mask_map, default_mask, custom_mask)
+            mask_a = get_mask(
+                xa[0], ya[0], self.roi_mask_map, default_mask, custom_mask
+            )
+            mask_b = get_mask(
+                xb[0], yb[0], self.roi_mask_map, default_mask, custom_mask
+            )
 
             # Custom mask definition
             if custom_mask:
@@ -1151,10 +1243,9 @@ class Section:
 
         return tile_map, tile_space, is_vert, shift_vec
 
-
-
-    def analyze_offset(self, offset: Vector, tile_id: int, axis: int,
-                       before=15, after=15, std_band=6) -> Optional[Vector]:
+    def analyze_offset(
+        self, offset: Vector, tile_id: int, axis: int, before=15, after=15, std_band=6
+    ) -> Optional[Vector]:
 
         try:
             mean_offset, std = self.estimate_offset(tile_id, axis, before, after)
@@ -1180,14 +1271,9 @@ class Section:
 
         return mean_offset
 
-
-    def estimate_offset(self,
-                        tile_id: int,
-                        axis: int,
-                        before: int = 10,
-                        after: int = 10
-                        ) -> Optional[tuple[Vector, Vector]]:
-
+    def estimate_offset(
+        self, tile_id: int, axis: int, before: int = 10, after: int = 10
+    ) -> Optional[tuple[Vector, Vector]]:
         """Compute mean coarse offset vector from neighboring sections.
 
         Args:
@@ -1243,12 +1329,16 @@ class Section:
         vecs = aggregate_offsets(section_dirs)
 
         if len(vecs) == 0:
-            logging.warning(f's{self.section_num} t{tile_id}: average coarse offset could not be estimated.')
+            logging.warning(
+                f"s{self.section_num} t{tile_id}: average coarse offset could not be estimated."
+            )
             return None
 
         # np.nanmean is necessary due to missing offset values if tile has no neighbor
         if np.all(np.isnan(np.array(vecs))):
-            logging.warning(f's{self.section_num} t{tile_id}: only NaN values found during mean vec. estimation')
+            logging.warning(
+                f"s{self.section_num} t{tile_id}: only NaN values found during mean vec. estimation"
+            )
             return None
 
         mean = np.nanmean(np.array(vecs), axis=0)
@@ -1258,15 +1348,13 @@ class Section:
 
         return mean, std
 
-
     def refine_coarse_offset_eval_ov(
-            self,
-            offset: Vector,
-            tile_pair: tuple[Tile, Tile],
-            is_vert: bool,
-            max_ext: int,
-            stride: int,
-
+        self,
+        offset: Vector,
+        tile_pair: tuple[Tile, Tile],
+        is_vert: bool,
+        max_ext: int,
+        stride: int,
     ) -> Optional[tuple[Vector, tuple[GridXY, GridXY]]]:
 
         # Create set of shift vectors
@@ -1281,27 +1369,28 @@ class Section:
             seam_res = 1 / seam_ssim
             gz.append(seam_res)
         if not gz:
-            logging.warning(f'Refining offset not successful. Check image masks and consider disabling them.')
+            logging.warning(
+                f"Refining offset not successful. Check image masks and consider disabling them."
+            )
             return None
 
         # Select best offset from computed offset field
         best_offset, refine_data = utils.interp_coarse_grid((gx, gy), gz)
-        logging.debug(f'estimated offset: {best_offset}')
+        logging.debug(f"estimated offset: {best_offset}")
 
         return best_offset, refine_data
 
-
     def refine_coarse_offset(
-            self,
-            offset: Vector,
-            tid_a: int,
-            tid_b: int,
-            tile_pair: tuple[Tile, Tile],
-            is_vert,
-            max_ext,
-            stride,
-            orig_co: Optional[Vector] = None,
-            tile_map: Optional[TileMap] = None,
+        self,
+        offset: Vector,
+        tid_a: int,
+        tid_b: int,
+        tile_pair: tuple[Tile, Tile],
+        is_vert,
+        max_ext,
+        stride,
+        orig_co: Optional[Vector] = None,
+        tile_map: Optional[TileMap] = None,
     ) -> Optional[tuple[Vector, tuple[GridXY, GridXY]]]:
 
         # Create set of shift vectors
@@ -1322,22 +1411,23 @@ class Section:
 
             gz.append(seam_res)
         if not gz:
-            logging.warning(f'Refining offset not successful. Check image masks and consider disabling them.')
+            logging.warning(
+                f"Refining offset not successful. Check image masks and consider disabling them."
+            )
             return None
 
         # Select best offset from computed offset field
         best_offset, refine_data = utils.interp_coarse_grid((gx, gy), gz)
-        logging.debug(f'estimated offset: {best_offset}')
+        logging.debug(f"estimated offset: {best_offset}")
 
         return best_offset, refine_data
 
-
     def eval_ov(
-            self,
-            tile_pair: tuple[Tile, Tile],
-            offset: Vector,
-            plot_pair=False,
-            half_width=50
+        self,
+        tile_pair: tuple[Tile, Tile],
+        offset: Vector,
+        plot_pair=False,
+        half_width=50,
     ) -> float:
 
         def check_zero_dimension(image_array):
@@ -1345,20 +1435,21 @@ class Section:
 
         def plot_eval_pair(a, b):
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
-            ax1.imshow(a, cmap='gray')
-            ax1.set_title('Image 1')
-            ax2.imshow(b, cmap='gray')
-            ax2.set_title('Image 2')
+            ax1.imshow(a, cmap="gray")
+            ax1.set_title("Image 1")
+            ax2.imshow(b, cmap="gray")
+            ax2.set_title("Image 2")
             plt.show()
             return
 
         MIN_OV_WIDTH = 15
 
         tile_a, tile_b = tile_pair
-        logging.debug(f'eval_ov tile-pair: {tile_a.tile_id, tile_b.tile_id}')
+        logging.debug(f"eval_ov tile-pair: {tile_a.tile_id, tile_b.tile_id}")
 
         is_vert = utils.pair_is_vertical(
-            self.tile_id_map, tile_a.tile_id, tile_b.tile_id)
+            self.tile_id_map, tile_a.tile_id, tile_b.tile_id
+        )
 
         # Pre-process images
         if tile_a.img_data is None:
@@ -1383,30 +1474,32 @@ class Section:
 
         # Crop common area
         h, _ = np.shape(img_a)
-        ov_a = img_a[max(0, offset[1 - axis]):min(h, h + offset[1 - axis])]
-        ov_a = ov_a[:, -abs(offset[axis]):]
-        ov_b = img_b[max(0, -offset[1 - axis]):min(h, h - offset[1 - axis])]
-        ov_b = ov_b[:, :abs(offset[axis])]
+        ov_a = img_a[max(0, offset[1 - axis]) : min(h, h + offset[1 - axis])]
+        ov_a = ov_a[:, -abs(offset[axis]) :]
+        ov_b = img_b[max(0, -offset[1 - axis]) : min(h, h - offset[1 - axis])]
+        ov_b = ov_b[:, : abs(offset[axis])]
 
         if check_zero_dimension(ov_a):
-            logging.warning('Cropping first overlap overlap resulted in error')
+            logging.warning("Cropping first overlap overlap resulted in error")
             return np.nan
         if check_zero_dimension(ov_b):
-            logging.warning('Cropping second overlap overlap resulted in error')
+            logging.warning("Cropping second overlap overlap resulted in error")
             return np.nan
 
         # Remove masked regions
         ov_stacked = np.rot90(np.hstack((ov_a, ov_b)), k=-1)
         ov_stacked = utils.crop_nan(ov_stacked)
-        logging.debug(f'eval_ov: cropped stack ov shape {ov_stacked.shape}')
+        logging.debug(f"eval_ov: cropped stack ov shape {ov_stacked.shape}")
 
         if any((size < MIN_OV_WIDTH for size in ov_stacked.shape)):
-            logging.info(f'eval_ov: s{self.section_num} cropped ov-shape is under limit ({MIN_OV_WIDTH} pixels)')
+            logging.info(
+                f"eval_ov: s{self.section_num} cropped ov-shape is under limit ({MIN_OV_WIDTH} pixels)"
+            )
             return np.nan
 
         # Split stacked ov-images
-        ov_ac = ov_stacked[:ov_a.shape[1]]
-        ov_bc = ov_stacked[ov_a.shape[1]:]
+        ov_ac = ov_stacked[: ov_a.shape[1]]
+        ov_bc = ov_stacked[ov_a.shape[1] :]
         # utils.plot_images_with_overlay(ov_ac, ov_bc)
 
         # Perform crop around intended seam position
@@ -1414,44 +1507,43 @@ class Section:
         seam_pos = int(ov_h / 2)
         hw_ov = min(half_width, ov_h // 2)
         if ov_h > 2 * MIN_OV_WIDTH:
-            ov_ac = ov_ac[seam_pos - hw_ov:seam_pos + hw_ov]
-            ov_bc = ov_bc[seam_pos - hw_ov:seam_pos + hw_ov]
+            ov_ac = ov_ac[seam_pos - hw_ov : seam_pos + hw_ov]
+            ov_bc = ov_bc[seam_pos - hw_ov : seam_pos + hw_ov]
 
         # Compute SSIM over area
         ov_ac, ov_bc = map(utils.norm_img, (ov_ac, ov_bc))
         mssim = ssim(ov_ac, ov_bc)
         mssim = (mssim + 1) / 2
-        logging.debug(f'mssim: {mssim:.3f}')
+        logging.debug(f"mssim: {mssim:.3f}")
 
         if plot_pair:
             plot_eval_pair(ov_ac, ov_bc)
 
         return mssim
 
+    def compute_coarse_offset(
+        self,
+        id_a: int,
+        id_b: int,
+        refine: bool,
+        store: bool,
+        clahe: bool,
+        overlaps_xy=((200, 300), (200, 300)),
+        min_range=(10, 100, 0),
+        min_overlap=10,
+        filter_size=10,
+        masking=False,
+        max_valid_offset=350,
+        est_vec: Optional[Vector] = None,
+        custom_mask_params: tuple[int, int, int, int] = (0, 0, 0, 0),
+        co_score_lim: Optional[float] = None,
+        co_lim_dist: Optional[float] = None,
+        refine_params: Optional[dict] = None,
+    ) -> Optional[Union[tuple[int, ...], np.ndarray[Any, np.dtype[Any]]]]:
 
-
-    def compute_coarse_offset(self,
-                              id_a: int,
-                              id_b: int,
-                              refine: bool,
-                              store: bool,
-                              clahe: bool,
-                              overlaps_xy=((200, 300), (200, 300)),
-                              min_range=(10, 100, 0),
-                              min_overlap=10,
-                              filter_size=10,
-                              masking=False,
-                              max_valid_offset=350,
-                              est_vec: Optional[Vector] = None,
-                              custom_mask_params: tuple[int, int, int, int] = (0, 0, 0, 0),
-                              co_score_lim: Optional[float] = None,
-                              co_lim_dist: Optional[float] = None,
-                              refine_params: Optional[dict] = None
-                              ) -> Optional[Union[tuple[int, ...], np.ndarray[Any, np.dtype[Any]]]]:
-
-        def co_score_valid(co: Optional[Vector] = None,
-                           lim_val: Optional[float] = None
-                           ) -> bool:
+        def co_score_valid(
+            co: Optional[Vector] = None, lim_val: Optional[float] = None
+        ) -> bool:
             # Compute current seam quality and skip refinement if meets criteria
             if lim_val is None:
                 return False
@@ -1460,15 +1552,16 @@ class Section:
                 tile_pair = self.load_image_pair(id_a, id_b, blur_fct=6.0)
                 co_score = self.eval_ov(tile_pair, co)
                 if co_score > co_score_lim:
-                    msg = f's{self.section_num} t{id_a}-t{id_b} coarse offset vector quality already sufficient ({co_score}>{co_score_lim})'
+                    msg = f"s{self.section_num} t{id_a}-t{id_b} coarse offset vector quality already sufficient ({co_score}>{co_score_lim})"
                     print(msg), logging.warning(msg)
                     return True
             return False
 
-        def co_dist_valid(co: Optional[Vector] = None,
-                          est_vec: Optional[Vector] = None,
-                          co_lim_dist: Optional[float] = 15.
-                          ) -> bool:
+        def co_dist_valid(
+            co: Optional[Vector] = None,
+            est_vec: Optional[Vector] = None,
+            co_lim_dist: Optional[float] = 15.0,
+        ) -> bool:
             # Verifies that the absolute pixel distance of current coarse offset is within limits from estimated vector
 
             if est_vec is None or co is None:
@@ -1478,23 +1571,26 @@ class Section:
             abs_dist = np.linalg.norm(abs_diff)
             vec_valid = abs_dist < co_lim_dist
             if not vec_valid:
-                msg = f's{self.section_num:04d} t{id_a}-t{id_b}: coarse offset vector deviation from est. vec. too large ({int(abs_dist)} pix., limit={int(co_lim_dist)} pix.)'
+                msg = f"s{self.section_num:04d} t{id_a}-t{id_b}: coarse offset vector deviation from est. vec. too large ({int(abs_dist)} pix., limit={int(co_lim_dist)} pix.)"
                 print(msg), logging.warning(msg)
             return vec_valid
 
-        refine_params_nominal = {'masking': masking,
-                                 'levels': 1,
-                                 'max_ext': 50,
-                                 'stride': 10,
-                                 'clahe': True,
-                                 'store': True,
-                                 'plot': False,
-                                 'show_plot': False,
-                                 'est_vec': (0, 0),
-                                 'custom_mask_params': (1, 1, 1, 1)
-                                 }
+        refine_params_nominal = {
+            "masking": masking,
+            "levels": 1,
+            "max_ext": 50,
+            "stride": 10,
+            "clahe": True,
+            "store": True,
+            "plot": False,
+            "show_plot": False,
+            "est_vec": (0, 0),
+            "custom_mask_params": (1, 1, 1, 1),
+        }
 
-        logging.info(f'Section s{self.section_num:04d} - computing coarse offset t{id_a} - t{id_b}')
+        logging.info(
+            f"Section s{self.section_num:04d} - computing coarse offset t{id_a} - t{id_b}"
+        )
 
         # Load image data
         if self.tile_dicts is None:
@@ -1503,14 +1599,15 @@ class Section:
         # Get tile-map and tile-space of a tile-pair
         is_vert = utils.pair_is_vertical(self.tile_id_map, id_a, id_b)
         if is_vert is None:
-            logging.info(f'Specified tile_ids are not neighbors or one of the tile-ids are missing!')
+            logging.info(
+                f"Specified tile_ids are not neighbors or one of the tile-ids are missing!"
+            )
             return
 
         axis = 1 if is_vert else 0
 
         # Refine any coarse shifts using refine pyramid method
         if refine:
-
             # offset = self.get_coarse_offset(id_a, axis)
 
             # if co_score_valid(offset, co_score_lim):
@@ -1524,14 +1621,16 @@ class Section:
                     if k in refine_params_op.keys():
                         refine_params_op[k] = refine_params[k]
 
-            refine_params_op['tid_a'] = id_a
-            refine_params_op['tid_b'] = id_b
+            refine_params_op["tid_a"] = id_a
+            refine_params_op["tid_b"] = id_b
             shift_vec = self.refine_pyramid(**refine_params_op)
 
         else:
             tiles = self.load_image_pair(id_a, id_b, clahe)
             if tiles is None:
-                logging.debug(f'Unable to load tile image data (s{self.section_num:04d}: t{id_a}, t{id_b}).')
+                logging.debug(
+                    f"Unable to load tile image data (s{self.section_num:04d}: t{id_a}, t{id_b})."
+                )
                 return None
 
             tile_a, tile_b = tiles
@@ -1549,8 +1648,12 @@ class Section:
                 self.load_masks()
 
                 # For dummy mask map indices
-                k0: (int, int) = tuple(np.squeeze(np.where(self.tile_id_map == id_a))[::-1])
-                k1: (int, int) = tuple(np.squeeze(np.where(self.tile_id_map == id_b))[::-1])
+                k0: (int, int) = tuple(
+                    np.squeeze(np.where(self.tile_id_map == id_a))[::-1]
+                )
+                k1: (int, int) = tuple(
+                    np.squeeze(np.where(self.tile_id_map == id_b))[::-1]
+                )
                 mask_map = {(0, 0): self.mask_map[k0]}
 
                 top, bottom = 1000, 1
@@ -1584,7 +1687,7 @@ class Section:
             # Read coarse offset if refining is desired
             co = self.get_coarse_offset(id_a, axis) if refine else None
             if co is not None:
-                logging.info(f'Original coarse offset (to be refined): {co}')
+                logging.info(f"Original coarse offset (to be refined): {co}")
 
             # Check if co is not None and does not contain NaN
             co = co if co is None or not any(np.isnan(x) for x in co) else None
@@ -1621,10 +1724,14 @@ class Section:
         try:
             shift_vec = tuple(map(int, shift_vec))
         except OverflowError as _:
-            logging.info(f's{self.section_num:04d} t{id_a}-t{id_b} Inf value in coarse shift shift_vector.')
+            logging.info(
+                f"s{self.section_num:04d} t{id_a}-t{id_b} Inf value in coarse shift shift_vector."
+            )
             return np.inf, np.inf
         except ValueError as _:
-            logging.info(f's{self.section_num:04d} t{id_a}-t{id_b} NaN value in coarse shift shift_vector.')
+            logging.info(
+                f"s{self.section_num:04d} t{id_a}-t{id_b} NaN value in coarse shift shift_vector."
+            )
             return np.inf, np.inf
 
         if store:
@@ -1634,15 +1741,15 @@ class Section:
 
         return shift_vec
 
-#---- LOADING TILE-MAP ----
+    # ---- LOADING TILE-MAP ----
 
     def load_tile_map(
-            self,
-            gauss: bool = False,
-            clahe: bool = False,
-            clahe_params: dict[str, Any] | None = None,
-            parallel: bool = False,
-            max_workers: Optional[int] = None
+        self,
+        gauss: bool = False,
+        clahe: bool = False,
+        clahe_params: dict[str, Any] | None = None,
+        parallel: bool = False,
+        max_workers: Optional[int] = None,
     ) -> None:
         """
         Orchestrates tile loading with atomic failure guarantee and coordinate filtering.
@@ -1651,9 +1758,7 @@ class Section:
 
         # Handle potential scalar or malformed tile-id map
         if self.tile_id_map is None:
-            raise ValueError(
-                f"Section {self.section_num}: tile_id_map is not valid."
-            )
+            raise ValueError(f"Section {self.section_num}: tile_id_map is not valid.")
 
         # Extract only coordinates where tiles were recorded
         valid_indices = np.argwhere(self.tile_id_map != -1)
@@ -1662,16 +1767,26 @@ class Section:
         if valid_indices.size == 0:
             raise ValueError(f"Section {self.section_num} has no recorded tiles!")
 
-        logging.info(f"Loading {len(positions)} tiles for s{self.section_num} (parallel={parallel})")
+        logging.info(
+            f"Loading {len(positions)} tiles for s{self.section_num} (parallel={parallel})"
+        )
         try:
             if parallel:
                 workers = max_workers or min(8, len(positions))
                 with ThreadPoolExecutor(max_workers=workers) as executor:
                     results = list(
-                        executor.map(lambda p: self._get_tile_data(p, clahe, clahe_params, gauss), positions)
+                        executor.map(
+                            lambda p: self._get_tile_data(
+                                p, clahe, clahe_params, gauss
+                            ),
+                            positions,
+                        )
                     )
             else:
-                results = [self._get_tile_data(p, clahe, clahe_params, gauss) for p in positions]
+                results = [
+                    self._get_tile_data(p, clahe, clahe_params, gauss)
+                    for p in positions
+                ]
 
             for pos_tuple, img_data in results:
                 if img_data is not None:
@@ -1691,11 +1806,11 @@ class Section:
             )
 
     def _get_tile_data(
-            self,
-            pos: tuple[int, int],
-            clahe: bool,
-            clahe_params: dict[str, Any] | None = None,
-            gauss: bool = False,
+        self,
+        pos: tuple[int, int],
+        clahe: bool,
+        clahe_params: dict[str, Any] | None = None,
+        gauss: bool = False,
     ) -> tuple[tuple[int, int], Optional[np.ndarray]]:
         """Encapsulates tile lookup, I/O, and post-processing logic."""
         y, x = pos
@@ -1703,7 +1818,9 @@ class Section:
         try:
             tile_id = int(self.tile_id_map[y, x])
         except (ValueError, TypeError, IndexError) as e:
-            logging.error(f"Invalid tile_id at {pos}: {e} (raw value: {self.tile_id_map[y, x]})")
+            logging.error(
+                f"Invalid tile_id at {pos}: {e} (raw value: {self.tile_id_map[y, x]})"
+            )
             return (x, y), None
 
         if tile_id == -1:
@@ -1734,11 +1851,14 @@ class Section:
             return (x, y), img
 
         except Exception as e:
-            logging.error(f"Failed to load tile at position {pos} (tile_id={tile_id}): {e}")
+            logging.error(
+                f"Failed to load tile at position {pos} (tile_id={tile_id}): {e}"
+            )
             return (x, y), None
 
-
-    def _update_tile_map_single(self, result: Tuple[Tuple[int, int], Optional[np.ndarray]]) -> None:
+    def _update_tile_map_single(
+        self, result: Tuple[Tuple[int, int], Optional[np.ndarray]]
+    ) -> None:
         """Update tile_map with a single result. Safe even if tile_map is None."""
         if self.tile_map is None:
             self.tile_map = {}
@@ -1747,11 +1867,8 @@ class Section:
         if img is not None:
             self.tile_map[(x, y)] = img
 
-
     def ensure_tile_map_ready(
-            self,
-            apply_clahe: bool = False,
-            clahe_params: dict[str, Any] | None = None
+        self, apply_clahe: bool = False, clahe_params: dict[str, Any] | None = None
     ) -> None:
         """Ensure tile map is loaded. Raises if loading fails."""
         if self.tile_map is not None and len(self.tile_map) > 0:
@@ -1765,7 +1882,7 @@ class Section:
                 clahe=apply_clahe,
                 clahe_params=clahe_params,
                 parallel=True,
-                max_workers=8
+                max_workers=8,
             )
 
         except ValueError as e:
@@ -1774,18 +1891,15 @@ class Section:
         except Exception as e:
             logging.error(e)
 
+    # ---- EOF LOADING TILE-MAP ----
 
-# ---- EOF LOADING TILE-MAP ----
-
-
-# ---- Coarse offsets ----
+    # ---- Coarse offsets ----
 
     def _is_cache_valid(self, overwrite: bool) -> bool:
         return Path(self.path_cxy).exists() and not overwrite
 
     def compute_coarse_offsets_section(
-            self,
-            config: CoarseStitchConfig
+        self, config: CoarseStitchConfig
     ) -> Optional[np.ndarray]:
         """Pure computational bridge to the stitch_rigid backend."""
         try:
@@ -1807,44 +1921,51 @@ class Section:
             logging.error(f"Algorithmic failure in S{self.section_num}: {e}")
             return None
 
+    # ---- EOFCoarse offsets ----
 
-# ---- EOFCoarse offsets ----
-
-# ---- FineFlows ----
+    # ---- FineFlows ----
 
     def compute_fine_flows(self, config: RegistrationConfig, **kwargs) -> None:
         """Proxy method to the Orchestrator service."""
-        logging.info(f'flow config: ps={config.patch_size}, stride={kwargs.get('stride')}')
+        logging.info(
+            f"flow config: ps={config.patch_size}, stride={kwargs.get('stride')}"
+        )
         orchestrator = FlowFieldOrchestrator(self)
-        logging.info('ff_orchestrator OK')
+        logging.info("ff_orchestrator OK")
         orchestrator.compute_fine_flows(config, **kwargs)
 
     def load_fflows(self, ext: Optional[str] = None) -> None:
-        ext = '' if ext is None else ext
-        fp_fflows = self.path / f'fflows{ext}.pkl'
-        logging.info(f's{self.section_num}: loading fine flows from {fp_fflows}.')
+        ext = "" if ext is None else ext
+        fp_fflows = self.path / f"fflows{ext}.pkl"
+        logging.info(f"s{self.section_num}: loading fine flows from {fp_fflows}.")
 
         try:
-            with open(fp_fflows, 'rb') as f:
+            with open(fp_fflows, "rb") as f:
                 self.fflows = pickle.load(f)
 
         except FileNotFoundError:
-            logging.warning(f's{self.section_num} fine flows file not found: {fp_fflows}')
+            logging.warning(
+                f"s{self.section_num} fine flows file not found: {fp_fflows}"
+            )
         except EOFError:
-            logging.warning(f's{self.section_num}: EOFError - Ran out of input while reading {fp_fflows}.')
+            logging.warning(
+                f"s{self.section_num}: EOFError - Ran out of input while reading {fp_fflows}."
+            )
         except pickle.UnpicklingError as e:
-            logging.error(f's{self.section_num}: Error while unpickling {fp_fflows}: {e}')
+            logging.error(
+                f"s{self.section_num}: Error while unpickling {fp_fflows}: {e}"
+            )
         except Exception as e:
             logging.error(f"An error occurred while reading '{fp_fflows}': {e}")
 
-# ---- EOF FineFlows ----
+    # ---- EOF FineFlows ----
 
-# ----  FINE MESH ----
+    # ----  FINE MESH ----
 
     def compute_fine_mesh(
-            self,
-            reg_config: RegistrationConfig,
-            mesh_config: MeshIntegrationConfig,
+        self,
+        reg_config: RegistrationConfig,
+        mesh_config: MeshIntegrationConfig,
     ) -> None:
         """
         Computes a high-resolution elastic mesh using JAX-accelerated relaxation.
@@ -1873,39 +1994,48 @@ class Section:
             sample_tile_shape = next(iter(self.tile_map.values())).shape
 
             fx, fy, nds, nbors, key_to_idx = stitch_elastic.aggregate_arrays(
-                data_x, data_y,
+                data_x,
+                data_y,
                 list(self.tile_map.keys()),
                 self.coarse_mesh[:, 0, ...],
                 stride=stride_tuple,
-                tile_shape=sample_tile_shape
+                tile_shape=sample_tile_shape,
             )
 
             @jax.jit
             def prev_fn(nds):
                 target_fn = ft.partial(
-                    stitch_elastic.compute_target_mesh, x=nds, fx=fx, fy=fy, stride=stride_tuple
+                    stitch_elastic.compute_target_mesh,
+                    x=nds,
+                    fx=fx,
+                    fy=fy,
+                    stride=stride_tuple,
                 )
                 nds = jax.vmap(target_fn)(nbors)
                 return jnp.transpose(nds, [1, 0, 2, 3])
 
             # Initialize SOFIMA integration config via attribute mapping
             config_attrs = mesh_config.model_dump()
-            config_attrs['stride'] = stride_tuple
+            config_attrs["stride"] = stride_tuple
 
             config_sofima = mesh.IntegrationConfig(**config_attrs)
 
-            logging.info(f"[Section {self.section_num}] Executing JAX mesh relaxation...")
+            logging.info(
+                f"[Section {self.section_num}] Executing JAX mesh relaxation..."
+            )
             res, _, _ = mesh.relax_mesh(nds, None, config_sofima, prev_fn=prev_fn)
 
             # 3. Inverse Mapping (Index -> Tuple Key)
             idx_to_key = {v: k for k, v in key_to_idx.items()}
             self.fmesh = {
-                idx_to_key[i]: np.array(res[:, i:i + 1, :])
+                idx_to_key[i]: np.array(res[:, i : i + 1, :])
                 for i in range(res.shape[1])
             }
 
             # 4. Persistence
-            logging.info(f"[Section {self.section_num}] Serializing mesh to {self.path_fmesh}")
+            logging.info(
+                f"[Section {self.section_num}] Serializing mesh to {self.path_fmesh}"
+            )
             meshes_to_save = {str(k): v for k, v in self.fmesh.items()}
             np.savez(self.path_fmesh, **meshes_to_save)
 
@@ -1915,13 +2045,16 @@ class Section:
             gc.collect()
 
             elapsed = time.perf_counter() - start_time
-            logging.info(f"[Section {self.section_num}] Fine mesh complete. Duration: {elapsed:.2f}s")
+            logging.info(
+                f"[Section {self.section_num}] Fine mesh complete. Duration: {elapsed:.2f}s"
+            )
 
         except Exception as e:
-            logging.error(f"[Section {self.section_num}] Critical failure: {e}", exc_info=True)
+            logging.error(
+                f"[Section {self.section_num}] Critical failure: {e}", exc_info=True
+            )
             jax.clear_caches()
             raise
-
 
     def _ensure_fine_mesh_resources(self) -> None:
         """Ensure all required resources for fine mesh processing are loaded and ready.
@@ -1942,10 +2075,11 @@ class Section:
         if self.tile_dicts is not None:
             return
 
-        logging.warning("Tile dicts not loaded. Loading now for section %s", self.section_num)
+        logging.warning(
+            "Tile dicts not loaded. Loading now for section %s", self.section_num
+        )
         self.tile_dicts = utils.get_tile_dicts(self.path)
         self.read_tile_id_map()
-
 
     def _ensure_coarse_offsets(self) -> None:
         if self.cxy is not None:
@@ -1962,7 +2096,9 @@ class Section:
         if self.tile_map is not None:
             return
 
-        logging.info("Loading tile map for section %s (CLAHE + parallel)", self.section_num)
+        logging.info(
+            "Loading tile map for section %s (CLAHE + parallel)", self.section_num
+        )
         try:
             self.load_tile_map(clahe=True, parallel=True)
         except utils.TileLoadingError as e:
@@ -2002,41 +2138,51 @@ class Section:
                 f"Failed to load fine flows for section {self.section_num}"
             )
 
-
     def clean_and_reconcile_fflows(self, config: RegistrationConfig) -> None:
 
         if self.fflows is None:
-            raise ValueError (f"s{self.section_num} clean_fflows failed: fine flows not available.")
+            raise ValueError(
+                f"s{self.section_num} clean_fflows failed: fine flows not available."
+            )
 
         fine_x, offsets_x = self.fflows[0]
         fine_y, offsets_y = self.fflows[1]
 
         # Clean flows
         kwargs = config.clean_kwargs
-        fine_x = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_x.items()}
-        fine_y = {k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :] for k, v in fine_y.items()}
+        fine_x = {
+            k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :]
+            for k, v in fine_x.items()
+        }
+        fine_y = {
+            k: flow_utils.clean_flow(v[:, np.newaxis, ...], **kwargs)[:, 0, :, :]
+            for k, v in fine_y.items()
+        }
 
         # Reconcile flows
         kwargs = config.recon_kwargs
-        fine_x = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
-                  fine_x.items()}
-        fine_y = {k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :] for k, v in
-                  fine_y.items()}
+        fine_x = {
+            k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :]
+            for k, v in fine_x.items()
+        }
+        fine_y = {
+            k: flow_utils.reconcile_flows([v[:, np.newaxis, ...]], **kwargs)[:, 0, :, :]
+            for k, v in fine_y.items()
+        }
 
         ffx = fine_x, offsets_x
         ffy = fine_y, offsets_y
 
         self.fflows_recon = (ffx, ffy)
 
+    # ----  EOF FINE MESH ----
 
-# ----  EOF FINE MESH ----
-
-# ---- WARP SECTION ----
+    # ---- WARP SECTION ----
 
     def warp_section(
-            self,
-            stride: int,
-            config: WarpConfigStitching,
+        self,
+        stride: int,
+        config: WarpConfigStitching,
     ) -> None:
         """
         Orchestrates high-memory warping and stitching operations.
@@ -2047,19 +2193,22 @@ class Section:
         try:
             self._ensure_warping_resources(config)
         except (FileNotFoundError, ValueError) as e:
-            logging.error(f"[Section {self.section_num}] Resource initialization failed: {e}")
+            logging.error(
+                f"[Section {self.section_num}] Resource initialization failed: {e}"
+            )
             raise  # Propagate to pipeline master to record the failure
 
         # 2. Execution Setup
         clahe_params = dict(
             kernel_size=config.kernel_size,
             clip_limit=config.clip_limit,
-            nbins=config.nbins
+            nbins=config.nbins,
         )
 
         try:
             logging.info(
-                f"[Section {self.section_num}] Starting Render: stride={stride}, parallelism={config.warp_parallelism}")
+                f"[Section {self.section_num}] Starting Render: stride={stride}, parallelism={config.warp_parallelism}"
+            )
 
             stitched, _ = warp.render_tiles(
                 tiles=self.tile_map,
@@ -2069,7 +2218,7 @@ class Section:
                 use_clahe=config.use_clahe,
                 clahe_kwargs=clahe_params,
                 tile_masks=self.margin_masks if config.margin_masking else None,
-                parallelism=config.warp_parallelism
+                parallelism=config.warp_parallelism,
             )
 
             # 3. Persistence
@@ -2080,12 +2229,16 @@ class Section:
             gc.collect()
 
             elapsed = time.perf_counter() - start_time
-            logging.info(f"[Section {self.section_num}] Warp complete. Duration: {elapsed:.2f}s")
+            logging.info(
+                f"[Section {self.section_num}] Warp complete. Duration: {elapsed:.2f}s"
+            )
 
         except Exception as e:
-            logging.error(f"[Section {self.section_num}] Critical failure during warp/store: {e}", exc_info=True)
+            logging.error(
+                f"[Section {self.section_num}] Critical failure during warp/store: {e}",
+                exc_info=True,
+            )
             raise
-
 
     def _ensure_warping_resources(self, config: WarpConfigStitching) -> None:
         """Hardened dependency loader with integrity checks."""
@@ -2095,10 +2248,14 @@ class Section:
             try:
                 self.fmesh = utils.load_mapped_npz(self.path_fmesh)
             except FileNotFoundError:
-                raise FileNotFoundError(f"Mesh missing for section {self.section_num}: {self.path_fmesh}")
+                raise FileNotFoundError(
+                    f"Mesh missing for section {self.section_num}: {self.path_fmesh}"
+                )
             except BadZipFile as e:
                 logging.critical(f"Integrity check failed: {e}")
-                raise RuntimeError(f"Section {self.section_num} fine mesh data is unrecoverable.") from e
+                raise RuntimeError(
+                    f"Section {self.section_num} fine mesh data is unrecoverable."
+                ) from e
 
         if not self.fmesh:
             raise ValueError(f"Mesh data for s{self.section_num} is empty.")
@@ -2118,31 +2275,40 @@ class Section:
                 if clahe:
                     clahe_params = {
                         "kernel_size": config.kernel_size,
-                        "clip_limit": config.clip_limit
+                        "clip_limit": config.clip_limit,
                     }
 
                 self.load_tile_map(
-                    gauss=False, clahe=clahe, clahe_params=clahe_params,
-                    parallel=True, max_workers=config.warp_parallelism
+                    gauss=False,
+                    clahe=clahe,
+                    clahe_params=clahe_params,
+                    parallel=True,
+                    max_workers=config.warp_parallelism,
                 )
 
             except utils.TileLoadingError as e:
-                raise RuntimeError(f"Aborting section {self.section_num} due to missing tile-map data.") from e
+                raise RuntimeError(
+                    f"Aborting section {self.section_num} due to missing tile-map data."
+                ) from e
 
         if not self.tile_map:
-            raise RuntimeError(f"Tile map loading returned empty for section {self.section_num}")
+            raise RuntimeError(
+                f"Tile map loading returned empty for section {self.section_num}"
+            )
 
         # Optional margin masks
         if config.margin_masking and self.margin_masks is None:
             try:
                 self.margin_masks = utils.load_mapped_npz(self.path_margin_masks)
             except (FileNotFoundError, BadZipFile):
-                logging.warning(f"Margin masking skipped for s{self.section_num} - Resource unavailable.")
+                logging.warning(
+                    f"Margin masking skipped for s{self.section_num} - Resource unavailable."
+                )
 
     def _persist_warped_result(self, data: np.ndarray):
         """Handles Zarr serialization logic."""
         path_stitched = self.path_stitched.parent
-        section_name = Path(self.path).name + '.zarr'
+        section_name = Path(self.path).name + ".zarr"
         utils.store_section_zarr(data, section_name, path_stitched)
         self.image = data
 
@@ -2151,18 +2317,17 @@ class Section:
 
 
 class FlowFieldOrchestrator:
-
-    def __init__(self, section: 'Section'):
+    def __init__(self, section: "Section"):
         self.section = section
 
     def compute_fine_flows(
-            self,
-            config: RegistrationConfig,
-            stride: int,
-            masking: bool = False,
-            store: bool = True,
-            overwrite: bool = False,
-            ext: Optional[str] = None,
+        self,
+        config: RegistrationConfig,
+        stride: int,
+        masking: bool = False,
+        store: bool = True,
+        overwrite: bool = False,
+        ext: Optional[str] = None,
     ) -> None:
         """High-level orchestration for fine flow computation."""
 
@@ -2177,9 +2342,8 @@ class FlowFieldOrchestrator:
 
         # 2. Execution
         try:
-            logging.info(f'Computing fine-flows with stride: {stride}')
-            self.section.fflows = (
-                self._run_iterative_flow_estimation(config, stride))
+            logging.info(f"Computing fine-flows with stride: {stride}")
+            self.section.fflows = self._run_iterative_flow_estimation(config, stride)
         except RuntimeError as e:
             logging.error(f"Flow estimation failed: {e}")
             return
@@ -2188,24 +2352,19 @@ class FlowFieldOrchestrator:
         if store and self.section.fflows:
             self._persist_fflows(self.section.fflows, ext)
 
-    def _prepare_infrastructure(
-            self,
-            masking: bool,
-            apply_clahe: bool = False
-    ) -> bool:
+    def _prepare_infrastructure(self, masking: bool, apply_clahe: bool = False) -> bool:
         """Ensures all buffers and remote data are ready for computation."""
         if self.section.cxy is None:
             _ = self.section.get_coarse_mat()
 
         if self.section.cxy is None:
-            logging.warning(f"Coarse offset array missing for s{self.section.section_num}")
+            logging.warning(
+                f"Coarse offset array missing for s{self.section.section_num}"
+            )
             return False
 
         try:
-            self.section.ensure_tile_map_ready(
-                apply_clahe=apply_clahe,
-                clahe_params={}
-            )
+            self.section.ensure_tile_map_ready(apply_clahe=apply_clahe, clahe_params={})
         except Exception:
             return False
 
@@ -2215,10 +2374,7 @@ class FlowFieldOrchestrator:
         return True
 
     def _run_iterative_flow_estimation(
-            self,
-            cfg: RegistrationConfig,
-            stride: int,
-            max_attempts: int = 5
+        self, cfg: RegistrationConfig, stride: int, max_attempts: int = 5
     ) -> Tuple[Any, Any]:
         """
         Executes the SOFIMA flow estimation with a fallback
@@ -2231,7 +2387,9 @@ class FlowFieldOrchestrator:
             if ps < cfg.min_patch_size:
                 break
             try:
-                logging.info(f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}")
+                logging.info(
+                    f"s{self.section.section_num} computation attempt {attempt} | PS: {ps}"
+                )
                 flow_x = self._execute_sofima_call(cfg, stride, axis=0)
                 flow_y = self._execute_sofima_call(cfg, stride, axis=1)
                 return flow_x, flow_y
@@ -2241,13 +2399,13 @@ class FlowFieldOrchestrator:
                 )
 
                 ps -= ps_step
-        raise RuntimeError(f"Flow estimation exhausted all attempts for s{self.section.section_num}")
+        raise RuntimeError(
+            f"Flow estimation exhausted all attempts for s{self.section.section_num}"
+        )
 
     def _execute_sofima_call(
-            self,
-            cfg: RegistrationConfig,
-            stride: int, axis: int
-    )-> tuple[TileFlow, TileOffset]:
+        self, cfg: RegistrationConfig, stride: int, axis: int
+    ) -> tuple[TileFlow, TileOffset]:
         """Wrapper for the external library call."""
 
         return stitch_elastic.compute_flow_map(
@@ -2272,20 +2430,20 @@ class FlowFieldOrchestrator:
         return self.section.fflows is not None
 
 
-
 #### ---------   FUNCTIONS    ---------
 
+
 def run_plot_ov(
-        config: cfg.ExpConfig,
-        sec_num: int,
-        tid_a: int,
-        tid_b: int,
-        xy: Optional[tuple[int, int]] = None,
-        vert_nn: bool = False,
-        shift_vec: Optional[Vector] = None
+    config: cfg.ExpConfig,
+    sec_num: int,
+    tid_a: int,
+    tid_b: int,
+    xy: Optional[tuple[int, int]] = None,
+    vert_nn: bool = False,
+    shift_vec: Optional[Vector] = None,
 ) -> None:
 
-    ps = Path(config.proc_dir) / 'sections' / f's{sec_num}_g{config.grid_num}'
+    ps = Path(config.proc_dir) / "sections" / f"s{sec_num}_g{config.grid_num}"
     section = Section(ps)
     section.feed_section_data()
 
@@ -2297,28 +2455,35 @@ def run_plot_ov(
                 tid_b = section.tile_id_map[y][x + 1]
             else:
                 tid_b = section.tile_id_map[y + 1][x]
-            print(f'plotting tile-pair ov: s{sec_num} t{tid_a}-t{tid_b}')
+            print(f"plotting tile-pair ov: s{sec_num} t{tid_a}-t{tid_b}")
         except IndexError as _:
-            log_str = 'vertical' if vert_nn else 'horizontal'
-            print(f'plot_ov failed: tile at index {xy} does not have a {log_str} neighbor')
+            log_str = "vertical" if vert_nn else "horizontal"
+            print(
+                f"plot_ov failed: tile at index {xy} does not have a {log_str} neighbor"
+            )
             return
     else:
-        print(f'plotting tile-pair ov: s{sec_num} t{tid_a}-t{tid_b}')
+        print(f"plotting tile-pair ov: s{sec_num} t{tid_a}-t{tid_b}")
 
     if shift_vec is None:
         axis = 1 if utils.pair_is_vertical(section.tile_id_map, tid_a, tid_b) else 0
         shift_vec = section.get_coarse_offset(tid_a, axis)
 
     print(f"Plotting ov s{sec_num} t{tid_a}-t{tid_b} with coarse offset: {shift_vec}")
-    section.plot_ov(tid_a=tid_a, tid_b=tid_b, shift_vec=shift_vec, dir_out=str(section.path),
-                    show_plot=True, clahe=True, blur=1.1, store_to_root=False)
+    section.plot_ov(
+        tid_a=tid_a,
+        tid_b=tid_b,
+        shift_vec=shift_vec,
+        dir_out=str(section.path),
+        show_plot=True,
+        clahe=True,
+        blur=1.1,
+        store_to_root=False,
+    )
     return
 
 
-def main_fine_align_sections(
-        config: cfg.ExpConfig,
-        sec_nums: Union[list[int], int]
-):
+def main_fine_align_sections(config: cfg.ExpConfig, sec_nums: Union[list[int], int]):
     # FINE-ALIGN AND WARP SECTION(S)
 
     if not isinstance(sec_nums, (int, list)):
@@ -2329,7 +2494,7 @@ def main_fine_align_sections(
         sec_nums = [sec_nums]
 
     for num in sec_nums:
-        path_section = Path(config.proc_dir) / 'sections' / f's{num}_g{config.grid_num}'
+        path_section = Path(config.proc_dir) / "sections" / f"s{num}_g{config.grid_num}"
         section = Section(path_section)
         section.feed_section_data()
         fine_align_section(section, config.grid_shape, masking=True)
@@ -2343,6 +2508,7 @@ def debug_cxcy():
     coarse_mat = section.get_coarse_mat()
     print(coarse_mat)
     return
+
 
 def debug_margin_masks():
 
@@ -2364,21 +2530,19 @@ def compute_fine_flows(self, ff_config, **kwargs):
 
 
 def fine_align_section(
-        section: Section,
-        grid_shape: tuple[int, int],
-        masking=False
+    section: Section, grid_shape: tuple[int, int], masking=False
 ) -> None:
 
     patch_size = 120  # For fine-flows
     stride = 20  # fine-flows resolution
-    batch_size = 256 # fine-flows
+    batch_size = 256  # fine-flows
 
     rim_size = 40  # Safety margin to custom overlaps
     # margin = max(10, rim_size // 3)  # Cut all tile edges by 'margin'
     margin = 0
     # use_clahe = True
     # zarr_store = True  # Store .zarr into stitched-sections folder
-    rescale_fct = 0.5 # Store .jpg thumbnail into section folder
+    rescale_fct = 0.5  # Store .jpg thumbnail into section folder
     # rescale_fct = None  # Store .jpg thumbnail into section folder
     # parallelism: int = 1
     overwrite = True
@@ -2424,14 +2588,18 @@ def fine_align_section(
 
     # # Compute flows between overlaps
     config = RegistrationConfig()
-    config['patch_size'] = [patch_size, patch_size],
-    config['batch_size'] = batch_size
+    config["patch_size"] = ([patch_size, patch_size],)
+    config["batch_size"] = batch_size
 
     ff_orchestrator = FlowFieldOrchestrator(section)
     ff_orchestrator.compute_fine_flows(
-        config=config, stride=stride, masking=True, store=True, overwrite=overwrite, ext=None
+        config=config,
+        stride=stride,
+        masking=True,
+        store=True,
+        overwrite=overwrite,
+        ext=None,
     )
-
 
     # #  Compute fine meshes
     # cfg = mesh.IntegrationConfig(
@@ -2464,10 +2632,9 @@ def fine_align_section(
 
 
 if __name__ == "__main__":
-
     # Accessing individual experiments
     configs = cfg.get_experiment_configurations()
-    exp_name = 'ROLI_F1'
+    exp_name = "ROLI_F1"
     exp = configs[exp_name]
 
     # # # FINE ALIGN
@@ -2481,4 +2648,3 @@ if __name__ == "__main__":
     # PLOTTING, WARPING, FINE ALIGNMENT
     # shift_vec = None
     # run_plot_ov(exp, sec_num=1500, tid_a=464, tid_b=489, xy=None, vert_nn=False, shift_vec=shift_vec)
-

@@ -14,7 +14,12 @@ import em_inspection.experiment_configs as cfg
 import em_inspection.inspection_utils_refactor as utils
 import em_inspection.parse_sbem_dataset
 
-from em_inspection.Section_refactored import Section, fine_align_section, Vector, cached_read_image
+from em_inspection.Section_refactored import (
+    Section,
+    fine_align_section,
+    Vector,
+    cached_read_image,
+)
 from em_inspection.coarse_offset_processor import CoarseOffsetProcessor
 from em_inspection.schema import InspectionSchema as IS
 
@@ -25,7 +30,6 @@ logger = logging.getLogger(__name__)
 # logging.basicConfig(level=logging.DEBUG)
 # logging.basicConfig(level=logging.INFO)
 logging.basicConfig(level=logging.WARNING)
-
 
 
 class Inspection:
@@ -52,7 +56,7 @@ class Inspection:
         self.dir_outliers = self.dir_inspect / IS.DIR_OVERLAPS_OUTLIERS
         self.dir_inf_overlaps = self.dir_inspect / IS.DIR_INF_OVERLAPS
 
-         # INIT FILE-PATHS
+        # INIT FILE-PATHS
         self.fn_coarse_offsets = IS.FILE_COARSE_OFFSETS
         self.fn_tile_id_map = IS.FILE_TILE_ID_MAP
         self.path_cxyz = self._get_inspect_path(IS.FILE_ALL_OFFSETS)
@@ -67,17 +71,16 @@ class Inspection:
 
         # 3. Component Initialization
         self.co_processor = CoarseOffsetProcessor(
-            self.config,
-            self._get_processor_paths()
+            self.config, self._get_processor_paths()
         )
 
     def _get_processor_paths(self) -> Dict[str, Path]:
         """Provides a mapping of paths based on the Schema."""
         return {
-            'inspect': self.dir_inspect,
-            'cxyz': self.dir_inspect / IS.FILE_ALL_OFFSETS,
-            'tid_maps': self.dir_inspect / IS.FILE_ALL_TILE_ID_MAPS,
-            'co_outliers': self.dir_inspect / IS.FILE_CO_OUTLIERS
+            "inspect": self.dir_inspect,
+            "cxyz": self.dir_inspect / IS.FILE_ALL_OFFSETS,
+            "tid_maps": self.dir_inspect / IS.FILE_ALL_TILE_ID_MAPS,
+            "co_outliers": self.dir_inspect / IS.FILE_CO_OUTLIERS,
         }
 
     def _init_metadata_containers(self):
@@ -111,8 +114,7 @@ class Inspection:
         return
 
     def list_all_section_dirs(self) -> None:
-        """Lists all section and .zarr folders stored in 'sections' and 'stitched' folders
-        """
+        """Lists all section and .zarr folders stored in 'sections' and 'stitched' folders"""
 
         if self.os_name not in {"Windows", "Linux", "Darwin"}:
             print(f"list_all_section_dirs failed: unknown OS-system ({self.os_name}).")
@@ -128,21 +130,27 @@ class Inspection:
         elif self.os_name == "Linux":
             res, res_st = map(utils.process_dirs_unix, (sections_dir, stitched_dir))
         else:
-            logging.error(f"Failed to list all sections: not supported processing platform!")
+            logging.error(
+                f"Failed to list all sections: not supported processing platform!"
+            )
             return
 
         if res is not None:
-            (self.section_dirs,
-             self.section_names,
-             self.section_nums,
-             self.section_dicts) = res
+            (
+                self.section_dirs,
+                self.section_names,
+                self.section_nums,
+                self.section_dicts,
+            ) = res
 
         # Stitched sections folder
         if res_st is not None:
-            (self.stitched_dirs,
-             self.stitched_names,
-             self.stitched_nums,
-             self.stitched_dicts) = res_st
+            (
+                self.stitched_dirs,
+                self.stitched_names,
+                self.stitched_nums,
+                self.stitched_dicts,
+            ) = res_st
 
         return
 
@@ -163,15 +171,17 @@ class Inspection:
 
         if len(missing_nums) > 0:
             utils.write_dict_to_yaml(str(self.fp_missing_sections), missing_nums)
-            is_are = 'is' if len(missing_nums) == 1 else 'are'
-            logging.warning(f"There {is_are} {len(missing_nums)} missing sections in 'sections' folder!")
+            is_are = "is" if len(missing_nums) == 1 else "are"
+            logging.warning(
+                f"There {is_are} {len(missing_nums)} missing sections in 'sections' folder!"
+            )
 
         self.missing_sections = missing_nums
         return
 
     def _create_inspection_dirs(self):
-        new_dirs = ('overlaps', 'traces', 'downscaled', 'inf_overlaps')
-        logging.debug(f'Creating inspection infrastructure {new_dirs}')
+        new_dirs = ("overlaps", "traces", "downscaled", "inf_overlaps")
+        logging.debug(f"Creating inspection infrastructure {new_dirs}")
         for leaf in new_dirs:
             create_directory(self.dir_inspect / leaf)
         return
@@ -201,7 +211,6 @@ class Inspection:
         failed_sec_nums = [num for num in results if num is not None]
         return failed_sec_nums
 
-
     def backup_coarse_offsets(self, progress_cb=None):
         """Stores all coarse offset arrays into a compressed .npz file."""
 
@@ -210,7 +219,7 @@ class Inspection:
             target_filename=self.fn_coarse_offsets,
             processing_func=utils.process_offsets,
             progress_cb=progress_cb,
-            max_workers=20
+            max_workers=20,
         )
 
         if not offsets:
@@ -219,13 +228,12 @@ class Inspection:
 
         fp_out = self.dir_inspect / "all_offsets.npz"
         np.savez_compressed(fp_out, **offsets)
-        logging.info(f'Coarse offsets compressed and saved to: {fp_out}')
+        logging.info(f"Coarse offsets compressed and saved to: {fp_out}")
 
         # Save the missing file log
         fp_out2 = fp_out.with_name("all_offsets_missing_files.txt")
         with open(fp_out2, "w") as f:
             f.writelines("\n".join(missing_files))
-
 
     def backup_tile_id_maps(self, progress_cb=None):
         """Aggregates and stores all Tile ID maps into a .npz file."""
@@ -235,7 +243,7 @@ class Inspection:
             target_filename=self.fn_tile_id_map,
             processing_func=utils.process_tile_maps,
             progress_cb=progress_cb,
-            max_workers=20
+            max_workers=20,
         )
 
         if not tile_id_maps:
@@ -244,9 +252,8 @@ class Inspection:
 
         fp_out = self.path_id_maps
         np.savez_compressed(fp_out, **tile_id_maps)
-        logging.info(f'Tile-ID maps saved to: {fp_out}')
+        logging.info(f"Tile-ID maps saved to: {fp_out}")
         return
-
 
     @staticmethod
     def load_outliers(path_outliers: UniPath) -> dict[int, list[tuple[int, int]]]:
@@ -264,13 +271,13 @@ class Inspection:
 
         outliers_data = {}
 
-        with open(path_outliers, 'r') as f:
+        with open(path_outliers, "r") as f:
             # Skip the header line
             next(f)
 
             # Read data line by line
             for line in f:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 slice_num = int(parts[0])
                 tile_id = int(parts[-2])
                 tile_id_nn = int(parts[-1])
@@ -289,13 +296,12 @@ class Inspection:
 
         return outliers_data
 
-
     def fix_false_offsets_trace(
-            self,
-            tid_pair: [tuple[int, int]],
-            align_args: dict,
-            inf=False,
-            custom_sec_nums: Optional[Iterable[int]] = None
+        self,
+        tid_pair: [tuple[int, int]],
+        align_args: dict,
+        inf=False,
+        custom_sec_nums: Optional[Iterable[int]] = None,
     ) -> None:
 
         sec_nums = []
@@ -304,13 +310,13 @@ class Inspection:
             fp = self.fp_inf_vals
 
         if not Path(fp).exists():
-            logging.info(f'No outliers/inf values fetched from {fp}')
+            logging.info(f"No outliers/inf values fetched from {fp}")
 
         if not custom_sec_nums:
             try:
                 outliers = self.load_outliers(path_outliers=fp)
             except ValueError as _:
-                logging.warning(f'Empty list of outliers/inf values in {fp}')
+                logging.warning(f"Empty list of outliers/inf values in {fp}")
                 return
 
             sec_nums = list(outliers.keys())
@@ -320,11 +326,13 @@ class Inspection:
             # sec_nums = [num for num in sec_nums if num in custom_sec_nums]
 
         if not sec_nums:
-            logging.warning(f'Fixing false offsets: nothing to fix in specified range of section numbers and tile-pair IDs.')
+            logging.warning(
+                f"Fixing false offsets: nothing to fix in specified range of section numbers and tile-pair IDs."
+            )
             return
 
         for sec_num in sec_nums:
-            print(f'Aligning s{sec_num} tid_pair: {tid_pair}')
+            print(f"Aligning s{sec_num} tid_pair: {tid_pair}")
             tid_a, tid_b = tid_pair
             align_tile_pair(self, sec_num, tid_a, tid_b, **align_args)
 
@@ -346,17 +354,12 @@ class Inspection:
         # process_eval_ov_results(mssim_tuples, tid_pair[0], tid_pair[1], dir_out, sort=False)
         return
 
-
-    def plot_all_ovs_par(
-            self,
-            sec_nums,
-            num_processes: int = 4
-    ) -> None:
+    def plot_all_ovs_par(self, sec_nums, num_processes: int = 4) -> None:
 
         num_processes = min(len(sec_nums), num_processes)
 
         if len(sec_nums) == 0:
-            logging.warning('plot_ovs: Nothing to plot. Invalid section range.')
+            logging.warning("plot_ovs: Nothing to plot. Invalid section range.")
             return
 
         # Create dict of all sections and all tile_id pairs
@@ -376,24 +379,23 @@ class Inspection:
 
         return
 
-
     def plot_ov_for_section(self, sec_num: int, ov_dict: dict):
         sec_dict = {sec_num: ov_dict.get(sec_num)}
         self.plot_specific_ovs(sec_dict)
         return
 
-
-    def plot_specific_ovs(self,
-                          ov_dict: dict[int, list[tuple[int, int]]],
-                          dir_name_out: Optional[str] = None,
-                          refine=False,
-                          est_vec: Optional[Vector] = None,
-                          shift_abs_dev: Optional[float] = 15.
-                          ) -> None:
+    def plot_specific_ovs(
+        self,
+        ov_dict: dict[int, list[tuple[int, int]]],
+        dir_name_out: Optional[str] = None,
+        refine=False,
+        est_vec: Optional[Vector] = None,
+        shift_abs_dev: Optional[float] = 15.0,
+    ) -> None:
 
         # Process parent dir for stored images
         if dir_name_out is None:
-            dir_name_out = 'overlaps'
+            dir_name_out = "overlaps"
 
         dir_out = self.dir_inspect / dir_name_out
         utils.create_directory(dir_out)
@@ -417,16 +419,28 @@ class Inspection:
             # skip = [(860, 900), (941, 981)]
             skip = []
             # unique_tid_list = [(651, 683),] # (624, 656)
-            for (tid_a, tid_b) in unique_tid_list:
+            for tid_a, tid_b in unique_tid_list:
                 if (tid_a, tid_b) not in skip:
-                    print(f'Plotting s{sec.section_num} t{tid_a}-t{tid_b}')
-                    logging.info(f'Plotting s{sec.section_num} t{tid_a}-t{tid_b}')
+                    print(f"Plotting s{sec.section_num} t{tid_a}-t{tid_b}")
+                    logging.info(f"Plotting s{sec.section_num} t{tid_a}-t{tid_b}")
 
                     if refine:
-                        logging.info(f'Refining coarse offset of s{sec.section_num} t{tid_a}-t{tid_b}')
-                        refine_kwargs = dict(tid_a=tid_a, tid_b=tid_b, masking=False, levels=3,
-                                             max_ext=80, stride=12, clahe=True, store=True,
-                                             plot=False, show_plot=False, est_vec=None)
+                        logging.info(
+                            f"Refining coarse offset of s{sec.section_num} t{tid_a}-t{tid_b}"
+                        )
+                        refine_kwargs = dict(
+                            tid_a=tid_a,
+                            tid_b=tid_b,
+                            masking=False,
+                            levels=3,
+                            max_ext=80,
+                            stride=12,
+                            clahe=True,
+                            store=True,
+                            plot=False,
+                            show_plot=False,
+                            est_vec=None,
+                        )
                         shift_vec = sec.refine_pyramid(**refine_kwargs)
                         # print(f'Refined vector: {shift_vec}')
 
@@ -447,25 +461,27 @@ class Inspection:
                     shift_vec = (0, 0) if np.inf in shift_vec else shift_vec
                     shift_vec = None
 
-                    args = dict(tid_a=tid_a,
-                                tid_b=tid_b,
-                                shift_vec=shift_vec,
-                                dir_out=dir_out,
-                                show_plot=False,
-                                clahe=True,
-                                blur=1.0)
+                    args = dict(
+                        tid_a=tid_a,
+                        tid_b=tid_b,
+                        shift_vec=shift_vec,
+                        dir_out=dir_out,
+                        show_plot=False,
+                        clahe=True,
+                        blur=1.0,
+                    )
                     sec.plot_ov(**args)
         return
 
     def plot_specific_ovs_refactored(
-            self,
-            ov_dict: dict[int, list[tuple[int, int]]],
-            dir_name_out: Optional[str] = None,
+        self,
+        ov_dict: dict[int, list[tuple[int, int]]],
+        dir_name_out: Optional[str] = None,
     ) -> None:
 
         # Process parent dir for stored images
         if dir_name_out is None:
-            dir_name_out = 'overlaps'
+            dir_name_out = "overlaps"
 
         dir_out = self.dir_inspect / dir_name_out
         utils.create_directory(dir_out)
@@ -485,24 +501,27 @@ class Inspection:
             unique_tid_list = [x for x in tid_list if x not in seen and not seen.add(x)]
 
             skip = []
-            for (tid_a, tid_b) in unique_tid_list:
+            for tid_a, tid_b in unique_tid_list:
                 if (tid_a, tid_b) not in skip:
                     # print(f'Plotting overlap s{sec.section_num} t{tid_a}-t{tid_b}')
-                    logging.info(f'Plotting overlap s{sec.section_num} t{tid_a}-t{tid_b}')
+                    logging.info(
+                        f"Plotting overlap s{sec.section_num} t{tid_a}-t{tid_b}"
+                    )
 
-                    args = dict(tid_a=tid_a,
-                                tid_b=tid_b,
-                                shift_vec=shift_vec,
-                                dir_out=dir_out,
-                                show_plot=False,
-                                clahe=True,
-                                blur=1.0)
+                    args = dict(
+                        tid_a=tid_a,
+                        tid_b=tid_b,
+                        shift_vec=shift_vec,
+                        dir_out=dir_out,
+                        show_plot=False,
+                        clahe=True,
+                        blur=1.0,
+                    )
                     sec.plot_ov(**args)
         return
 
+
 ###  EOF PRIVATE FUNCTIONS  ####
-
-
 
 
 def create_directory(dir_path: Path):
@@ -524,30 +543,36 @@ def main_scan_missing_section_folders(insp: Inspection):
     print(f"Inspecting:\n{insp}")
 
     if insp.section_nums is None:
-        logging.warning(f"No sections numbers in the Inspection. Has it been initialized?")
+        logging.warning(
+            f"No sections numbers in the Inspection. Has it been initialized?"
+        )
         return
 
-    print(f'Nr. of section entries in sections folder: {len(insp.section_nums)}')
-    print(f'First and last section nr. specified in config: {insp.first_sec, insp.last_sec}')
-    print(f'Nr. of missing section folders: {len(insp.missing_sections)}')
-    utils.write_dict_to_yaml(str(insp.root / 'missing_sections.yaml'), insp.missing_sections)
+    print(f"Nr. of section entries in sections folder: {len(insp.section_nums)}")
+    print(
+        f"First and last section nr. specified in config: {insp.first_sec, insp.last_sec}"
+    )
+    print(f"Nr. of missing section folders: {len(insp.missing_sections)}")
+    utils.write_dict_to_yaml(
+        str(insp.root / "missing_sections.yaml"), insp.missing_sections
+    )
     return
 
 
 def main_verify_tile_id_maps(insp: Inspection):
     failed_sec_nums = insp.verify_tile_id_maps()
-    fp = str(insp.root / 'invalid_tile_id_maps.yaml')
+    fp = str(insp.root / "invalid_tile_id_maps.yaml")
     utils.write_dict_to_yaml(fp, failed_sec_nums)
     return
 
 
 def plot_traces_from_backup(
-        path_cxyz: Path | str,
-        path_id_maps: Path | str,
-        traces_out_dir: Path | str,
-        tile_ids: Iterable[int],
-        in_parallel: bool = False,
-        max_processes: int = 20
+    path_cxyz: Path | str,
+    path_id_maps: Path | str,
+    traces_out_dir: Path | str,
+    tile_ids: Iterable[int],
+    in_parallel: bool = False,
+    max_processes: int = 20,
 ) -> None:
     """
     Plot position traces for selected tiles from the cxyz backup file.
@@ -584,7 +609,9 @@ def plot_traces_from_backup(
 
     if in_parallel:
         num_proc = min(max_processes, len(args_list))
-        logging.info(f"Plotting {len(args_list)} traces in parallel using {num_proc} processes...")
+        logging.info(
+            f"Plotting {len(args_list)} traces in parallel using {num_proc} processes..."
+        )
         with multiprocessing.Pool(processes=num_proc) as pool:
             pool.starmap(utils.plot_trace_from_backup, args_list)
     else:
@@ -597,24 +624,25 @@ def plot_traces_from_backup(
     return None
 
 
-def postprocess_cxcy(exp: Inspection,
-                     plot_traces: bool,
-                     locate_inf: bool,
-                     trace_ids: Optional[Iterable[int]] = None,
-                     in_parallel: bool = False,
-                     max_processes: int = 20
-                     ):
+def postprocess_cxcy(
+    exp: Inspection,
+    plot_traces: bool,
+    locate_inf: bool,
+    trace_ids: Optional[Iterable[int]] = None,
+    in_parallel: bool = False,
+    max_processes: int = 20,
+):
     """Backs-up all coarse offsets (cx_cy.json files) into a compressed .npz file and generates their plots (optional).
 
-      Args:
-          :param exp (Inspection): Inspection object.
-          :param plot_traces (bool): Whether to plot traces.
-          :param locate_inf (bool): Whether to locate and save inf values from cx_cy.json files.
-          :param trace_id (int): plot only specified tile_id trace
-          :param in_parallel:
-          :param trace_ids:
-          :param max_processes:
-      """
+    Args:
+        :param exp (Inspection): Inspection object.
+        :param plot_traces (bool): Whether to plot traces.
+        :param locate_inf (bool): Whether to locate and save inf values from cx_cy.json files.
+        :param trace_id (int): plot only specified tile_id trace
+        :param in_parallel:
+        :param trace_ids:
+        :param max_processes:
+    """
 
     # Backup cx_cy
     if not exp.path_cxyz.exists():
@@ -636,7 +664,7 @@ def postprocess_cxcy(exp: Inspection,
         _ = utils.locate_inf_vals(exp.path_cxyz, exp.dir_inspect, store=True)
 
     if plot_traces:
-        traces_out_dir = exp.dir_inspect / 'traces'
+        traces_out_dir = exp.dir_inspect / "traces"
         if trace_ids is None:
             trace_ids = sorted(list(utils.get_tile_ids_set(str(exp.path_id_maps))))
 
@@ -653,9 +681,8 @@ def postprocess_cxcy(exp: Inspection,
 
 
 def main_fix_tile_id_maps(exp: Inspection):
-    """ Computes and stores tile-id maps for all sections in sections folder """
+    """Computes and stores tile-id maps for all sections in sections folder"""
     for sec_dir in exp.section_dirs:
-
         # Read tile-id map
         tile_id_map = utils.read_tile_id_map(sec_dir)
         tile_id_map_filtered = set(tile_id_map.flatten())
@@ -669,10 +696,11 @@ def main_fix_tile_id_maps(exp: Inspection):
             with open(sec_dir / "tile_id_map.json", "w") as f:
                 json.dump(tile_id_map_list, f)
         except ValueError as e:
-            logging.warning(f'Storing tile-id_map failed: {e}')
+            logging.warning(f"Storing tile-id_map failed: {e}")
             continue
 
     return
+
 
 def main_par_multiproc(insp: Inspection):
 
@@ -681,10 +709,8 @@ def main_par_multiproc(insp: Inspection):
     end = insp.last_sec
     # start, end = 1869, 1869
 
-    sec_nums = tuple(range(start, end+1))
-    valid_nums = utils.validate_section_numbers(
-        insp.first_sec, insp.last_sec, sec_nums
-    )
+    sec_nums = tuple(range(start, end + 1))
+    valid_nums = utils.validate_section_numbers(insp.first_sec, insp.last_sec, sec_nums)
 
     init_specific_section_dirs(insp, valid_nums)
     end = None
@@ -696,18 +722,19 @@ def main_par_multiproc(insp: Inspection):
         end=end,
         nums_to_align=nums_to_align,
         masking=False,
-        num_processes=num_processes
+        num_processes=num_processes,
     )
 
     return
 
+
 def fine_align_sections_multiproc(
-        exp: Inspection,
-        start: Optional[int] = None,
-        end: Optional[int] = None,
-        nums_to_align: Optional[Iterable[int]] = None,
-        masking: bool = True,
-        num_processes: int = 40
+    exp: Inspection,
+    start: Optional[int] = None,
+    end: Optional[int] = None,
+    nums_to_align: Optional[Iterable[int]] = None,
+    masking: bool = True,
+    num_processes: int = 40,
 ):
     # jax.stitch_config.update("jax_platform_name", "cpu")
     if exp.section_dicts is None:
@@ -726,15 +753,19 @@ def fine_align_sections_multiproc(
 
     # Compute or refine coarse offsets
     if not len(sections):
-        print('No sections were selected for processing.')
-        logging.warning('No valid sections were selected for processing. Check experiment setting and section numbers.')
+        print("No sections were selected for processing.")
+        logging.warning(
+            "No valid sections were selected for processing. Check experiment setting and section numbers."
+        )
         return
 
     # Compute without parallelization
     if num_processes == 0:
         for s in sections:
             fine_align_section(s, exp.grid_shape, masking)
-        logging.info(f'Finished fine-alignment of sections {min(nums_to_align)} - {max(nums_to_align)}')
+        logging.info(
+            f"Finished fine-alignment of sections {min(nums_to_align)} - {max(nums_to_align)}"
+        )
         return
 
     # Select mode of alignment
@@ -747,20 +778,20 @@ def fine_align_sections_multiproc(
 
 
 def main_fix_outliers_and_infinities(insp: Inspection):
-    """FIX OUTLIERS, INFINITIES AND PLOT THEM """
+    """FIX OUTLIERS, INFINITIES AND PLOT THEM"""
 
     def _get_sec_nums(_dir_ovs: Path) -> list[int]:
         tid_a, tid_b = tid_pair_to_align
         str_a = str(tid_a).zfill(4)
         str_b = str(tid_b).zfill(4)
-        dir_ov = dir_overlaps / ('t' + str_a + '_t' + str_b)
+        dir_ov = dir_overlaps / ("t" + str_a + "_t" + str_b)
         return utils.get_ov_sec_nums(dir_ov)
 
     dir_overlaps = insp.dir_outliers
     # dir_overlaps = exp.dir_inspect / 'inf_overlaps'
 
     # tid_pairs = [(260, 261)]
-    est_vec =  (-30, -140) # vert (+x, -y)
+    est_vec = (-30, -140)  # vert (+x, -y)
     # est_vec = None
     masking = False
     refine = True
@@ -779,49 +810,60 @@ def main_fix_outliers_and_infinities(insp: Inspection):
         # custom_sec_nums = None
 
         refine_params = dict(
-            levels=3, max_ext=100, stride=20, clahe=True, store=store,
-            plot=plot, show_plot=False, est_vec=est_vec,
-            custom_mask_params=custom_mask_params
+            levels=3,
+            max_ext=100,
+            stride=20,
+            clahe=True,
+            store=store,
+            plot=plot,
+            show_plot=False,
+            est_vec=est_vec,
+            custom_mask_params=custom_mask_params,
         )
 
         args = dict(
-            masking=masking, store=store, refine=refine, plot=plot,
-            refine_params=refine_params
+            masking=masking,
+            store=store,
+            refine=refine,
+            plot=plot,
+            refine_params=refine_params,
         )
 
         insp.fix_false_offsets_trace(
             tid_pair=tid_pair_to_align,
             custom_sec_nums=custom_sec_nums,
             inf=fix_infinities,
-            align_args=args
+            align_args=args,
         )
     return
 
 
 def align_tile_pair(
-        exp: Inspection,
-        sec_num: int,
-        tid_a: int,
-        tid_b: int,
-        masking: bool,
-        store: bool,
-        refine: bool,
-        plot: bool,
-        refine_params: dict,
-        clahe: bool = True,
+    exp: Inspection,
+    sec_num: int,
+    tid_a: int,
+    tid_b: int,
+    masking: bool,
+    store: bool,
+    refine: bool,
+    plot: bool,
+    refine_params: dict,
+    clahe: bool = True,
 ) -> Optional[float]:
 
-    sec_dir = exp.dir_sections / f's{sec_num}_g{exp.grid_nr}'
+    sec_dir = exp.dir_sections / f"s{sec_num}_g{exp.grid_nr}"
 
     if not sec_dir.exists():
-        logging.warning(f'Section s{sec_num} not found in the sections directory!')
+        logging.warning(f"Section s{sec_num} not found in the sections directory!")
         return None
 
     my_sec = Section(sec_dir)
     my_sec.feed_section_data()
 
     if tid_a not in my_sec.tile_id_map and tid_b not in my_sec.tile_id_map:
-        logging.warning(f'Section s{sec_num} does not contain tile-pair {tid_a}-{tid_b}!')
+        logging.warning(
+            f"Section s{sec_num} does not contain tile-pair {tid_a}-{tid_b}!"
+        )
         return None
 
     if masking:
@@ -848,16 +890,20 @@ def align_tile_pair(
         overlaps_xy = ((100, 200, 300), (100, 200, 300))
         min_range = ((0, 50, 100), (0, 50, 100))
 
-        args = dict(overlaps_xy=overlaps_xy,
-                    min_range=min_range,
-                    min_overlap=2,
-                    filter_size=10,
-                    masking=masking,
-                    max_valid_offset=400)
+        args = dict(
+            overlaps_xy=overlaps_xy,
+            min_range=min_range,
+            min_overlap=2,
+            filter_size=10,
+            masking=masking,
+            max_valid_offset=400,
+        )
 
-        offset = my_sec.compute_coarse_offset(tid_a, tid_b, refine, store, clahe, **args)
-        logging.info(f's{my_sec.section_num} coarse offset: {offset}')
-        print(f'computed coarse offset: {offset}')
+        offset = my_sec.compute_coarse_offset(
+            tid_a, tid_b, refine, store, clahe, **args
+        )
+        logging.info(f"s{my_sec.section_num} coarse offset: {offset}")
+        print(f"computed coarse offset: {offset}")
 
     if plot:
         dir_out = utils.cross_platform_path(str(exp.dir_inf_overlaps))
@@ -865,8 +911,10 @@ def align_tile_pair(
         # Plot zero overlap if Inf in coarse offset
         if offset is None or any(np.isinf(offset)):
             offset = (0, 0)
-            print('Offset not determined')
-        my_sec.plot_ov(tid_a, tid_b, offset, dir_out, show_plot=False, clahe=clahe, blur=1.0)
+            print("Offset not determined")
+        my_sec.plot_ov(
+            tid_a, tid_b, offset, dir_out, show_plot=False, clahe=clahe, blur=1.0
+        )
 
     return seam_score
 
@@ -875,11 +923,12 @@ def plot_ov_wrapper(section, **kwargs):
     # print(f'Plotting s{section.section_num}')
     return Section.plot_ov(section, **kwargs)
 
+
 def par_plot_ov(
-        exp: Inspection,
-        kwargs: dict,
-        num_processes: int,
-        nums_to_align: Optional[Iterable[int]] = None
+    exp: Inspection,
+    kwargs: dict,
+    num_processes: int,
+    nums_to_align: Optional[Iterable[int]] = None,
 ) -> None:
 
     if exp.section_nums is None:
@@ -901,9 +950,13 @@ def par_plot_ov(
     # Filter sections without any of the requested tile_ids or pair is not neighbouring
     for sec in sections:
         sec.read_tile_id_map()
-        tid_a, tid_b = kwargs['tid_a'], kwargs['tid_b']
+        tid_a, tid_b = kwargs["tid_a"], kwargs["tid_b"]
         is_vert = utils.pair_is_vertical(sec.tile_id_map, tid_a, tid_b)
-        if is_vert is None or tid_a not in sec.tile_id_map or tid_b not in sec.tile_id_map:
+        if (
+            is_vert is None
+            or tid_a not in sec.tile_id_map
+            or tid_b not in sec.tile_id_map
+        ):
             sections.remove(sec)
 
     part_func = partial(plot_ov_wrapper, **kwargs)
@@ -914,29 +967,28 @@ def par_plot_ov(
 
 
 def run_par_plot_ov(
-        exp: Inspection,
-        start: Optional[int],
-        end: Optional[int],
-        tid_a: int,
-        tid_b: int,
-        num_proc: int,
-        dir_out: Optional[str] = None,
-        sec_nums: Optional[Iterable[int]] = None
+    exp: Inspection,
+    start: Optional[int],
+    end: Optional[int],
+    tid_a: int,
+    tid_b: int,
+    num_proc: int,
+    dir_out: Optional[str] = None,
+    sec_nums: Optional[Iterable[int]] = None,
 ):
-    """Plots overlap regions of a specific tile-pair over sections in parallel.
-    """
+    """Plots overlap regions of a specific tile-pair over sections in parallel."""
     jax.config.update("jax_platform_name", "cpu")
 
     if dir_out is None:
-        dir_out = exp.dir_inspect / 'overlaps'
-        logging.debug(f'storing to: {dir_out}')
+        dir_out = exp.dir_inspect / "overlaps"
+        logging.debug(f"storing to: {dir_out}")
 
     # Select section range (optional)
     nums_to_align = None
     if sec_nums is not None:
         nums_to_align = sec_nums
     elif None not in (start, end):
-        nums_to_align = set(range(start, end+1))
+        nums_to_align = set(range(start, end + 1))
 
     kwargs = dict(
         tid_a=tid_a,
@@ -945,7 +997,7 @@ def run_par_plot_ov(
         dir_out=dir_out,
         show_plot=False,
         clahe=True,
-        blur=1.2
+        blur=1.2,
     )
 
     par_plot_ov(
@@ -969,21 +1021,19 @@ def init_specific_section_dirs(exp: Inspection, sec_nums: Sequence[int]) -> None
     names = [f"s{n}_g{grid}" for n in sec_nums]
     dirs_ = [base / name for name in names]
 
-    exp.section_nums   = list(sec_nums)
-    exp.section_names  = names
-    exp.section_dirs   = dirs_
-    exp.section_dicts  = {n: str(p) for n, p in zip(sec_nums, dirs_)}
+    exp.section_nums = list(sec_nums)
+    exp.section_names = names
+    exp.section_dirs = dirs_
+    exp.section_dicts = {n: str(p) for n, p in zip(sec_nums, dirs_)}
     return None
 
 
 def _prepare_sections(
-        inspection: Inspection,
-        start: int,
-        end: int
+    inspection: Inspection, start: int, end: int
 ) -> Optional[list[int]]:
     """Helper to handle the repetitive range creation and initialization."""
     try:
-        sec_nums = list(range(start, end+1))
+        sec_nums = list(range(start, end + 1))
         valid_nums = utils.validate_section_numbers(
             inspection.first_sec, inspection.last_sec, sec_nums
         )
@@ -997,7 +1047,7 @@ def _prepare_sections(
 def main_par_plot_ovs_specific_tile_pair(inspection: Inspection):
 
     start: int = 1360  # inspection.first_sec
-    end: int = 1370    # inspection.last_sec
+    end: int = 1370  # inspection.last_sec
     tid_a: int = 464
     tid_b: int = 489
     num_proc: int = 1
@@ -1054,13 +1104,11 @@ def main_get_cxyz_outliers(config: cfg.ExpConfig):
 
 
 def main_postprocess_coarse_shifts(
-        exp: Inspection,
-        trace_ids: Optional[Iterable[int]] = None,
-        plot_traces: bool = True
+    exp: Inspection, trace_ids: Optional[Iterable[int]] = None, plot_traces: bool = True
 ) -> None:
 
     if exp.section_nums is None:
-        sec_nums = tuple(range(exp.first_sec, exp.last_sec+1))
+        sec_nums = tuple(range(exp.first_sec, exp.last_sec + 1))
         valid_nums = utils.validate_section_numbers(
             exp.first_sec, exp.last_sec, sec_nums
         )
@@ -1071,7 +1119,7 @@ def main_postprocess_coarse_shifts(
         plot_traces=plot_traces,
         locate_inf=True,
         trace_ids=trace_ids,
-        in_parallel=True
+        in_parallel=True,
     )
     return
 
@@ -1079,7 +1127,7 @@ def main_postprocess_coarse_shifts(
 def plot_ovs_from_out_or_inf_file(exp: Inspection):
     # Plot overlaps from file 'coarse_offset_outliers.txt' or 'all_inf.txt'
 
-    path_outliers = exp.dir_inspect / 'coarse_offset_outliers.txt'
+    path_outliers = exp.dir_inspect / "coarse_offset_outliers.txt"
     dir_name_out = exp.dir_overlaps.name
 
     # path_outliers = exp.dir_inspect / 'inf_vals.txt'
@@ -1093,9 +1141,7 @@ def plot_ovs_from_out_or_inf_file(exp: Inspection):
 
     # Initialize sections
     sec_nums = tuple(ov_dict.keys())
-    valid_nums = utils.validate_section_numbers(
-        exp.first_sec, exp.last_sec, sec_nums
-    )
+    valid_nums = utils.validate_section_numbers(exp.first_sec, exp.last_sec, sec_nums)
     init_specific_section_dirs(exp, valid_nums)
 
     # Plot overlaps
@@ -1105,8 +1151,7 @@ def plot_ovs_from_out_or_inf_file(exp: Inspection):
 
 
 def _get_update_targets(
-    cxyz_file: np.lib.npyio.NpzFile,
-    new_cxyz: Dict[str, np.ndarray]
+    cxyz_file: np.lib.npyio.NpzFile, new_cxyz: Dict[str, np.ndarray]
 ) -> Iterator[Tuple[str, np.ndarray]]:
     """Yields (key, value) from new_cxyz if they differ from backup."""
     for k, v in new_cxyz.items():
@@ -1116,8 +1161,7 @@ def _get_update_targets(
 
 
 def parse_acquisition(
-        exp_cfg: cfg.ExpConfig,
-        sec_range: Optional[tuple[int, int]] = None
+    exp_cfg: cfg.ExpConfig, sec_range: Optional[tuple[int, int]] = None
 ) -> None:
 
     insp = Inspection(exp_cfg)
@@ -1130,7 +1174,6 @@ def parse_acquisition(
         f"Section numbers range: [{start}-{end}]\n"
         f"Output dir: {output_dir}"
     )
-
 
     from em_inspection.parameter_config import AcquisitionConfig
 
@@ -1148,9 +1191,7 @@ def parse_acquisition(
     validator.validate_tile_id_maps()
 
 
-
 if __name__ == "__main__":
-
     ### Accessing individual alignment experiments
     configs = cfg.get_experiment_configurations()
     # exp_config = configs.get("ROLI_F1")
@@ -1167,32 +1208,25 @@ if __name__ == "__main__":
     ### PRE- & POST-PROCESS ROUTINES
     # main_scan_missing_section_folders(exp)
 
-
     ### FIX TILE-ID MAPS
     # main_fix_tile_id_maps(exp)
-
 
     ### VERIFY TILE_ID MAPS
     # main_verify_tile_id_maps(exp)
 
-
     ### POSTPROCESS COARSE SHIFTS
     # main_postprocess_coarse_shifts(exp, plot_traces=True, trace_ids=None)
-
 
     # # MULTIPROCESSING, RENDERING & FINE ALIGNMENT
     # main_par_multiproc(exp)
 
-
     ### DETECT BAD COARSE OFFSETS
     # main_get_cxyz_outliers(stitch_config=exp_config)
-
 
     # PLOTTING OVs
     # main_par_plot_ovs_specific_tile_pair(exp)
     # main_plot_ovs_all_tilepairs(exp)
     # plot_ovs_from_out_or_inf_file(exp)
-
 
     # FIX COARSE OFFSETS
     # main_fix_outliers_and_infinities(exp)
@@ -1201,10 +1235,7 @@ if __name__ == "__main__":
     exp = Inspection(exp_config)
     dir_stitched = exp.dir_stitched
     sec_nums_to_check = list(range(12801, 15000))
-    missing_sec_nums = utils.get_missing_stitched_sections(dir_stitched, sec_nums_to_check)
+    missing_sec_nums = utils.get_missing_stitched_sections(
+        dir_stitched, sec_nums_to_check
+    )
     print(missing_sec_nums)
-
-
-
-
-

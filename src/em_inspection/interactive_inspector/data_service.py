@@ -24,25 +24,43 @@ import em_inspection.parse_sbem_dataset as parse_sbem_dataset
 from em_inspection.Section_refactored import CoarseStitchConfig
 from em_inspection.coarse_offset_processor import SectionIndex
 from em_inspection.experiment_configs import ExperimentRegistry, ExpConfig
-from em_inspection.parameter_config import (AcquisitionConfig, StitchingConfig, RegistrationConfig, MeshIntegrationConfig,
-                              MaskingConfig, WarpConfig)
+from em_inspection.parameter_config import (
+    AcquisitionConfig,
+    StitchingConfig,
+    RegistrationConfig,
+    MeshIntegrationConfig,
+    MaskingConfig,
+    WarpConfig,
+)
 from em_inspection.Tile_refactored import Tile
 from em_inspection.interactive_inspector.constants import DataConstants as DC
 from em_inspection.interactive_inspector.constants import UIConstants as UI
 from em_inspection.interactive_inspector.presenters.flow_presenter import FlowPresenter
-from em_inspection.interactive_inspector.presenters.overlap_presenter import OverlapPresenter
+from em_inspection.interactive_inspector.presenters.overlap_presenter import (
+    OverlapPresenter,
+)
 from em_inspection.schema import InspectionSchema as IS
 from em_inspection.inspection_utils_refactor import get_missing_stitched_sections
 from em_inspection.interactive_inspector.pipeline_actions import PipelineOrchestrator
 from em_inspection.inspection_refactored import (
-    Inspection, Section, _prepare_sections, Vector, utils, cached_read_image, init_specific_section_dirs,
+    Inspection,
+    Section,
+    _prepare_sections,
+    Vector,
+    utils,
+    cached_read_image,
+    init_specific_section_dirs,
 )
 from em_inspection.Section_refactored import SectionInfrastructureError
-from em_inspection.interactive_inspector.dynamic_range_masks import RangeAnalysisConfig, create_range_mask_plot
+from em_inspection.interactive_inspector.dynamic_range_masks import (
+    RangeAnalysisConfig,
+    create_range_mask_plot,
+)
 
 
 class DataServiceError(Exception):
     """Base exception for the entire experiment registry errors"""
+
     def __init__(self, message):
         super().__init__(message)
         self.message = message
@@ -74,9 +92,9 @@ class DataService:
 
         self.acq_config: AcquisitionConfig | None = None
         self.exp_config: ExpConfig | None = None
-        self.stitch_config: StitchingConfig |None = None
+        self.stitch_config: StitchingConfig | None = None
         self.reg_config: RegistrationConfig | None = None
-        self.mesh_config: MeshIntegrationConfig| None = None
+        self.mesh_config: MeshIntegrationConfig | None = None
         self.mask_config: MaskingConfig | None = None
         self.warp_config: WarpConfig | None = None
 
@@ -86,37 +104,46 @@ class DataService:
         self._section_cache = {}
         self._lock = threading.Lock()
         self._worker = None
-        self.parsing_status = {"active": False, "progress": 0, "message": "", "logs": ""}
+        self.parsing_status = {
+            "active": False,
+            "progress": 0,
+            "message": "",
+            "logs": "",
+        }
         self._log_buffer = io.StringIO()
         self._log_lock = threading.Lock()
-        self.backup_status = {"active": False, "progress": 0, "message": "", "error": None}
+        self.backup_status = {
+            "active": False,
+            "progress": 0,
+            "message": "",
+            "error": None,
+        }
         self.coarse_align_status = UI.STITCH_STATUS
         self.abort_requested = False
         self.stitch_status = {"active": False, "pending_messages": []}
         self.message_queue = deque()
         self.service_initialized = False
 
-
     def handle_new_exp_infra(self, exp_config: ExpConfig) -> None:
-        """Performs actions during new experiment initialization """
+        """Performs actions during new experiment initialization"""
         # Register new experiment into list of projects
         self.create_and_save_new_experiment(exp_config)
-    
+
         # Create and save default stitching config to allow further steps
         self.stitch_config = self.create_default_stitch_config(exp_config)
-    
+
         # Save tile_stitching_config.yaml
         self.store_stitch_config(self.stitch_config, path_out=None)
 
         # Initial self and database
         self.load_experiment(exp_config)
 
-        
     def get_missing_stitched_sections(self) -> list[int]:
         dir_stitched = self.inspection.dir_stitched
-        sec_nums_to_check = list(range(self.inspection.first_sec, self.inspection.last_sec))
+        sec_nums_to_check = list(
+            range(self.inspection.first_sec, self.inspection.last_sec)
+        )
         return get_missing_stitched_sections(dir_stitched, sec_nums_to_check)
-
 
     def create_and_save_new_experiment(self, exp_config: ExpConfig) -> None:
         """Called by the Dash Callback when the user hits 'Add Experiment'
@@ -138,23 +165,18 @@ class DataService:
 
         self.initialize_experiment_from_config(new_conf)
 
-
     @staticmethod
     def create_default_stitch_config(exp_config: ExpConfig) -> StitchingConfig:
         return StitchingConfig().from_experiment(exp_config)
 
-
     def store_stitch_config(
-            self,
-            stitch_config: StitchingConfig,
-            path_out: str | None = None
+        self, stitch_config: StitchingConfig, path_out: str | None = None
     ) -> None:
 
         if path_out is None:
             path_out = self.get_stitch_config_path
 
         parameter_config.save_to_disk(stitch_config, path_out)
-
 
     def initialize_experiment_from_config(self, config: ExpConfig):
         self.exp_config = config
@@ -164,13 +186,11 @@ class DataService:
         self.service_initialized = True
         logging.info(f"DataService: Active experiment set to {config.name}")
 
-
     def get_sec_path(self, sec_num: int) -> str:
         sec_dir = Path(self.exp_config.proc_dir, IS.DIR_SECTIONS)
         grid_num = self.exp_config.grid_num
         sec_name = f"s{sec_num}_g{grid_num}"
         return str(sec_dir / sec_name)
-
 
     def get_latest_logs(self):
         """Safely read the current buffer."""
@@ -187,18 +207,21 @@ class DataService:
 
         # Regex to find percentages (e.g., '10%')
         # We look for the last one in the string as it's the most recent
-        matches = re.findall(r'(\d+)%', log_text)
+        matches = re.findall(r"(\d+)%", log_text)
         if matches:
             last_percent = int(matches[-1])
             if last_percent > self.parsing_status["progress"]:
                 self.parsing_status["progress"] = last_percent
 
-
     def parse_experiment(self, exp_name: str) -> None:
         with self._log_lock:
             self._log_buffer.seek(0)
             self._log_buffer.truncate(0)
-            self.parsing_status = {"active": True, "progress": 0, "message": "Parsing..."}
+            self.parsing_status = {
+                "active": True,
+                "progress": 0,
+                "message": "Parsing...",
+            }
 
         save_stdout, save_stderr = sys.stdout, sys.stderr
         sys.stdout = sys.stderr = self._log_buffer
@@ -215,7 +238,7 @@ class DataService:
                 str(self.inspection.dir_sections),
                 self.acq_config,
                 self.inspection.first_sec,
-                self.inspection.last_sec
+                self.inspection.last_sec,
             )
 
             # Validate parsing
@@ -238,19 +261,16 @@ class DataService:
             log_text = self._log_buffer.getvalue()
 
         # Sniper regex for the tqdm percentage
-        matches = re.findall(r'(\d+)%', log_text)
+        matches = re.findall(r"(\d+)%", log_text)
         if matches:
             last_val = int(matches[-1])
             if last_val > self.parsing_status["progress"]:
                 self.parsing_status["progress"] = last_val
 
-
     def validate_parsed(self) -> dict:
         # Check parsed section folders
         validator = parse_sbem_dataset.Validator(
-            self.inspection.root,
-            self.inspection.first_sec,
-            self.inspection.last_sec
+            self.inspection.root, self.inspection.first_sec, self.inspection.last_sec
         )
 
         missing_sections = validator.validate_parsed_sbem_acquisition()
@@ -258,27 +278,28 @@ class DataService:
 
         return {
             "missing_count": len(missing_sections),
-            "invalid_maps_count": len(invalid_maps)
+            "invalid_maps_count": len(invalid_maps),
         }
 
     @property
     def get_stitch_config_path(self):
         if self.exp_config is None:
-            raise (ValueError, "Failed to load tile_stitching_config.yaml. Experiment is not initialized.")
+            raise (
+                ValueError,
+                "Failed to load tile_stitching_config.yaml. Experiment is not initialized.",
+            )
         return str(Path(self.exp_config.proc_dir) / UI.FN_CFG_TILE_STITCHING)
 
-
     def load_stitching_config(self, config_path: str) -> StitchingConfig:
-        with open(config_path, 'r') as f:
+        with open(config_path, "r") as f:
             data = yaml.safe_load(f)
 
-        logging.info(f'loading {config_path}')
+        logging.info(f"loading {config_path}")
 
         cfg = StitchingConfig(**data)
         self.stitch_config = cfg
 
         return cfg
-
 
     def load_experiment(self, config: ExpConfig) -> None:
         """Loads inspector configuration profiles and loads offsets database."""
@@ -293,23 +314,26 @@ class DataService:
 
         # === Database Lifecycle Handshake ===
         if not self.processor.db_path.exists():
-            logging.info(f"DataService: Target database file for {config.name} not found. Spawning ingestion worker...")
+            logging.info(
+                f"DataService: Target database file for {config.name} not found. Spawning ingestion worker..."
+            )
             thread = threading.Thread(
-                target=self.run_offsets_backup_thread,
-                daemon=True
+                target=self.run_offsets_backup_thread, daemon=True
             )
             thread.start()
         else:
-            logging.info(f"DataService: Existing database identified for {config.name}. Synchronizing engines...")
+            logging.info(
+                f"DataService: Existing database identified for {config.name}. Synchronizing engines..."
+            )
             self.initialize_database_context()
 
         self.clear_cache()
-        logging.info(f"DataService: Loaded {config.name} configuration context successfully.")
-
+        logging.info(
+            f"DataService: Loaded {config.name} configuration context successfully."
+        )
 
     def initialize_experiment(
-            self, exp_name, proc_dir, grid_num, first_sec, last_sec,
-            grid_shape, acq_dir
+        self, exp_name, proc_dir, grid_num, first_sec, last_sec, grid_shape, acq_dir
     ):
         """
         The 'Actual' constructor called by the Setup page.
@@ -321,12 +345,11 @@ class DataService:
             first_sec=first_sec,
             last_sec=last_sec,
             grid_shape=(int(grid_shape[0]), int(grid_shape[1])),
-            acq_dir=acq_dir
+            acq_dir=acq_dir,
         )
 
         self.inspection = Inspection(self.exp_config)
         logging.info(f"DataService: Experiment {self.exp_config.name} successfully.")
-
 
     def _update_offsets_backup_stats(self, current, total, task_index, total_tasks=2):
         """
@@ -342,8 +365,9 @@ class DataService:
         global_progress = int(base_progress + task_progress)
 
         self.backup_status["progress"] = global_progress
-        self.backup_status["message"] = f"Task {task_index + 1}/{total_tasks}: {current}/{total} sections..."
-
+        self.backup_status["message"] = (
+            f"Task {task_index + 1}/{total_tasks}: {current}/{total} sections..."
+        )
 
     def initialize_database_context(self, overwrite: bool = False):
         """
@@ -353,7 +377,9 @@ class DataService:
         db_path = self.processor.db_path
 
         if db_path.exists() and overwrite:
-            logging.info(f"Overwrite flag active. Purging database container at: {db_path}")
+            logging.info(
+                f"Overwrite flag active. Purging database container at: {db_path}"
+            )
             try:
                 db_path.unlink()
             except OSError as e:
@@ -361,44 +387,53 @@ class DataService:
                 raise
 
         if not db_path.exists():
-            logging.info(f"Database target {db_path} not found. Attempting real record injection...")
+            logging.info(
+                f"Database target {db_path} not found. Attempting real record injection..."
+            )
 
             # 1. Direct execution: Attempt to back up real coarse offsets first
             offsets_discovered = self.backup_coarse_offsets_to_duckdb()
 
             # 2. Fallback execution: If no files existed on disk, compile structural NaN framework
             if not offsets_discovered:
-                logging.warning("No coarse offset matrix files discovered. Generating structural NaN placeholder...")
+                logging.warning(
+                    "No coarse offset matrix files discovered. Generating structural NaN placeholder..."
+                )
                 self.initialize_empty_coarse_offsets_db()
         else:
-            logging.info(f"Existing DuckDB container discovered at {db_path}. Skipping compilation.")
+            logging.info(
+                f"Existing DuckDB container discovered at {db_path}. Skipping compilation."
+            )
 
         # === Uniform Post-Initialization / Loading Pipeline ===
         logging.info("Syncing processor state engines with database index layout...")
         self.processor.fetch_section_sequence_from_db()
         self.tile_ids = self.processor.get_largest_tile_id_map()
 
-
     def initialize_empty_coarse_offsets_db(self, progress_cb=None):
         """
         Creates a structural placeholder database containing all experiment section numbers
         and tile IDs. Fills all vector displacement fields with float NaN values.
         """
-        logging.info("Initializing fallback structural database with NaN placeholder matrices...")
+        logging.info(
+            "Initializing fallback structural database with NaN placeholder matrices..."
+        )
 
         tile_id_maps_dict, _ = utils.aggregate_parallel(
             section_dirs=self.inspection.section_dirs,
             target_filename=self.inspection.fn_tile_id_map,
             processing_func=utils.get_tile_id_map,
             progress_cb=progress_cb,
-            max_workers=20
+            max_workers=20,
         )
 
         if not tile_id_maps_dict:
-            raise RuntimeError("Database initialization aborted: Zero valid tile_id_maps resolved.")
+            raise RuntimeError(
+                "Database initialization aborted: Zero valid tile_id_maps resolved."
+            )
 
         all_rows = []
-        nan_val = float('nan')
+        nan_val = float("nan")
 
         for sec_num_str, tile_map in tile_id_maps_dict.items():
             sec_num = int(sec_num_str)
@@ -409,10 +444,11 @@ class DataService:
                 all_rows.append((tid, sec_num, nan_val, nan_val, nan_val, nan_val))
 
         if not all_rows:
-            raise RuntimeError("No valid tile mappings were generated inside matrix dictionaries.")
+            raise RuntimeError(
+                "No valid tile mappings were generated inside matrix dictionaries."
+            )
 
         self.processor.repo.bulk_insert_rows_atomic(all_rows, suffix="_duckdb_fallback")
-
 
     def backup_coarse_offsets_to_duckdb(self, progress_cb=None) -> bool:
         """
@@ -424,7 +460,7 @@ class DataService:
             target_filename=self.inspection.fn_coarse_offsets,
             processing_func=utils.process_offsets,
             progress_cb=progress_cb,
-            max_workers=20
+            max_workers=20,
         )
 
         if not offsets:
@@ -435,20 +471,26 @@ class DataService:
             target_filename=self.inspection.fn_tile_id_map,
             processing_func=utils.get_tile_id_map,
             progress_cb=progress_cb,
-            max_workers=20
+            max_workers=20,
         )
 
         if not tile_id_maps_dict:
-            logging.error("Coarse offsets existed, but corresponding tile_id_maps are missing.")
+            logging.error(
+                "Coarse offsets existed, but corresponding tile_id_maps are missing."
+            )
             return False
 
         self.processor.flatten_and_save_coarse_offsets(offsets, tile_id_maps_dict)
         return True
 
-
     def run_offsets_backup_thread(self, overwrite: bool = False):
         """Compiles spatial arrays and saves them directly into DuckDB stores via background worker."""
-        self.backup_status = {"active": True, "progress": 1, "message": "Initializing...", "error": None}
+        self.backup_status = {
+            "active": True,
+            "progress": 1,
+            "message": "Initializing...",
+            "error": None,
+        }
         try:
             if not self.inspection:
                 raise ValueError("No inspection object loaded in execution context.")
@@ -459,13 +501,17 @@ class DataService:
             if not self.inspection.section_dirs:
                 raise ValueError("No valid section directories resolved on storage.")
 
-            self.backup_status["message"] = "Task 1/1: Processing DuckDB lifecycle transaction..."
+            self.backup_status["message"] = (
+                "Task 1/1: Processing DuckDB lifecycle transaction..."
+            )
 
             # Execute unified controller
             self.initialize_database_context(overwrite=overwrite)
 
             self.backup_status["progress"] = 100
-            self.backup_status["message"] = "Backup complete: Relational tables indexed and loaded."
+            self.backup_status["message"] = (
+                "Backup complete: Relational tables indexed and loaded."
+            )
             time.sleep(1.0)
 
         except Exception as e:
@@ -474,16 +520,14 @@ class DataService:
         finally:
             self.backup_status["active"] = False
 
-
     def get_trace(self, tid: str):
         if not self.processor:
             logging.error("Trace requested but no experiment is loaded.")
             return None
         return self.processor.get_full_trace(tid)
 
-
     def _get_overlap_context(
-            self, tid_a: str, z: int, overlap_type: str
+        self, tid_a: str, z: int, overlap_type: str
     ) -> Optional[OverlapContext]:
 
         z_str = str(z)
@@ -502,16 +546,18 @@ class DataService:
 
         # 3. Handle Vector Logic
         raw_vec = self.processor.get_shift_vec(z, axis, y, x)
-        logging.debug(f'get_overlap_context: raw_vec: {raw_vec}')
+        logging.debug(f"get_overlap_context: raw_vec: {raw_vec}")
 
         # Check for INF or NaN to ensure plotting safety
         if not np.isfinite(raw_vec).all():
-            logging.info(f"Invalid vector (Inf/NaN) at Z={z}, T={tid_a_int}. Defaulting to (0,0).")
+            logging.info(
+                f"Invalid vector (Inf/NaN) at Z={z}, T={tid_a_int}. Defaulting to (0,0)."
+            )
             shift_vec = (0, 0)
         else:
             shift_vec = tuple(map(int, np.round(raw_vec)))
 
-        logging.debug(f'Final shift_vec: {shift_vec} | Raw: {raw_vec}')
+        logging.debug(f"Final shift_vec: {shift_vec} | Raw: {raw_vec}")
 
         return OverlapContext(
             section=section,
@@ -520,9 +566,8 @@ class DataService:
             axis=axis,
             y=y,
             x=x,
-            shift_vec=shift_vec
+            shift_vec=shift_vec,
         )
-
 
     def ensure_flow_fig_resources(self, section_num: int) -> Section | None:
 
@@ -540,26 +585,25 @@ class DataService:
 
         return section
 
-
     def get_flow_fig(
-            self,
-            section_num: int,
-            tile_id: str,
-            reg_config: RegistrationConfig | None = None,
-            do_clean_flow: bool = False
+        self,
+        section_num: int,
+        tile_id: str,
+        reg_config: RegistrationConfig | None = None,
+        do_clean_flow: bool = False,
     ) -> Optional[go.Figure]:
         """Retrieves scientific flow field data matrices and hands them off to the FlowPresenter.
 
-            This method ensures the necessary resources are loaded, determines the spatial
-            coordinates for the tile, and optionally performs flow cleaning and reconciliation.
-            The colormap range is locked to the raw data values to ensure visual consistency
-            between raw and cleaned states.
+         This method ensures the necessary resources are loaded, determines the spatial
+         coordinates for the tile, and optionally performs flow cleaning and reconciliation.
+         The colormap range is locked to the raw data values to ensure visual consistency
+         between raw and cleaned states.
 
-           Args:
-            section_num: The index of the section to visualize.
-            tile_id: The string identifier for the specific tile.
-            reg_config: Configuration for cleaning; defaults to self.reg_config if None.
-            do_clean_flow: If True, applies cleaning and reconciliation to the flow fields.
+        Args:
+         section_num: The index of the section to visualize.
+         tile_id: The string identifier for the specific tile.
+         reg_config: Configuration for cleaning; defaults to self.reg_config if None.
+         do_clean_flow: If True, applies cleaning and reconciliation to the flow fields.
 
         """
         cfg = reg_config or self.reg_config
@@ -588,8 +632,9 @@ class DataService:
 
             z_lims = None
             if xy in fine_x_raw and xy in fine_y_raw:
-                all_vals = np.concatenate([fine_x_raw[xy][:2].flatten(),
-                                           fine_y_raw[xy][:2].flatten()])
+                all_vals = np.concatenate(
+                    [fine_x_raw[xy][:2].flatten(), fine_y_raw[xy][:2].flatten()]
+                )
                 z_lims = (np.nanmin(all_vals), np.nanmax(all_vals))
 
             fine_x, fine_y = fine_x_raw, fine_y_raw
@@ -609,7 +654,6 @@ class DataService:
             logging.warning(err_msg)
             return None
 
-
     def _resolve_tile(self, section_num: int, tile_id_num: int) -> Optional[Tile]:
         """Internal domain helper to safely fetch and instantiate a Tile entity."""
         section = self._get_initialized_section(section_num)
@@ -617,16 +661,13 @@ class DataService:
             return None
 
         if tile_id_num not in section.tile_dicts:
-            logging.warning(f'Tile t{tile_id_num} not resolved.')
+            logging.warning(f"Tile t{tile_id_num} not resolved.")
             return None
 
         return Tile(section.tile_dicts[tile_id_num])
 
-
     def get_range_masks_fig(
-            self,
-            section_num: int,
-            tile_id_num: int
+        self, section_num: int, tile_id_num: int
     ) -> Optional[go.Figure]:
 
         t = self._resolve_tile(section_num, tile_id_num)
@@ -641,14 +682,13 @@ class DataService:
 
         return create_range_mask_plot(t.img_data, rac)
 
-
     def get_tile_image_fig(
-            self,
-            section_num: int,
-            tile_id_num: int,
-            bin_fct: int = 2,
-            gauss_sigma: float = 0.8,
-            apply_clahe: bool = True,
+        self,
+        section_num: int,
+        tile_id_num: int,
+        bin_fct: int = 2,
+        gauss_sigma: float = 0.8,
+        apply_clahe: bool = True,
     ) -> go.Figure:
 
         t = self._resolve_tile(section_num, tile_id_num)
@@ -663,26 +703,37 @@ class DataService:
         # 3. Downscaling for responsiveness
         display_img = pipeline.bin(bin_fct).processed
 
-        fig = px.imshow(display_img, color_continuous_scale='gray')
+        fig = px.imshow(display_img, color_continuous_scale="gray")
 
         fig.update_layout(
             coloraxis_showscale=False,
-            paper_bgcolor='black',
-            plot_bgcolor='black',
+            paper_bgcolor="black",
+            plot_bgcolor="black",
             margin=dict(l=0, r=0, b=20, t=15),
-            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, ticks='', visible=False),
-            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, ticks='', visible=False)
+            xaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                showticklabels=False,
+                ticks="",
+                visible=False,
+            ),
+            yaxis=dict(
+                showgrid=False,
+                zeroline=False,
+                showticklabels=False,
+                ticks="",
+                visible=False,
+            ),
         )
 
         return fig
 
-
     def get_overlap_figure(
-            self,
-            tid_a: str,
-            z: int,
-            overlap_type: str,
-            manual_nudge: Tuple[int, int] = (0, 0)
+        self,
+        tid_a: str,
+        z: int,
+        overlap_type: str,
+        manual_nudge: Tuple[int, int] = (0, 0),
     ) -> Optional[go.Figure]:
         """Brokers pixel registration arrays to the OverlapPresenter canvas."""
         ctx = self._get_overlap_context(tid_a, z, overlap_type)
@@ -690,14 +741,14 @@ class DataService:
             return None
 
         dx, dy = manual_nudge
-        if overlap_type.upper().startswith('H'):
+        if overlap_type.upper().startswith("H"):
             corrected_nudge = (dy, -dx)
         else:
             corrected_nudge = (dx, dy)
 
         nudged_vec = (
             ctx.shift_vec[0] + corrected_nudge[0],
-            ctx.shift_vec[1] + corrected_nudge[1]
+            ctx.shift_vec[1] + corrected_nudge[1],
         )
 
         try:
@@ -718,30 +769,31 @@ class DataService:
                 tid_a=ctx.tid_a,
                 tid_b=ctx.tid_b,
                 overlap_type=overlap_type.upper(),
-                z=z
+                z=z,
             )
         except Exception as e:
             logging.error(f"Nudge plot failed: {e}")
             return None
 
-
     def _resolve_overlap_context(
-            self, z_str: Any, tid_a: int, ov_type: str
+        self, z_str: Any, tid_a: int, ov_type: str
     ) -> Optional[Tuple[int, int, int, int]]:
 
         normalized_z = str(int(z_str)) if z_str is not None else ""
         lookup: SectionIndex = self.processor.get_section_lookup(normalized_z)
-        if lookup is None or not hasattr(lookup, 'tile_to_coords'):
+        if lookup is None or not hasattr(lookup, "tile_to_coords"):
             return None
 
         if tid_a not in lookup.tile_to_coords:
-            logging.debug(f'tile_id {tid_a} not found in the lookup coords: {lookup.tile_to_coords}')
+            logging.debug(
+                f"tile_id {tid_a} not found in the lookup coords: {lookup.tile_to_coords}"
+            )
             return None
 
         y, x = lookup.tile_to_coords[tid_a]
-        target_y = y + 1 if ov_type == 'V' else y
-        target_x = x + 1 if ov_type == 'H' else x
-        axis_idx = 1 if ov_type == 'V' else 0
+        target_y = y + 1 if ov_type == "V" else y
+        target_x = x + 1 if ov_type == "H" else x
+        axis_idx = 1 if ov_type == "V" else 0
 
         # Reverse lookup using the lean slotted SectionIndex cache
         for potential_tid, coords in lookup.tile_to_coords.items():
@@ -751,12 +803,11 @@ class DataService:
         logging.warning(f"Boundary hit: Tile {tid_a} has no {ov_type} neighbor.")
         return None
 
-
     def _get_initialized_section(self, z: int) -> Optional[Section]:
         """Manages section lifecycle structures using DuckDB mapping coordinates."""
         sec_num_list = _prepare_sections(self.inspection, start=z, end=z)
         if sec_num_list is None:
-            logging.warning(f'Section number {z} falls outside experiment ranges.')
+            logging.warning(f"Section number {z} falls outside experiment ranges.")
             return None
 
         sec_path = self.inspection.section_dicts.get(z)
@@ -786,15 +837,14 @@ class DataService:
 
             return self._section_cache[sec_path]
 
-
     def compute_coarse_shift(
-            self,
-            tid_a: str,
-            z: int,
-            overlap_type: str,
-            initial_nudge: Tuple[int, int] = (0, 0),
-            override_vector: Optional[Vector] = None,
-            max_ext: int = 25,
+        self,
+        tid_a: str,
+        z: int,
+        overlap_type: str,
+        initial_nudge: Tuple[int, int] = (0, 0),
+        override_vector: Optional[Vector] = None,
+        max_ext: int = 25,
     ):
         """
         Calculates a new shift vector.
@@ -813,7 +863,7 @@ class DataService:
         section: Section = ctx.section
         section.tile_dicts = utils.get_tile_dicts(section.path)  # TODO: Optimize
 
-        if overlap_type.upper().startswith('H'):
+        if overlap_type.upper().startswith("H"):
             aligned_nudge = (initial_nudge[1], -initial_nudge[0])
         else:
             aligned_nudge = initial_nudge
@@ -824,9 +874,11 @@ class DataService:
         else:
             start_offset: Vector = (
                 ctx.shift_vec[0] + aligned_nudge[0],
-                ctx.shift_vec[1] + aligned_nudge[1]
+                ctx.shift_vec[1] + aligned_nudge[1],
             )
-            logging.info(f"NUDGE MODE: {ctx.shift_vec} + {aligned_nudge} = {start_offset}")
+            logging.info(
+                f"NUDGE MODE: {ctx.shift_vec} + {aligned_nudge} = {start_offset}"
+            )
 
         try:
             current_shift = start_offset
@@ -840,7 +892,7 @@ class DataService:
                         tile_pair=(t1, t2),
                         is_vert=bool(ctx.axis),
                         max_ext=m_ext,
-                        stride=s
+                        stride=s,
                     )
                 except TypeError:
                     current_shift = (np.nan, np.nan)
@@ -850,12 +902,14 @@ class DataService:
 
             self.processor.update_shift_vec(z, ctx.axis, ctx.y, ctx.x, current_shift)
 
-            logging.info(f's{ctx.section.section_num} t{ctx.tid_a}-t{ctx.tid_b} REFINED VECTOR: {current_shift}')
+            logging.info(
+                f"s{ctx.section.section_num} t{ctx.tid_a}-t{ctx.tid_b} REFINED VECTOR: {current_shift}"
+            )
 
             return {
                 "initial": ctx.shift_vec,
                 "start_used": start_offset,
-                "refined": current_shift
+                "refined": current_shift,
             }
         except Exception as e:
             logging.error(f"Calculation failed: {e}")
@@ -866,40 +920,46 @@ class DataService:
         if not self.processor.modified_offset_entries:
             return
 
-        modified_sections = sorted(list(
-            {int(sec_num) for (sec_num, _) in self.processor.modified_offset_entries.keys()}
-        ))
+        modified_sections = sorted(
+            list(
+                {
+                    int(sec_num)
+                    for (sec_num, _) in self.processor.modified_offset_entries.keys()
+                }
+            )
+        )
 
-        sec_paths_dict = {sec_num: self.get_sec_path(sec_num) for sec_num in modified_sections}
+        sec_paths_dict = {
+            sec_num: self.get_sec_path(sec_num) for sec_num in modified_sections
+        }
         self.processor.store_cxyz_to_offset_files(sec_paths_dict, modified_sections)
         return None
 
-
     @staticmethod
     def _build_plotly_figure(img: np.ndarray, t1: str, t2: int, ov: str, z: int):
-        fig = px.imshow(img, binary_string=True, origin='upper')
+        fig = px.imshow(img, binary_string=True, origin="upper")
         fig.update_layout(
             title=dict(
                 text=f"<b>OVERLAP {ov}</b> | {t1} ↔ {t2} | Z={z}",
-                x=0.5, y=0.98, xanchor='center',
-                font=dict(family="Monospace", size=14, color="#00FFCC")
+                x=0.5,
+                y=0.98,
+                xanchor="center",
+                font=dict(family="Monospace", size=14, color="#00FFCC"),
             ),
             margin=dict(l=0, r=0, b=0, t=10),
             xaxis=dict(visible=False, fixedrange=False),
             yaxis=dict(visible=False, fixedrange=False),
-            paper_bgcolor='black',
-            plot_bgcolor='black',
-            dragmode='pan',
-            autosize=True
+            paper_bgcolor="black",
+            plot_bgcolor="black",
+            dragmode="pan",
+            autosize=True,
         )
 
         return fig
 
-
     def find_inf_offsets_for_tile(self, tile_id: str):
         """Pass-through to the processor logic."""
         return self.processor.find_inf_offsets_for_tile(tile_id)
-
 
     def preload_source_images(self, selection_data: list):
         """
@@ -913,32 +973,34 @@ class DataService:
             if self._worker and self._worker.is_alive():
                 return
 
-            targets = selection_data[:DC.CACHED_BASKET_ITEMS]
-            logging.debug(f'targets: {targets}')
+            targets = selection_data[: DC.CACHED_BASKET_ITEMS]
+            logging.debug(f"targets: {targets}")
             self._worker = threading.Thread(
-                target=self._preload_loop,
-                args=(targets,),
-                daemon=True
+                target=self._preload_loop, args=(targets,), daemon=True
             )
             self._worker.start()
-
 
     def _preload_loop(self, items):
         """Background task for cluster I/O."""
         for item in items:
-            logging.debug(f'_preload_loop item: {item}')
+            logging.debug(f"_preload_loop item: {item}")
             try:
                 # Defensive formatting checks prior to worker extraction
-                if not item or 'tid' not in item or 'z' not in item or 'overlap' not in item:
+                if (
+                    not item
+                    or "tid" not in item
+                    or "z" not in item
+                    or "overlap" not in item
+                ):
                     continue
 
-                ctx = self._get_overlap_context(item['tid'], item['z'], item['overlap'])
+                ctx = self._get_overlap_context(item["tid"], item["z"], item["overlap"])
 
                 if not ctx or ctx.section is None:
                     continue
 
                 sec = ctx.section
-                if getattr(sec, 'tile_dicts', None) is None:
+                if getattr(sec, "tile_dicts", None) is None:
                     sec.tile_dicts = utils.get_tile_dicts(sec.path)
 
                 if not sec.tile_dicts:
@@ -951,8 +1013,9 @@ class DataService:
                         cached_read_image(str(path))
 
             except Exception as e:
-                logging.debug(f"Preload worker skipped tile {item.get('tid', 'unknown')}: {e}")
-
+                logging.debug(
+                    f"Preload worker skipped tile {item.get('tid', 'unknown')}: {e}"
+                )
 
     def clear_cache(self):
         """Reset all caches and force garbage collection."""
@@ -962,34 +1025,47 @@ class DataService:
             gc.collect()
             logging.debug("Caches cleared and memory freed.")
 
-
     def get_slider_metadata(self):
         """Returns range bounds for UI navigation sliders using the database sequence."""
 
-        z_values = getattr(self.processor, 'section_sequence', [])
+        z_values = getattr(self.processor, "section_sequence", [])
 
         # FALLBACK: If database isn't built yet, populate boundaries from raw experiment configurations
         if not z_values and self.exp_config is not None:
-            z_values = list(range(self.exp_config.first_sec, self.exp_config.last_sec + 1))
+            z_values = list(
+                range(self.exp_config.first_sec, self.exp_config.last_sec + 1)
+            )
 
         if not z_values:
-            return {"min": 0, "max": 100, "marks": {0: "0", 100: "100"}, "initial_value": 0}
+            return {
+                "min": 0,
+                "max": 100,
+                "marks": {0: "0", 100: "100"},
+                "initial_value": 0,
+            }
 
         z_min, z_max = min(z_values), max(z_values)
         step_size = max(1, (z_max - z_min) // 5)
 
-        slider_marks = {int(v): str(int((z_max + z_min) - v)) for v in range(z_min, z_max + 1, step_size)}
+        slider_marks = {
+            int(v): str(int((z_max + z_min) - v))
+            for v in range(z_min, z_max + 1, step_size)
+        }
         slider_marks[z_max] = str(z_min)
         slider_marks[z_min] = str(z_max)
 
-        return {"min": z_min, "max": z_max, "marks": slider_marks, "initial_value": z_max}
-
+        return {
+            "min": z_min,
+            "max": z_max,
+            "marks": slider_marks,
+            "initial_value": z_max,
+        }
 
     @staticmethod
     @functools.lru_cache(maxsize=32)
     def prepare_stitching_params(
-            config_path: str | os.PathLike | None = None,
-            ui_params: tuple[tuple[str, any], ...] | None = None,
+        config_path: str | os.PathLike | None = None,
+        ui_params: tuple[tuple[str, any], ...] | None = None,
     ) -> StitchingConfig:
         """
         1. Loads YAML (The Base)
@@ -1015,9 +1091,17 @@ class DataService:
 
             reg = target_dict["registration_config"]
             if "overlaps_x" in ui_params_dict:
-                reg["overlaps_x"] = [int(x.strip()) for x in str(ui_params_dict["overlaps_x"]).split(",") if x.strip()]
+                reg["overlaps_x"] = [
+                    int(x.strip())
+                    for x in str(ui_params_dict["overlaps_x"]).split(",")
+                    if x.strip()
+                ]
             if "overlaps_y" in ui_params_dict:
-                reg["overlaps_y"] = [int(x.strip()) for x in str(ui_params_dict["overlaps_y"]).split(",") if x.strip()]
+                reg["overlaps_y"] = [
+                    int(x.strip())
+                    for x in str(ui_params_dict["overlaps_y"]).split(",")
+                    if x.strip()
+                ]
             if "min_overlap" in ui_params_dict:
                 reg["min_overlap"] = int(ui_params_dict["min_overlap"])
             if "min_peak_ratio" in ui_params_dict:
@@ -1039,14 +1123,18 @@ class DataService:
             if "max_gradient" in ui_params_dict:
                 reg["max_gradient"] = int(ui_params_dict["max_gradient"])
             if "reconcile_flow_max_deviation" in ui_params_dict:
-                reg["reconcile_flow_max_deviation"] = int(ui_params_dict["reconcile_flow_max_deviation"])
+                reg["reconcile_flow_max_deviation"] = int(
+                    ui_params_dict["reconcile_flow_max_deviation"]
+                )
 
             # Warp Config
             if "warp_config" not in target_dict:
                 target_dict["warp_config"] = {}
 
             if "use_clahe" in ui_params_dict:
-                target_dict["warp_config"]["use_clahe"] = bool(ui_params_dict["use_clahe"])
+                target_dict["warp_config"]["use_clahe"] = bool(
+                    ui_params_dict["use_clahe"]
+                )
 
             # Pipeline Config
             if "pipeline_config" not in target_dict:
@@ -1065,22 +1153,19 @@ class DataService:
         try:
             return StitchingConfig.model_validate(raw_dict)
         except Exception as e:
-            logging.warning(f"Validation warning: {e}. Returning defaults for missing keys.")
+            logging.warning(
+                f"Validation warning: {e}. Returning defaults for missing keys."
+            )
             return StitchingConfig(**raw_dict)  # Brute force attempt
 
-
-    def run_coarse_align_thread(
-            self,
-            section_numbers,
-            reg_params: CoarseStitchConfig
-    ):
+    def run_coarse_align_thread(self, section_numbers, reg_params: CoarseStitchConfig):
         self.abort_requested = False
         self.coarse_align_status = {
             "active": True,
             "progress": 0,
             "message": "Initializing...",
             "pending_messages": [UI.log_row("Coarse Alignment Started", type="info")],
-            "error": None
+            "error": None,
         }
 
         total = len(section_numbers)
@@ -1094,13 +1179,17 @@ class DataService:
             for i, sec_num in enumerate(section_numbers):
                 if self.abort_requested:
                     self.coarse_align_status["pending_messages"].append(
-                        UI.log_row("🛑 Abort signal received. Stopping...", type="warning")
+                        UI.log_row(
+                            "🛑 Abort signal received. Stopping...", type="warning"
+                        )
                     )
                     break
 
                 msg = f"Processing section {sec_num} ({i + 1}/{total})"
                 self.coarse_align_status["message"] = msg
-                self.coarse_align_status["pending_messages"].append(UI.log_row(msg, type="info"))
+                self.coarse_align_status["pending_messages"].append(
+                    UI.log_row(msg, type="info")
+                )
 
                 try:
                     # 1. Component Instantiation
@@ -1116,7 +1205,7 @@ class DataService:
                         clahe=reg_params.apply_clahe,
                         clahe_params=reg_params.clahe_params,
                         parallel=True,
-                        max_workers=8
+                        max_workers=8,
                     )
                     coarse_offsets = section.compute_coarse_offsets_section(reg_params)
                     utils.save_coarse_mat(coarse_offsets, section.path)
@@ -1135,7 +1224,10 @@ class DataService:
 
                 except Exception as e:
                     self._handle_section_failure(
-                        sec_num, f"Unexpected Crash: {e}", failed_sections, level="critical"
+                        sec_num,
+                        f"Unexpected Crash: {e}",
+                        failed_sections,
+                        level="critical",
                     )
 
                 self.coarse_align_status["progress"] = int(((i + 1) / total) * 100)
@@ -1155,11 +1247,16 @@ class DataService:
                 fail_msg = f"Finished with {len(failed_sections)} failed sections: {failed_sections}"
                 logging.warning(fail_msg)
                 self.coarse_align_status["pending_messages"].append(
-                    UI.log_row(f"⚠️ Completed with errors. Failed sections: {failed_sections}", type="warning")
+                    UI.log_row(
+                        f"⚠️ Completed with errors. Failed sections: {failed_sections}",
+                        type="warning",
+                    )
                 )
                 self.coarse_align_status["error"] = fail_msg
             else:
-                self.coarse_align_status["message"] = f"Successfully processed {successful}/{total} sections."
+                self.coarse_align_status["message"] = (
+                    f"Successfully processed {successful}/{total} sections."
+                )
                 self.coarse_align_status["progress"] = 100
                 self.coarse_align_status["pending_messages"].append(
                     UI.log_row("🏁 Coarse Alignment Complete", type="success")
@@ -1167,7 +1264,9 @@ class DataService:
 
     # Helper methods to reduce boilerplate
     def _log_status(self, msg, msg_type):
-        self.coarse_align_status["pending_messages"].append(UI.log_row(msg, type=msg_type))
+        self.coarse_align_status["pending_messages"].append(
+            UI.log_row(msg, type=msg_type)
+        )
 
     def _handle_section_failure(self, sec_num, error_msg, failed_list, level="error"):
         logging.log(getattr(logging, level.upper()), f"Section {sec_num}: {error_msg}")
@@ -1176,8 +1275,7 @@ class DataService:
 
     @staticmethod
     def compute_auto_zoom_ranges(
-            shifts: npt.NDArray[np.float64],
-            sec_nums: list[int]
+        shifts: npt.NDArray[np.float64], sec_nums: list[int]
     ) -> Tuple[list[int], list[int]]:
         """
         Calculates column-specific horizontal and vertical auto-zoom bounding x-ranges
@@ -1189,14 +1287,16 @@ class DataService:
             mask = ~np.isnan(sub_shifts).all(axis=0)
             if np.any(mask):
                 valid_idx = np.where(mask)[0]
-                return [int(sec_nums[valid_idx[0]]) - 2, int(sec_nums[valid_idx[-1]]) + 2]
+                return [
+                    int(sec_nums[valid_idx[0]]) - 2,
+                    int(sec_nums[valid_idx[-1]]) + 2,
+                ]
             return [int(min(sec_nums)), int(max(sec_nums))]
 
         range_h = get_range_for_indices([0, 1])
         range_v = get_range_for_indices([2, 3])
 
         return range_h, range_v
-
 
     @staticmethod
     def get_inf_y_ceiling(data_row: npt.NDArray[np.float64]) -> float:

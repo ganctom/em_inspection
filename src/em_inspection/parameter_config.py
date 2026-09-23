@@ -21,7 +21,7 @@ def save_to_disk(cfg_obj: BaseModel, path_out: str):
     """
     raw_data = cfg_obj.model_dump()
     clean_data = prepare_for_yaml(raw_data)
-    with open(path_out, 'w') as f:
+    with open(path_out, "w") as f:
         yaml.safe_dump(clean_data, f, default_flow_style=False, sort_keys=False)
 
 
@@ -35,7 +35,7 @@ def prepare_for_yaml(obj):
     elif isinstance(obj, (list, tuple)):
         # Convert both to lists for a uniform YAML sequence output
         return [prepare_for_yaml(item) for item in obj]
-    elif hasattr(obj, '__fspath__'):  # Handles Path objects
+    elif hasattr(obj, "__fspath__"):  # Handles Path objects
         return str(obj)
     return obj
 
@@ -48,7 +48,7 @@ class AcquisitionConfig(BaseModel):
     thickness: float = DC.DEF_CT
     resolution_xy: float = DC.DEF_PX_SIZE
 
-    @field_validator('sbem_root_dir', mode='before')
+    @field_validator("sbem_root_dir", mode="before")
     @classmethod
     def normalize_paths(cls, v):
         return cross_platform_path(v) if v else v
@@ -56,12 +56,12 @@ class AcquisitionConfig(BaseModel):
     @classmethod
     def from_experiment(cls, exp: ExpConfig) -> AcquisitionConfig:
         return cls(
-                sbem_root_dir=exp.acq_dir,
-                tile_grid=f"g{exp.grid_num:04d}",
-                grid_shape = exp.grid_shape,
-                thickness = exp.cut_thickness,
-                resolution_xy = exp.pixel_size,
-            )
+            sbem_root_dir=exp.acq_dir,
+            tile_grid=f"g{exp.grid_num:04d}",
+            grid_shape=exp.grid_shape,
+            thickness=exp.cut_thickness,
+            resolution_xy=exp.pixel_size,
+        )
 
     @property
     def grid_number(self) -> int:
@@ -74,7 +74,9 @@ class AcquisitionConfig(BaseModel):
         if re.match(r"^g0+$", self.tile_grid):
             return 0
 
-        raise ValueError(f"Invalid tile_grid format: {self.tile_grid}. Expected 'gXXXX'.")
+        raise ValueError(
+            f"Invalid tile_grid format: {self.tile_grid}. Expected 'gXXXX'."
+        )
 
 
 class ExpConfig(BaseModel):
@@ -97,15 +99,17 @@ class ExpConfig(BaseModel):
         cleaned["grid_shape"] = (x, y)
         return cls(**cleaned)
 
-    @field_validator('acq_dir', 'proc_dir', mode='before')
+    @field_validator("acq_dir", "proc_dir", mode="before")
     @classmethod
     def normalize_paths(cls, v):
         return cross_platform_path(v) if v else v
 
-    @model_validator(mode='after')
-    def validate_range(self) -> 'ExpConfig':
+    @model_validator(mode="after")
+    def validate_range(self) -> "ExpConfig":
         if self.first_sec > self.last_sec:
-            raise ValueError(f"first_sec ({self.first_sec}) > last_sec ({self.last_sec})")
+            raise ValueError(
+                f"first_sec ({self.first_sec}) > last_sec ({self.last_sec})"
+            )
         return self
 
 
@@ -161,29 +165,28 @@ class RegistrationConfig(BaseModel):
     clip_limit: float = 2.0
     kernel_size: int = 128
 
-
     def to_dict(self):
         return self.model_dump()
 
     @property
     def clean_kwargs(self) -> dict:
         """Slices parameters required strictly for flow filtering/cleaning."""
-        return self.model_dump(include={
-            "min_peak_ratio",
-            "min_peak_sharpness",
-            "max_magnitude",
-            "max_deviation"
-        })
+        return self.model_dump(
+            include={
+                "min_peak_ratio",
+                "min_peak_sharpness",
+                "max_magnitude",
+                "max_deviation",
+            }
+        )
 
     @property
     def recon_kwargs(self) -> dict:
         """Slices and maps parameters required strictly for flow reconciliation."""
         # 1. Extract the raw subset
-        raw_subset = self.model_dump(include={
-            "max_gradient",
-            "reconcile_flow_max_deviation",
-            "min_patch_size"
-        })
+        raw_subset = self.model_dump(
+            include={"max_gradient", "reconcile_flow_max_deviation", "min_patch_size"}
+        )
         raw_subset["max_deviation"] = raw_subset.pop("reconcile_flow_max_deviation")
 
         return raw_subset
@@ -199,7 +202,7 @@ class RegistrationConfig(BaseModel):
             "filter_size",
             "clahe",
             "clip_limit",
-            "kernel_size"
+            "kernel_size",
         }
         return CoarseParams(**self.model_dump(include=coarse_fields))
 
@@ -302,7 +305,7 @@ class StitchingConfig(BaseModel):
     mask_config: MaskingConfig = MaskingConfig()
     pipeline_config: PipelineConfig = PipelineConfig()
 
-    @field_validator('output_dir', mode='before')
+    @field_validator("output_dir", mode="before")
     @classmethod
     def normalize_output_path(cls, v):
         return cross_platform_path(v) if v else v
@@ -314,7 +317,5 @@ class StitchingConfig(BaseModel):
             output_dir=exp.proc_dir,
             start_section=exp.first_sec,
             end_section=exp.last_sec,
-            acquisition_config=AcquisitionConfig().from_experiment(exp)
+            acquisition_config=AcquisitionConfig().from_experiment(exp),
         )
-
-

@@ -13,12 +13,26 @@ import random
 import re
 import subprocess
 import time
-from typing import Optional, Dict, Type, Union, Iterable, Sequence, Mapping, Any, Tuple, List, Callable, Set
+from typing import (
+    Optional,
+    Dict,
+    Type,
+    Union,
+    Iterable,
+    Sequence,
+    Mapping,
+    Any,
+    Tuple,
+    List,
+    Callable,
+    Set,
+)
 
 import cv2
 import json
 import matplotlib
-matplotlib.use('Agg')
+
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -38,7 +52,7 @@ from zipfile import BadZipFile
 
 from .schema import InspectionSchema as IS
 
-SECTION_PATTERN = re.compile(r's(?P<num>\d+)_')
+SECTION_PATTERN = re.compile(r"s(?P<num>\d+)_")
 
 UniPath = Union[str, Path]
 TileXY = tuple[int, int]
@@ -54,28 +68,40 @@ TileFlow = dict[TileXY, np.ndarray]
 # logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.WARNING)
 
+
 class InfrastructureError(Exception):
     """Raised when a section cannot be prepared for computation."""
+
     pass
+
 
 class MeshLoaderError(Exception):
     """Base exception for all mesh loading operations."""
+
     pass
+
 
 class MeshCorruptionError(MeshLoaderError):
     """Raised when the NPZ file exists but is not a valid ZIP or is unreadable."""
+
     pass
+
 
 class MeshSchemaError(MeshLoaderError):
     """Raised when the internal data structure (keys/values) fails validation."""
+
     pass
+
 
 class TileLoadingError(Exception):
     """Raised when the tile orchestration fails to produce a valid map."""
+
     pass
+
 
 class MeshResourceError(RuntimeError):
     """Raised when critical mesh/tile resources cannot be loaded or validated."""
+
     pass
 
 
@@ -93,24 +119,24 @@ class CoarseDataReader(ABC):
     def read(self, path: Path) -> CoarseData:
         pass
 
+
 # 3. Concrete Strategies (Single Responsibility)
 class NpzReader(CoarseDataReader):
     def read(self, path: Path) -> CoarseData:
         with np.load(str(path)) as data:
             return CoarseData(
-                cx=data['cx'],
-                cy=data['cy'],
-                coarse_mesh=data['coarse_mesh']
+                cx=data["cx"], cy=data["cy"], coarse_mesh=data["coarse_mesh"]
             )
+
 
 class JsonReader(CoarseDataReader):
     def read(self, path: Path) -> CoarseData:
-        with open(path, 'r') as f:
-            content = f.read().replace('NaN', 'null')
+        with open(path, "r") as f:
+            content = f.read().replace("NaN", "null")
             data = json.loads(content)
 
-            cx = np.array(data.get('cx', []), dtype=np.float32)
-            cy = np.array(data.get('cy', []), dtype=np.float32)
+            cx = np.array(data.get("cx", []), dtype=np.float32)
+            cy = np.array(data.get("cy", []), dtype=np.float32)
             if cx.ndim == 4:
                 cx = cx[:, 0, ...]
                 cy = cy[:, 0, ...]
@@ -120,11 +146,12 @@ class JsonReader(CoarseDataReader):
 
             return CoarseData(cx=cx, cy=cy)
 
+
 # 4. The Factory (Open/Closed Principle)
 class CoarseDataFactory:
     _readers: Dict[str, Type[CoarseDataReader]] = {
-        '.npz': NpzReader,
-        '.json': JsonReader
+        ".npz": NpzReader,
+        ".json": JsonReader,
     }
 
     @classmethod
@@ -134,17 +161,18 @@ class CoarseDataFactory:
             raise ValueError(f"Unsupported format: {path.suffix}")
         return reader_class()
 
+
 # 5. The Facade (Clean API)
 def read_coarse_mat(path: Path) -> CoarseData:
     """
-       Return contents of a coarse shifts data file (either npz or json).
+    Return contents of a coarse shifts data file (either npz or json).
 
-       :param path: path to the data file (cx_cy.npz or cx_cy.json)
-       :return:
-           coarse_mesh: contents of coarse_mesh (only if .npz file is read) or None
-           cx: coarse shifts between horizontal neighbors
-           cy: coarse shifts between vertical neighbors
-       """
+    :param path: path to the data file (cx_cy.npz or cx_cy.json)
+    :return:
+        coarse_mesh: contents of coarse_mesh (only if .npz file is read) or None
+        cx: coarse shifts between horizontal neighbors
+        cy: coarse shifts between vertical neighbors
+    """
     path = Path(path)
     try:
         reader = CoarseDataFactory.get_reader(path)
@@ -180,31 +208,31 @@ def write_dict_to_yaml(file_path: str, data: Union[Dict[int, float], Iterable[in
 
 def cross_platform_path(path: str) -> str:
 
-    OS_WIN = 'Windows'
-    OS_UX = 'Linux'
+    OS_WIN = "Windows"
+    OS_UX = "Linux"
     OS_MAC = "Darwin"
-    FS = r'/tungstenfs'
+    FS = r"/tungstenfs"
     TACH = "/tachyon/"
 
-    TUNGSTEN_PREFIX = r'\\nas.company.internal\tungsten'
-    TACHYON_PREFIX = r'\\storage.company.internal\tachyon'
+    TUNGSTEN_PREFIX = r"\\nas.company.internal\tungsten"
+    TACHYON_PREFIX = r"\\storage.company.internal\tachyon"
     TACHYON_PREFIX_MAC = "/Volumes/storage/"
 
     PREFIXES = FS, TUNGSTEN_PREFIX, TACHYON_PREFIX
 
-    def_ret_val = ''
+    def_ret_val = ""
 
     def win_to_ux_path(win_path: str, remove_substring=None) -> str:
         if remove_substring:
             win_path = win_path.replace(remove_substring, FS)
-        linux_path = win_path.replace('\\', '/')
-        linux_path = linux_path.replace('//', '', 1)
+        linux_path = win_path.replace("\\", "/")
+        linux_path = linux_path.replace("//", "", 1)
         return linux_path
 
     def ux_to_win_path(ux_path: str, remove_substring=None) -> str:
         if remove_substring:
             ux_path = ux_path.replace(remove_substring, TACHYON_PREFIX)
-        win_path = ux_path.replace('/', '\\')
+        win_path = ux_path.replace("/", "\\")
         return win_path
 
     # Get the operating system name
@@ -236,15 +264,16 @@ def cross_platform_path(path: str) -> str:
 
     if os_name == OS_WIN:
         path = path.replace(prefix, "W:")
-        path = path.replace('\\', '/')
+        path = path.replace("\\", "/")
     elif os_name == OS_UX and "\\" in path:
         # Running on UX but path in WinOS style
         path = win_to_ux_path(path, prefix)
     return path
 
 
-def process_dirs(directory_path: str, filter_function)\
-        -> Optional[tuple[list[Path], list[str], list[int], Dict[int, str]]]:
+def process_dirs(
+    directory_path: str, filter_function
+) -> Optional[tuple[list[Path], list[str], list[int], Dict[int, str]]]:
     """
     Process directories and return lists and dictionaries based on section number.
 
@@ -272,7 +301,7 @@ def process_dirs(directory_path: str, filter_function)\
 
 def get_section_num(section_path: UniPath) -> Optional[int]:
     try:
-        num = int(Path(section_path).name.split('_')[0].strip('s'))
+        num = int(Path(section_path).name.split("_")[0].strip("s"))
         return num
     except (ValueError, IndexError):
         return None
@@ -313,21 +342,28 @@ def filter_and_sort_sections(sections_dir: str) -> Optional[list[str]]:
     """
 
     # Define a regex pattern to filter section directory names
-    pattern = r's\d+_g\d+'
+    pattern = r"s\d+_g\d+"
     regex_pattern = re.compile(pattern)
 
     # Use glob to filter the section directory names
     dirs = glob(str(Path(sections_dir) / "*"))
 
     # Filter and sort the matching section directory names
-    sorted_dirs = sorted([dir_name for dir_name in dirs
-                          if os.path.isdir(dir_name) and regex_pattern.match(Path(dir_name).name)],
-                         key=lambda p: get_section_num(p))
+    sorted_dirs = sorted(
+        [
+            dir_name
+            for dir_name in dirs
+            if os.path.isdir(dir_name) and regex_pattern.match(Path(dir_name).name)
+        ],
+        key=lambda p: get_section_num(p),
+    )
 
     return sorted_dirs if sorted_dirs else None
 
 
-def process_dirs_unix(directory_path: str) -> Optional[tuple[list[Path], list[str], list[int], dict[int, str]]]:
+def process_dirs_unix(
+    directory_path: str,
+) -> Optional[tuple[list[Path], list[str], list[int], dict[int, str]]]:
     """Process directories using Unix commands and return lists and dictionaries based on section number."""
 
     if not Path(directory_path).exists():
@@ -343,13 +379,14 @@ def process_dirs_unix(directory_path: str) -> Optional[tuple[list[Path], list[st
 
     dirs = output.strip().split("\n")
     if not dirs:
-        print(f'process_dir_unix: No directories were loaded!')
+        print(f"process_dir_unix: No directories were loaded!")
         return None
 
     dirs = [Path(d) for d in dirs]
-    pattern = re.compile(r's\d+_g\d+(\.zarr)?$')
-    sections_with_paths = [(get_section_num(d.name), d) for d in dirs
-                           if pattern.search(d.name)]
+    pattern = re.compile(r"s\d+_g\d+(\.zarr)?$")
+    sections_with_paths = [
+        (get_section_num(d.name), d) for d in dirs if pattern.search(d.name)
+    ]
 
     sorted_sections = sorted(sections_with_paths, key=lambda x: x[0])
     nums, sorted_dirs = zip(*sorted_sections)
@@ -362,7 +399,7 @@ def process_dirs_unix(directory_path: str) -> Optional[tuple[list[Path], list[st
 def get_tile_ids_from_yaml(path: UniPath) -> Optional[list[int]]:
     section_yaml = Path(path) / "section.yaml"
     try:
-        with open(section_yaml, 'r') as file:
+        with open(section_yaml, "r") as file:
             contents = yaml.safe_load(file)
             if contents:
                 return [int(s["tile_id"]) for s in contents["tiles"]]
@@ -379,9 +416,9 @@ def read_tile_id_map(dir_section: UniPath) -> Optional[np.ndarray]:
     :param dir_section: Path to directory containing tile_id_map.json
     :return: tile id map as a numpy array
     """
-    fp_json = Path(dir_section) / 'tile_id_map.json'
+    fp_json = Path(dir_section) / "tile_id_map.json"
     if not fp_json.exists():
-        print(f'tile_id_map file is missing: {fp_json}')
+        print(f"tile_id_map file is missing: {fp_json}")
         return None
     else:
         return get_tile_id_map(fp_json)
@@ -398,11 +435,11 @@ def get_tile_id_map(path_tid_map: UniPath) -> npt.NDArray[np.int_]:
 
 
 def aggregate_parallel(
-        section_dirs: List[Path],
-        target_filename: str,
-        processing_func: Callable[[Path], Any],
-        progress_cb: Optional[Callable[[int, int], None]] = None,
-        max_workers: int = 8
+    section_dirs: List[Path],
+    target_filename: str,
+    processing_func: Callable[[Path], Any],
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+    max_workers: int = 8,
 ) -> Tuple[Dict[str, Any], List[str]]:
     """
     Aggregates data from multiple directories in parallel using a provided processing function.
@@ -474,14 +511,12 @@ def process_offsets(path: Path) -> np.ndarray:
 
 def process_tile_maps(path: Path) -> np.ndarray:
     """Logic specific to tile_id_map.json."""
-    with open(path, 'r') as f:
+    with open(path, "r") as f:
         return np.array(json.load(f), dtype=np.int32)
 
 
 def locate_inf_vals(
-        path_cxyz: Union[str, Path],
-        dir_out: Union[str, Path],
-        store: bool
+    path_cxyz: Union[str, Path], dir_out: Union[str, Path], store: bool
 ) -> Optional[list[tuple[int]]]:
     """
     Find all Inf values in a backed-up coarse shift tensor.
@@ -496,15 +531,15 @@ def locate_inf_vals(
     try:
         cxyz = np.load(str(path_cxyz), allow_pickle=True)
     except FileNotFoundError as _:
-        print('Error reading coarse tensor file.')
+        print("Error reading coarse tensor file.")
         return None
 
     try:
-        path_tid_maps = Path(path_cxyz).parent / 'all_tile_id_maps.npz'
+        path_tid_maps = Path(path_cxyz).parent / "all_tile_id_maps.npz"
         tid_maps = np.load(str(path_tid_maps), allow_pickle=True)
     except FileNotFoundError as _:
         tid_maps = None
-        logging.warning('Error reading all_tile_id_maps.npz')
+        logging.warning("Error reading all_tile_id_maps.npz")
 
     all_coords = []
     all_tids = []
@@ -536,8 +571,10 @@ def locate_inf_vals(
                 tids_list.append((tile_id_a, tile_id_b))
 
         if len(tids_list) > 0:
-            coords_w_key = [(int(section_num),) + c + tids
-                            for c, tids in zip(coords_list, tids_list)]
+            coords_w_key = [
+                (int(section_num),) + c + tids
+                for c, tids in zip(coords_list, tids_list)
+            ]
         else:
             coords_w_key = [(int(section_num),) + c for c in coords_list]
 
@@ -545,12 +582,18 @@ def locate_inf_vals(
         all_tids.append(tids_list)
 
     if store:
-        path_out = str(Path(dir_out) / 'inf_vals.txt')
+        path_out = str(Path(dir_out) / "inf_vals.txt")
         logging.info(f"Storing Inf values to: {path_out}")
-        np.savetxt(fname=path_out, X=all_coords, fmt='%s', delimiter='\t',
-                   header=f'Slice\tC\tZ\tY\tX\tTileID\tTileID_nn')
+        np.savetxt(
+            fname=path_out,
+            X=all_coords,
+            fmt="%s",
+            delimiter="\t",
+            header=f"Slice\tC\tZ\tY\tX\tTileID\tTileID_nn",
+        )
 
     return all_coords
+
 
 def tile_id_from_coord(coord: TileCoord, tile_id_map: np.ndarray) -> Optional[int]:
     """Determines tile ID from tile coordinates.
@@ -575,11 +618,11 @@ def tile_id_from_coord(coord: TileCoord, tile_id_map: np.ndarray) -> Optional[in
 
 def get_tile_ids_set(path_all_tid_maps: str) -> set[int]:
     try:
-        path_tid_maps = Path(path_all_tid_maps).parent / 'all_tile_id_maps.npz'
+        path_tid_maps = Path(path_all_tid_maps).parent / "all_tile_id_maps.npz"
         tid_maps = np.load(str(path_tid_maps), allow_pickle=True)
     except FileNotFoundError as _:
         tid_maps = None
-        logging.warning('Error reading all_tile_id_maps.npz')
+        logging.warning("Error reading all_tile_id_maps.npz")
 
     tile_ids = set()
     for tid in tid_maps.values():
@@ -591,12 +634,12 @@ def get_tile_ids_set(path_all_tid_maps: str) -> set[int]:
 
 
 def plot_trace_from_backup(
-        path_cxyz: str,
-        path_id_maps: str,
-        path_plot: str,
-        tile_id: int,
-        sec_range: tuple[Optional[int], Optional[int]],
-        show_plot: bool,
+    path_cxyz: str,
+    path_id_maps: str,
+    path_plot: str,
+    tile_id: int,
+    sec_range: tuple[Optional[int], Optional[int]],
+    show_plot: bool,
 ):
     """Plots traces from input cxyz tensor
 
@@ -610,22 +653,27 @@ def plot_trace_from_backup(
     :return:
     """
 
-    def plot_traces(x_axis: np.ndarray, traces: np.ndarray, _path_plot: str,
-                    _tile_id: int, _vert_nn_tile_id: Optional[int], _show_plot: bool) -> None:
-
-        """Plots array of both coarse offset vectors' values """
+    def plot_traces(
+        x_axis: np.ndarray,
+        traces: np.ndarray,
+        _path_plot: str,
+        _tile_id: int,
+        _vert_nn_tile_id: Optional[int],
+        _show_plot: bool,
+    ) -> None:
+        """Plots array of both coarse offset vectors' values"""
 
         fig, ax = plt.subplots(figsize=(15, 9))
-        labels = ('c0x', 'c0y', 'c1x', 'c1y')
+        labels = ("c0x", "c0y", "c1x", "c1y")
         for j in range(traces.shape[0]):
-            ax.plot(x_axis, traces[j, :], '-', label=f'{labels[j]}')
+            ax.plot(x_axis, traces[j, :], "-", label=f"{labels[j]}")
 
         # Add labels, title, and legend
-        ax.set_xlabel('Section number')
-        ax.set_ylabel('Shift [pix]')
-        nn_tile_id = '' if _vert_nn_tile_id is None else f" ({str(_vert_nn_tile_id)})"
-        ax.set_title(f'Coarse Offsets for Tile ID {_tile_id} {nn_tile_id}')
-        ax.legend(loc='upper right')
+        ax.set_xlabel("Section number")
+        ax.set_ylabel("Shift [pix]")
+        nn_tile_id = "" if _vert_nn_tile_id is None else f" ({str(_vert_nn_tile_id)})"
+        ax.set_title(f"Coarse Offsets for Tile ID {_tile_id} {nn_tile_id}")
+        ax.legend(loc="upper right")
         ax.grid(True)
 
         # Adjust x-axis and y-axis ticks density
@@ -644,7 +692,7 @@ def plot_trace_from_backup(
     path_plot = cross_platform_path(path_plot)
 
     if not path_cxyz.exists() or not path_id_maps.exists():
-        print(f'Input files are missing. Check path_cxyz: {path_cxyz}')
+        print(f"Input files are missing. Check path_cxyz: {path_cxyz}")
         return
 
     # Load coarse offsets
@@ -662,7 +710,7 @@ def plot_trace_from_backup(
 
     if len(sec_nums) == 0:
         # Not possible to map tile_id_map files to the coarse offset files
-        print(f'Available offsets maps and tile_id_maps do not match.')
+        print(f"Available offsets maps and tile_id_maps do not match.")
         return
 
     # Select range of sections to be processed
@@ -674,16 +722,18 @@ def plot_trace_from_backup(
         last = max(sec_nums)
 
     if first > last:
-        logging.warning('Plot traces: wrong section range definition.')
+        logging.warning("Plot traces: wrong section range definition.")
         return
 
     sec_nums_plot = set(np.arange(first, last, step=1))
     sec_nums_plot = sec_nums.intersection(sec_nums_plot)
-    logging.info(f'Trace plotting: {len(sec_nums_plot)} sections will be processed.')
+    logging.info(f"Trace plotting: {len(sec_nums_plot)} sections will be processed.")
 
     if len(sec_nums_plot) <= 1:
-        print(f'Nothing to plot. Sections {first} : {last} not in available'
-              f'range: [{min(sec_nums)} : {max(sec_nums)}].')
+        print(
+            f"Nothing to plot. Sections {first} : {last} not in available"
+            f"range: [{min(sec_nums)} : {max(sec_nums)}]."
+        )
         return
 
     arr = np.full(shape=(4, last - first), fill_value=np.nan)
@@ -702,14 +752,18 @@ def plot_trace_from_backup(
                     shifts = cxyz_obj[str(num)][:, :, y, x]
                     arr[:, i] = shifts.flatten().transpose()
                 except IndexError as _:
-                    logging.warning(f'Trace plotting: unable to determine shifts of s{num} t{tile_id}')
+                    logging.warning(
+                        f"Trace plotting: unable to determine shifts of s{num} t{tile_id}"
+                    )
                 except ValueError as _:
                     logging.warning(f"Trace plotting failed for s{num} t{tile_id}")
             else:
                 continue
 
     if not np.all(np.isnan(arr)):
-        plot_traces(x_axis_sec_nums, arr, path_plot, tile_id, vert_nn_tile_id, show_plot)
+        plot_traces(
+            x_axis_sec_nums, arr, path_plot, tile_id, vert_nn_tile_id, show_plot
+        )
 
 
 def get_vert_tile_id(tile_id_map: np.ndarray, tile_id: int) -> Optional[int]:
@@ -725,14 +779,18 @@ def get_vert_tile_id(tile_id_map: np.ndarray, tile_id: int) -> Optional[int]:
     """
     tile_id = int(tile_id)
     if not isinstance(tile_id, int):
-        raise ValueError(f"Invalid tile_id '{tile_id}' specification: must be an integer.")
+        raise ValueError(
+            f"Invalid tile_id '{tile_id}' specification: must be an integer."
+        )
 
     if tile_id < 0:
         logging.warning(f"Invalid tile_id specification (must be non-negative)!")
         return None
 
     if tile_id not in tile_id_map:
-        logging.warning(f"Invalid tile_id specification ({tile_id} not in tile_id_map)!")
+        logging.warning(
+            f"Invalid tile_id specification ({tile_id} not in tile_id_map)!"
+        )
         return None
 
     y, x = np.where(tile_id == tile_id_map)
@@ -757,8 +815,7 @@ def get_tid_idx(tile_id_map: np.ndarray, tile_id: int) -> Optional[tuple[int, in
 
 
 def compute_tile_id_map(
-        grid_shape: tuple[int, int],
-        tile_ids: Sequence[int]
+    grid_shape: tuple[int, int], tile_ids: Sequence[int]
 ) -> npt.NDArray[np.int_]:
     """
     Build a 2D grid of shape `grid_shape` where each cell contains its linear tile index
@@ -802,29 +859,32 @@ def compute_tile_id_map(
 
 def get_tile_dicts(path: Path) -> Dict[int, str]:
     section_yaml = path / IS.FILE_SECTION_CONFIG
-    with open(section_yaml, 'r') as file:
+    with open(section_yaml, "r") as file:
         contents = yaml.safe_load(file)
         if not contents:
             raise InfrastructureError(f"YAML at {section_yaml} is empty.")
-        return {int(s["tile_id"]): str(cross_platform_path(s["path"])) for s in contents["tiles"]}
+        return {
+            int(s["tile_id"]): str(cross_platform_path(s["path"]))
+            for s in contents["tiles"]
+        }
 
 
 def save_img(path: str, data: np.ndarray):
 
     if not isinstance(data, np.ndarray):
-        logging.warning(f'Image {Path(path).stem} could not be resized.')
+        logging.warning(f"Image {Path(path).stem} could not be resized.")
         return
 
-    logging.info(f'Saving thumbnail to: {path}')
+    logging.info(f"Saving thumbnail to: {path}")
     skimage.io.imsave(path, data)
     return
 
 
 def downscale_image(
-        img: np.ndarray,
-        factor: float,
-        min_size: int = 64,
-        interpolation: int = cv2.INTER_AREA,
+    img: np.ndarray,
+    factor: float,
+    min_size: int = 64,
+    interpolation: int = cv2.INTER_AREA,
 ) -> np.ndarray:
     if img is None or img.size == 0:
         raise ValueError("Empty input.")
@@ -850,7 +910,9 @@ def downscale_image(
 def read_zarr_volume(path_volume: Union[Path, str]) -> zarr.Group | None:
     path_str = cross_platform_path(str(path_volume))
     try:
-        vol = zarr.open_group(store=path_str, mode='r')  # ← fails if it's actually an array
+        vol = zarr.open_group(
+            store=path_str, mode="r"
+        )  # ← fails if it's actually an array
         logging.debug(str(vol.info))
 
         if not list(vol.keys()):
@@ -867,7 +929,7 @@ def read_zarr_volume(path_volume: Union[Path, str]) -> zarr.Group | None:
         return None
 
 
-def list_arrays(group: zarr.Group, prefix: str = '') -> list[str]:
+def list_arrays(group: zarr.Group, prefix: str = "") -> list[str]:
     keys = []
     for key in group.keys():
         item = group[key]
@@ -875,7 +937,7 @@ def list_arrays(group: zarr.Group, prefix: str = '') -> list[str]:
         if isinstance(item, zarr.Array):
             keys.append(prefix + key)
         elif isinstance(item, zarr.Group):
-            keys.extend(list_arrays(item, prefix=prefix + key + '/'))
+            keys.extend(list_arrays(item, prefix=prefix + key + "/"))
     return keys
 
 
@@ -884,8 +946,8 @@ def get_tile_shape(fp_yaml: UniPath) -> Optional[TileXY]:
         # Load the YAML data
         with open(fp_yaml, "r") as yaml_file:
             data = yaml.safe_load(yaml_file)
-            h = data['tile_height']
-            w = data['tile_width']
+            h = data["tile_height"]
+            w = data["tile_width"]
         return h, w
     except Exception as e:
         print(f"Error in get_tile_shape occurred: {e}")
@@ -915,19 +977,19 @@ def load_mapped_npz(fp: str) -> Optional[MaskMap]:
 
 
 def pair_is_vertical(
-        tile_id_map: np.ndarray,
-        tile_id_a: int,
-        tile_id_b: int
+    tile_id_map: np.ndarray, tile_id_a: int, tile_id_b: int
 ) -> Optional[bool]:
 
-    assert isinstance(tile_id_map, np.ndarray), f"Incorrect tile_id_map type {type(tile_id_map)}. Check if it was loaded correctly."
+    assert isinstance(tile_id_map, np.ndarray), (
+        f"Incorrect tile_id_map type {type(tile_id_map)}. Check if it was loaded correctly."
+    )
 
     if tile_id_a < 0 or tile_id_b < 0:
-        logging.warning('f(pair_is_vertical): tile_id must be greater than -1!')
+        logging.warning("f(pair_is_vertical): tile_id must be greater than -1!")
         return None
 
     if tile_id_a == tile_id_b:
-        logging.warning('f(pair_is_vertical): tile_ids must differ!')
+        logging.warning("f(pair_is_vertical): tile_ids must differ!")
         return None
 
     if tile_id_a not in tile_id_map:
@@ -961,11 +1023,9 @@ def pair_is_vertical(
             return None
 
 
-def get_shift(cx_cy: np.ndarray[float],
-              tile_id_map: np.ndarray,
-              tile_id: int,
-              axis: int
-              ) -> Optional[Vector]:
+def get_shift(
+    cx_cy: np.ndarray[float], tile_id_map: np.ndarray, tile_id: int, axis: int
+) -> Optional[Vector]:
     """Returns a shift vector to tile 'tile_id' in 'tile_id_map'.
 
     Params:
@@ -1007,32 +1067,30 @@ def create_directory(dir_path: UniPath):
         print(f"An unexpected error occurred: {e}")
 
 
-
-
 def plot_thin_image(
-        img_pair: np.ndarray,
-        is_vertical: bool,
-        path_plot: Optional[str],
-        show_plot: bool,
-        blur: float,
-        rotate_vert=False,
-        return_array: bool = False
+    img_pair: np.ndarray,
+    is_vertical: bool,
+    path_plot: Optional[str],
+    show_plot: bool,
+    blur: float,
+    rotate_vert=False,
+    return_array: bool = False,
 ) -> np.ndarray:
     """Plot a thin section of an image and save or show the result.
 
-        Args:
-            img_pair (np.ndarray): Input image pair.
-            is_vertical (bool): Flag to determine if the image is vertical.
-            path_plot (Optional[str]): Path to save the plot image.
-            show_plot (bool): Flag to show the plot.
-            blur (float): Gaussian blur sigma value.
-            rotate_vert (bool): Flag to rotate the image vertically.
-            return_array (bool): Return image array only, do not use matplotlib
-                                (switch for InteractiveProcessor)
+    Args:
+        img_pair (np.ndarray): Input image pair.
+        is_vertical (bool): Flag to determine if the image is vertical.
+        path_plot (Optional[str]): Path to save the plot image.
+        show_plot (bool): Flag to show the plot.
+        blur (float): Gaussian blur sigma value.
+        rotate_vert (bool): Flag to rotate the image vertically.
+        return_array (bool): Return image array only, do not use matplotlib
+                            (switch for InteractiveProcessor)
 
-        Returns:
-            np.ndarray: The processed image.
-        """
+    Returns:
+        np.ndarray: The processed image.
+    """
     # Define region of interest dimensions
     dy, dx = 250, 250
     h, w = img_pair.shape
@@ -1040,9 +1098,9 @@ def plot_thin_image(
 
     # output_img = output_img[h_mid - dy:h_mid + dy, w_mid-dx:w_mid+dx]
     if is_vertical:
-        img = img_pair[h_mid - dy:h_mid + dy, : w_mid + dx]
+        img = img_pair[h_mid - dy : h_mid + dy, : w_mid + dx]
     else:
-        img = img_pair[:h_mid + dy, w_mid - dx:w_mid + dx]
+        img = img_pair[: h_mid + dy, w_mid - dx : w_mid + dx]
 
     # Apply Gaussian blur if specified
     if blur > 1.0:
@@ -1062,15 +1120,20 @@ def plot_thin_image(
 
     # Plot the image with minimal empty space
     ax.imshow(
-        image_8bit, cmap='gray', aspect='equal', extent=(0, w, h, 0), vmin=0, vmax=255)
-    ax.axis('off')
+        image_8bit, cmap="gray", aspect="equal", extent=(0, w, h, 0), vmin=0, vmax=255
+    )
+    ax.axis("off")
 
     # Save the plot and show if needed
     if path_plot is not None:
-        image_8bit = np.rot90(image_8bit, k=-1) if (rotate_vert and not is_vertical) else image_8bit
+        image_8bit = (
+            np.rot90(image_8bit, k=-1)
+            if (rotate_vert and not is_vertical)
+            else image_8bit
+        )
         logging.info(path_plot)
         skimage.io.imsave(path_plot, image_8bit)
-        logging.info(f'storing ov thin image to: {path_plot}')
+        logging.info(f"storing ov thin image to: {path_plot}")
 
     if show_plot:
         plt.show()
@@ -1086,7 +1149,7 @@ def norm_img(data) -> np.ndarray:
 
 def get_tile_num(section_path: UniPath) -> Optional[int]:
     try:
-        num = int(Path(section_path).name.split('_')[-2].strip('t'))
+        num = int(Path(section_path).name.split("_")[-2].strip("t"))
         return num
     except (ValueError, IndexError):
         return None
@@ -1118,11 +1181,11 @@ def insert_image(canvas, image, x, y, alpha_on=False):
 
     if alpha_on:
         alpha = 0.5
-        canvas[y:y + h, x:x + w] = (
-                alpha * image[:, :] + (1 - alpha) * canvas[y:y + h, x:x + w]
+        canvas[y : y + h, x : x + w] = (
+            alpha * image[:, :] + (1 - alpha) * canvas[y : y + h, x : x + w]
         )
     else:
-        canvas[y:y + h, x:x + w] = image[:, :]
+        canvas[y : y + h, x : x + w] = image[:, :]
 
     return canvas
 
@@ -1143,10 +1206,9 @@ def insert_image_orig(canvas, image, x, y, alpha_on=False):
     cnv_h, cnv_w = canvas.shape
     print(cnv_h, cnv_w)
     h, w = image.shape
-    print(f'hw:{h, w}')
-    print(f'x, y: {x, y}')
-    print(f'x+w, y+h: {x+w, y+h}')
-
+    print(f"hw:{h, w}")
+    print(f"x, y: {x, y}")
+    print(f"x+w, y+h: {x + w, y + h}")
 
     if x < 0 or y < 0 or x + w > cnv_w or y + h > cnv_h:
         logging.info("Invalid insertion coordinates. Image exceeds canvas boundaries.")
@@ -1154,24 +1216,25 @@ def insert_image_orig(canvas, image, x, y, alpha_on=False):
 
     if alpha_on:
         alpha = 0.5
-        canvas[y:y + h, x:x + w] = (alpha * image[:, :] +
-                                    (1 - alpha) * canvas[y:y + h, x:x + w])
+        canvas[y : y + h, x : x + w] = (
+            alpha * image[:, :] + (1 - alpha) * canvas[y : y + h, x : x + w]
+        )
     else:
-        canvas[y:y + h, x:x + w] = image[:, :]
+        canvas[y : y + h, x : x + w] = image[:, :]
 
     return canvas
 
 
 def plot_tile_pair(
-        tile_map: TileMap,
-        shift_vec: Vector,
-        show_plot: bool,
-        path_plot: Optional[str] = None,
-        reverse_render: bool = True,
-        scaling_factor: Optional[float] = None,
-        alpha_on=False,
-        blur=2.0,
-        img_only: bool = False
+    tile_map: TileMap,
+    shift_vec: Vector,
+    show_plot: bool,
+    path_plot: Optional[str] = None,
+    reverse_render: bool = True,
+    scaling_factor: Optional[float] = None,
+    alpha_on=False,
+    blur=2.0,
+    img_only: bool = False,
 ) -> Optional[np.ndarray]:
     """Plots two images of a vertical tile-pair
     Args:
@@ -1195,13 +1258,15 @@ def plot_tile_pair(
     try:
         any_tile = next(iter(tile_map.values()))
     except StopIteration as _:
-        logging.warning(f'Plot_tile_pair: Nothing to plot. Check input "tile_map" parameter.')
+        logging.warning(
+            f'Plot_tile_pair: Nothing to plot. Check input "tile_map" parameter.'
+        )
         return None
 
     if isinstance(any_tile, np.ndarray):
         h, w = any_tile.shape
     else:
-        logging.warning(f'Plot_tile_pair: Input tile_map object contains wrong data.')
+        logging.warning(f"Plot_tile_pair: Input tile_map object contains wrong data.")
         return None
 
     pad = 1000  # Black border around the image pair  TODO parameter into f-def?
@@ -1217,7 +1282,6 @@ def plot_tile_pair(
 
     # Insert image data into canvas
     for i, (coord, img) in enumerate(tile_map.items()):
-
         # Get image offset coordinates (with respect to the canvas top-left corner)
         dx, dy = origins[i]
         x0 = int(int(pad / 2) + dx + coord[0] * w)
@@ -1239,7 +1303,7 @@ def plot_tile_pair(
 
     # Plot canvas
     if not img_only:
-        plt.imshow(img_out, cmap='grey')
+        plt.imshow(img_out, cmap="grey")
         fig = plt.gcf()
 
         if show_plot:
@@ -1247,7 +1311,7 @@ def plot_tile_pair(
             plt.show()
 
         if path_plot is not None:
-            logging.info(f'storing plot to: {path_plot}')
+            logging.info(f"storing plot to: {path_plot}")
             plt.savefig(path_plot, dpi=600)
 
         plt.close(fig)
@@ -1255,9 +1319,7 @@ def plot_tile_pair(
     return img_out
 
 
-def build_tiles_coords(
-        tile_id_map: np.ndarray
-) -> Optional[tuple[TileXY]]:
+def build_tiles_coords(tile_id_map: np.ndarray) -> Optional[tuple[TileXY]]:
     """Builds tile coordinates map from the given tile ID map.
 
     Args:
@@ -1285,7 +1347,7 @@ def get_ov_tid_pairs(directory: UniPath) -> list[tuple[int, int]]:
     Returns:
     - List[Tuple[int, int]]: A list of tuples, each containing a pair of tile IDs.
     """
-    pattern = re.compile(r'^t(\d{4})_t(\d{4})$')  # Exact match for 'tXXXX_tYYYY'
+    pattern = re.compile(r"^t(\d{4})_t(\d{4})$")  # Exact match for 'tXXXX_tYYYY'
     matches: list[tuple[int, int]] = []
 
     dir_path = Path(directory)
@@ -1306,7 +1368,7 @@ def get_ov_tid_pairs(directory: UniPath) -> list[tuple[int, int]]:
 
 def get_ov_sec_nums(directory: UniPath) -> list[int]:
     # Regular expression pattern to match "s0510_t0754_t0786_ov.jpg"
-    pattern = re.compile(r's(\d+)_t\d+_t\d+_ov\.jpg')
+    pattern = re.compile(r"s(\d+)_t\d+_t\d+_ov\.jpg")
     numbers = []
 
     # Create a Path object for the directory
@@ -1325,11 +1387,10 @@ def get_ov_sec_nums(directory: UniPath) -> list[int]:
     return sorted(numbers)
 
 
-
 def save_coarse_mat(
-        cxy_mat: np.ndarray,
-        dir_path: UniPath,
-        file_format: str = 'json',
+    cxy_mat: np.ndarray,
+    dir_path: UniPath,
+    file_format: str = "json",
 ) -> None:
     """
     Save coarse offsets array to a file in the specified format ('json' or 'npz').
@@ -1341,49 +1402,40 @@ def save_coarse_mat(
     dir_path = Path(dir_path)
 
     if not dir_path.is_dir():
-        logging.error(f'save_coarse_mat: directory {dir_path} does not exist.')
+        logging.error(f"save_coarse_mat: directory {dir_path} does not exist.")
         return
 
     try:
-        if file_format == 'json':
+        if file_format == "json":
             cx_0, cx_1 = cxy_mat[0][0], cxy_mat[0][1]
             cy_0, cy_1 = cxy_mat[1][0], cxy_mat[1][1]
             cx = [cx_0.tolist()], [cx_1.tolist()]
             cy = [cy_0.tolist()], [cy_1.tolist()]
-            data = {
-                "cx": list(cx),
-                "cy": list(cy)
-            }
-            with open(dir_path / 'cx_cy.json', 'w') as json_file:
+            data = {"cx": list(cx), "cy": list(cy)}
+            with open(dir_path / "cx_cy.json", "w") as json_file:
                 json.dump(data, json_file, indent=4)
-                logging.info(f'storing coarse mat: {dir_path}')
-        elif file_format == 'npz':
-            fn_fix = dir_path / 'coarse_fixed.npz'
+                logging.info(f"storing coarse mat: {dir_path}")
+        elif file_format == "npz":
+            fn_fix = dir_path / "coarse_fixed.npz"
             np.savez(fn_fix, cxy_mat)
         else:
-            logging.error(f'Error: Unsupported file format "{file_format}". Supported formats are "json" and "npz".')
+            logging.error(
+                f'Error: Unsupported file format "{file_format}". Supported formats are "json" and "npz".'
+            )
 
     except Exception as e:
-        logging.error(f'Error during save_coarse_mat: {e}')
+        logging.error(f"Error during save_coarse_mat: {e}")
 
 
-def get_pyramid(
-        levels=3,
-        max_ext=50,
-        stride=10
-) -> list[tuple[int, int]]:
+def get_pyramid(levels=3, max_ext=50, stride=10) -> list[tuple[int, int]]:
     # Define pyramid of search parameters
     params = [(max_ext // N, stride // N) for N in range(1, levels + 1)]
     params = [tup for tup in params if 0 not in tup]
     return params
 
 
-
 def get_shift_grid(
-        max_ext: int,
-        stride: int,
-        shift_vec: Vector,
-        is_vert: bool
+    max_ext: int, stride: int, shift_vec: Vector, is_vert: bool
 ) -> tuple[list[tuple[int, int]], np.ndarray, np.ndarray]:
     """
     Generate a grid of 2D shift vectors with specific stride and maximum extent.
@@ -1403,22 +1455,25 @@ def get_shift_grid(
         x_lim = min(-6, max_ext + shift_vec[0])
         x_disp, y_disp = np.meshgrid(
             np.arange(-max_ext + shift_vec[0], x_lim, stride),
-            np.arange(-max_ext + shift_vec[1], max_ext + shift_vec[1] + 1, stride), indexing='ij')
+            np.arange(-max_ext + shift_vec[1], max_ext + shift_vec[1] + 1, stride),
+            indexing="ij",
+        )
     else:
         y_lim = min(-6, max_ext + shift_vec[1])
         x_disp, y_disp = np.meshgrid(
             np.arange(-max_ext + shift_vec[0], max_ext + shift_vec[0], stride),
-            np.arange(-max_ext + shift_vec[1], y_lim, stride), indexing='ij')
+            np.arange(-max_ext + shift_vec[1], y_lim, stride),
+            indexing="ij",
+        )
 
     shifts = list(zip(x_disp.flatten().astype(int), y_disp.flatten().astype(int)))
 
     return shifts, x_disp, y_disp
 
 
-
 def interp_coarse_grid(
-        coarse_grid_xy: tuple[np.ndarray, np.ndarray],
-        coarse_grid_z: list[float],
+    coarse_grid_xy: tuple[np.ndarray, np.ndarray],
+    coarse_grid_z: list[float],
 ) -> tuple[Vector, tuple[GridXY, GridXY]]:
 
     cgx, cgy = coarse_grid_xy
@@ -1427,8 +1482,7 @@ def interp_coarse_grid(
 
     # Fine coarse offset grid
     fgx, fgy = np.meshgrid(
-        np.linspace(min(cgx), max(cgx), 100),
-        np.linspace(min(cgy), max(cgy), 100)
+        np.linspace(min(cgx), max(cgx), 100), np.linspace(min(cgy), max(cgy), 100)
     )
 
     # Create CloughTocher2DInterpolator instance
@@ -1442,34 +1496,30 @@ def interp_coarse_grid(
 
     # Convert the index to 2D coordinates
     min_index_2d = np.unravel_index(min_index, fgz.shape)
-    min_coord = (int(np.round(fgx[min_index_2d])),
-                 int(np.round(fgy[min_index_2d])))
+    min_coord = (int(np.round(fgx[min_index_2d])), int(np.round(fgy[min_index_2d])))
 
     # For plotting purposes
     coarse_grid_xyz = (cgx, cgy, cgz)
     fine_grid_xyz = (fgx, fgy, fgz)
     refined_data = coarse_grid_xyz, fine_grid_xyz
 
-    logging.debug(f'estimated offset: {min_coord}')
+    logging.debug(f"estimated offset: {min_coord}")
     return min_coord, refined_data
 
 
-
 def plot_refined_grid(
-        interp_data: tuple[GridXY, GridXY],
-        path_plot: Optional[str],
-        show_plot=False
+    interp_data: tuple[GridXY, GridXY], path_plot: Optional[str], show_plot=False
 ):
 
     # Plot the filled contour plot
     (x, y, z), (gx, gy, gz) = interp_data
 
-    plt.contourf(gx, gy, gz, cmap='viridis')
-    plt.colorbar(label='Inaccuracy [fct. of SSIM]')
-    plt.scatter(x, y, c=z, cmap='viridis', edgecolors='k', linewidth=0.5)
-    plt.xlabel('Coarse offset X [pix]')
-    plt.ylabel('Coarse offset Y [pix]')
-    plt.title('Seam inaccuracy in coarse offset space')
+    plt.contourf(gx, gy, gz, cmap="viridis")
+    plt.colorbar(label="Inaccuracy [fct. of SSIM]")
+    plt.scatter(x, y, c=z, cmap="viridis", edgecolors="k", linewidth=0.5)
+    plt.xlabel("Coarse offset X [pix]")
+    plt.ylabel("Coarse offset Y [pix]")
+    plt.title("Seam inaccuracy in coarse offset space")
 
     if show_plot:
         plt.show()
@@ -1517,7 +1567,9 @@ def get_neighbour_pairs(tid_map: np.ndarray) -> list[tuple[int, int]]:
     return pairs
 
 
-def validate_section_numbers(start: int, end: int, sec_nums: Sequence[int]) -> list[int]:
+def validate_section_numbers(
+    start: int, end: int, sec_nums: Sequence[int]
+) -> list[int]:
     requested_set = set(sec_nums)
     if not requested_set:  # empty input
         return []
@@ -1550,10 +1602,10 @@ def list_stitched(dir_stitched: str) -> list[str]:
 
 
 def find_outliers(
-        vector_trace: Dict[int, float],
-        n_before: int = 10,
-        n_after: int = 10,
-        n_sigmas: float = 5.,
+    vector_trace: Dict[int, float],
+    n_before: int = 10,
+    n_after: int = 10,
+    n_sigmas: float = 5.0,
 ) -> list[int]:
 
     min_win_len = 10
@@ -1587,10 +1639,7 @@ def find_outliers(
 
 
 def find_outliers_new(
-        trace: dict[int, float],
-        n_before: int,
-        n_after: int,
-        n_sigmas: float
+    trace: dict[int, float], n_before: int, n_after: int, n_sigmas: float
 ) -> list[int]:
     """
     Identifies outliers in a trace using a rolling median absolute deviation (MAD).
@@ -1633,7 +1682,7 @@ def rolling_mean_std_refactored(
     n_after: int,
     min_win_length: int,
     max_win_length: int,
-    n_sigmas: float = 4.0,          # new parameter - typically 3.0–5.0
+    n_sigmas: float = 4.0,  # new parameter - typically 3.0–5.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """
     Compute rolling mean and standard deviation using an asymmetric window.
@@ -1673,7 +1722,7 @@ def rolling_mean_std_refactored(
         return np.array([]), np.array([])
 
     mean_out = np.full(n, np.nan)
-    std_out  = np.full(n, np.nan)
+    std_out = np.full(n, np.nan)
 
     # Global mask: which points are still considered valid for future windows
     # Initially all finite values are valid
@@ -1684,7 +1733,7 @@ def rolling_mean_std_refactored(
             continue
 
         # ───── Initial window ─────
-        left  = max(0, i - n_before)
+        left = max(0, i - n_before)
         right = min(n, i + n_after + 1)
 
         # Only use currently valid points
@@ -1708,7 +1757,7 @@ def rolling_mean_std_refactored(
             expand_l += 1
             expand_r += 0
 
-            left  = max(0, i - expand_l)
+            left = max(0, i - expand_l)
             right = min(n, i + expand_r + 1)
 
             masked = np.ma.masked_where(~is_valid[left:right], data[left:right])
@@ -1727,10 +1776,10 @@ def rolling_mean_std_refactored(
             continue
 
         prelim_mean = masked.mean()
-        prelim_std  = masked.std(ddof=0)   # or ddof=1
+        prelim_std = masked.std(ddof=0)  # or ddof=1
 
         mean_out[i] = prelim_mean
-        std_out[i]  = prelim_std
+        std_out[i] = prelim_std
 
         # ───── Outlier check ─────
         if n_sigmas > 0 and prelim_std > 0:
@@ -1758,7 +1807,7 @@ def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
 
     outliers_data = {}
     try:
-        with open(path, 'r') as f:
+        with open(path, "r") as f:
             # Skip header
             header = next(f, None)
             if header is None:
@@ -1766,7 +1815,7 @@ def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
 
             # Read data line by line
             for line in f:
-                parts = line.strip().split('\t')
+                parts = line.strip().split("\t")
                 slice_num = int(parts[0])
                 tile_id = int(parts[-2])
                 tile_id_nn = int(parts[-1])
@@ -1806,7 +1855,9 @@ def process_single_section(path_to_check: Path, sec_num_str: str):
             cx = cx[:, 0, ...]
             cy = cy[:, 0, ...]
 
-        cxy = np.asarray((cx, cy), dtype=np.float32)  # float32 saves 50% space vs float64
+        cxy = np.asarray(
+            (cx, cy), dtype=np.float32
+        )  # float32 saves 50% space vs float64
         return sec_num_str, cxy, None
     except Exception as e:
         logging.error(f"Error processing section {sec_num_str}: {e}")
@@ -1821,15 +1872,16 @@ def parse_section_range(input_str: str) -> list[int]:
         return []
 
     sections = set()
-    parts = re.split(r'[,\s]+', str(input_str).strip())
+    parts = re.split(r"[,\s]+", str(input_str).strip())
 
     for part in parts:
-        if not part: continue
+        if not part:
+            continue
 
         # Handle ranges indicated by : or -
-        if ':' in part or '-' in part:
+        if ":" in part or "-" in part:
             try:
-                start_str, end_str = re.split(r'[:-]', part)
+                start_str, end_str = re.split(r"[:-]", part)
                 start, end = int(start_str), int(end_str)
                 sections.update(range(start, end + 1))
             except ValueError:
@@ -1856,17 +1908,17 @@ def io_read_tif(path: Path, retries: int = 3) -> np.ndarray | None:
             return skimage.io.imread(str(path))
         except OSError as e:
             if e.errno == 1 and attempt < retries - 1:  # Operation not permitted
-                delay = (0.1 * (2 ** attempt)) + random.uniform(0, 0.1)
+                delay = (0.1 * (2**attempt)) + random.uniform(0, 0.1)
                 time.sleep(delay)
                 continue
             raise
 
 
 def store_section_zarr(
-        img_data: np.ndarray,
-        section_name: str,
-        out_dir: str | Path,
-        chunks: tuple[int, int] = (2048, 2048)
+    img_data: np.ndarray,
+    section_name: str,
+    out_dir: str | Path,
+    chunks: tuple[int, int] = (2048, 2048),
 ) -> None:
     """
     Writes a 2D image as OME-Zarr with Zarr V2 compatibility and error handling.
@@ -1895,16 +1947,12 @@ def store_section_zarr(
                 "clevel": 3,
                 "shuffle": Blosc.SHUFFLE,
             },
-            "overwrite": True
+            "overwrite": True,
         }
 
         # 4. Initialize V2 Group
         # Explicitly setting zarr_version=2 is mandatory for OME-Zarr-Py compatibility
-        root_group = zarr.open_group(
-            store=store,
-            mode="w",
-            zarr_version=2
-        )
+        root_group = zarr.open_group(store=store, mode="w", zarr_version=2)
 
         write_image(
             image=img_data,
@@ -1912,7 +1960,7 @@ def store_section_zarr(
             scaler=Scaler(max_layer=0),
             axes="yx",
             storage_options=storage_options,
-            fmt=FormatV04()
+            fmt=FormatV04(),
         )
 
         logging.info(f"Successfully stored OME-Zarr: {zarr_path}")
@@ -1929,24 +1977,25 @@ def parse_sec_num(filename: str) -> Optional[int]:
     """
     match = SECTION_PATTERN.search(filename)
     if match:
-        return int(match.group('num'))
+        return int(match.group("num"))
     return None
 
+
 def identify_missing_ids(
-        expected_ids: Sequence[int],
-        actual_ids: Set[int]
+    expected_ids: Sequence[int], actual_ids: Set[int]
 ) -> List[int]:
     return sorted(list(set(expected_ids) - actual_ids))
 
+
 def get_existing_ids(path_stitched: str) -> Set[int]:
     with os.scandir(path_stitched) as entries:
-        zarr_dirs = (e.name for e in entries if e.is_dir() and e.name.endswith('.zarr'))
+        zarr_dirs = (e.name for e in entries if e.is_dir() and e.name.endswith(".zarr"))
         extr_nums = (parse_sec_num(name) for name in zarr_dirs)
         return {n for n in extr_nums if n is not None}
 
+
 def get_missing_stitched_sections(
-        target_path: Path | str,
-        expected_ids: Sequence[int]
+    target_path: Path | str, expected_ids: Sequence[int]
 ) -> List[int]:
     """I/O Orchestration Layer."""
     if not os.path.exists(target_path):

@@ -46,7 +46,9 @@ class Tile:
             raise
 
         # Seed the processed state register with base data
-        self._img_processed = self.img_data.copy() if self.img_data is not None else None
+        self._img_processed = (
+            self.img_data.copy() if self.img_data is not None else None
+        )
         return self
 
     def _ensure_loaded(self) -> None:
@@ -54,7 +56,9 @@ class Tile:
         if self._img_processed is None:
             self.load_image()
         if self._img_processed is None:
-            raise ValueError(f"Underlying image data matrix could not be resolved for: {self.tile_path}")
+            raise ValueError(
+                f"Underlying image data matrix could not be resolved for: {self.tile_path}"
+            )
 
     def denoise(self, sigma: float = 1.0) -> Self:
         """Applies Gaussian denoising directly on top of the current state register."""
@@ -75,7 +79,7 @@ class Tile:
             dsize=(0, 0),
             fx=scale,
             fy=scale,
-            interpolation=cv2.INTER_AREA
+            interpolation=cv2.INTER_AREA,
         )
         return self
 
@@ -96,4 +100,3 @@ def blur_gauss(image: np.ndarray, sigma: float = 1.0) -> np.ndarray:
         ks = 31
 
     return cv2.GaussianBlur(image, ksize=(ks, ks), sigmaX=sigma)
-
