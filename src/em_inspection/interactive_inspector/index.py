@@ -12,6 +12,7 @@ logging.basicConfig(level=logging.WARNING)
 # 2. Import the app instance and standardized constants
 
 # 4. Register all callbacks and services
+from em_inspection.interactive_inspector import callbacks  # noqa: F401
 from em_inspection.interactive_inspector.app import app
 from em_inspection.interactive_inspector.constants import Nav, UIConstants
 from em_inspection.interactive_inspector.data_service import service
