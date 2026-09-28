@@ -27,7 +27,49 @@ theme:
     - navigation.indexes
     - navigation.top
     - content.code.copy
+    - content.code.annotate
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - attr_list
+  - md_in_html
+  - tables
+  - def_list
+  - toc:
+      permalink: true
+
+extra_javascript:
+  - javascripts/mathjax.js
+  - https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js
 
 nav:
   - Home: index.md
   - Installation: installation.md
+  - Pipeline Concepts:
+      - Overview & Architecture: concepts/pipeline_overview.md
+      - Data Models & Storage: concepts/data_structures.md
+  - Workflow Guide:
+      - 1. Setup & Ingestion: workflow/01_setup.md
+      - 2. Coarse Alignment: workflow/02_coarse_alignment.md
+      - 3. Inspection & Curation: workflow/03_inspection.md
+      - 4. Section Stitching: workflow/04_stitching.md
+      - 5. Fine Alignment (Roadmap): workflow/05_fine_alignment.md
+  - Reference:
+      - Configuration Parameters: reference/configuration.md
+      - Operational Troubleshooting: reference/troubleshooting.md
