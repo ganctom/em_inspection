@@ -1,0 +1,74 @@
+[project]
+name = "em_inspection"
+version = "0.1.0"
+description = "A Python application for interactive inspection and processing of Serial Block-Face Electron Microscopy datasets."
+authors = [{ name = "Tomáš Gancarčik" }]
+license = { text = "MIT" }
+readme = "README.md"
+requires-python = ">= 3.11"
+dependencies = ["requests>=2.32.5,<3"]
+
+[build-system]
+build-backend = "hatchling.build"
+requires = ["hatchling"]
+
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["osx-arm64", "linux-64"]
+
+[tool.pixi.pypi-dependencies]
+em_inspection = { path = ".", editable = true }
+mkdocs-material = "*"
+pytest = ">=8.0.0,<9.0.0"
+pytest-mock = "*"
+opencv-python-headless = "*"
+dash-bootstrap-components = "*"
+dash-extensions = "*"
+paramiko = "*"
+sofima = { git = "https://github.com/google-research/sofima.git" }
+em_alignment = { git = "https://github.com/fmi-basel/gfriedri-em-alignment.git" }
+
+[tool.pixi.tasks]
+test = "python -m pytest"
+lint = "ruff check ."
+format = "ruff format ."
+docs-serve = "mkdocs serve"
+docs-build = "mkdocs build"
+
+[tool.pixi.dependencies]
+python = "3.13.*"
+pixi-pycharm = ">=0.0.10,<0.0.11"
+matplotlib = ">=3.10.8,<4"
+scikit-image = ">=0.25.2,<0.26"
+jax = ">=0.7.2,<0.8"
+numpy = ">=2.3.5,<3"
+scipy = ">=1.16.3,<2"
+yaml = ">=0.2.5,<0.3"
+pandas = "*"
+duckdb = "*"
+plotly = "*"
+dash = "*"
+tqdm = ">=4.67.1,<5"
+ruyaml = ">=0.91.0,<0.92"
+numcodecs = ">=0.16.5,<0.17"
+ome-zarr = ">=0.12.2,<0.13"
+pydantic = ">=2.12.5,<3"
+ruff = "*"
+pre-commit = "*"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/em_inspection"]
+
+[tool.pytest.ini_options]
+addopts = "-p no:dash"
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "E402", "F403", "W291", "F841", "E731"]
+

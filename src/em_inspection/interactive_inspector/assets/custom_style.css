@@ -1,0 +1,78 @@
+/* --- 1. SLIDER FIXES (RC-SLIDER) --- */
+
+/* Flips the slider handle back so it doesn't look inverted */
+.custom-vertical-slider .rc-slider-handle {
+    transform: scaleY(-1) !important;
+}
+
+/* Target the handle specifically */
+.rc-slider-vertical .rc-slider-handle {
+    width: 12px !important;
+    height: 12px !important;
+    margin-left: -4px !important;
+    margin-bottom: -6px !important;
+    border: 2px solid white !important;
+    background-color: #6f42c1 !important;
+    box-shadow: none !important;
+}
+
+/* Target the 'active' state to prevent handle jumping/growing */
+.rc-slider-vertical .rc-slider-handle:active,
+.rc-slider-vertical .rc-slider-handle:focus,
+.rc-slider-vertical .rc-slider-handle-click-focused {
+    width: 12px !important;
+    height: 12px !important;
+    box-shadow: 0 0 5px rgba(111, 66, 193, 0.5) !important;
+}
+
+/* Rail styling */
+.rc-slider-vertical .rc-slider-rail {
+    width: 4px !important;
+    background-color: #e9ecef !important;
+}
+
+
+/* --- 2. WORKFLOW NAVIGATION (TOP BAR ONLY) --- */
+
+/* IMPORTANT: We use the .navbar prefix here so these styles
+   DO NOT leak into internal dbc.Tabs or Accordions.
+*/
+
+/* Base transition for smooth hovering */
+.navbar .nav-link {
+    transition: all 0.2s ease-in-out;
+}
+
+/* Highlight for the active Top-Level page */
+.navbar .nav-link.active {
+    color: #ffffff !important;           /* Pure white text for focus */
+    font-weight: 700 !important;         /* Bold the text */
+    border-bottom: 3px solid #0dcaf0;    /* Cyan underline */
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* The 'active dot' indicator for the top bar */
+.navbar .nav-link.active::before {
+    content: "●";
+    margin-right: 6px;
+    font-size: 8px;
+    vertical-align: middle;
+    color: #0dcaf0;
+}
+
+
+/* --- 3. INTERNAL TABS (CONFIG MANAGER) --- */
+
+/* Ensures sub-tabs (Acquisition, Mesh, etc.) remain readable
+   and use standard Bootstrap styling.
+*/
+.nav-tabs .nav-link {
+    color: #495057; /* Standard dark text */
+    border-bottom: none;
+}
+
+.nav-tabs .nav-link.active {
+    color: #007bff !important; /* Blue for the active sub-tab */
+    font-weight: 600 !important;
+    border-bottom: 1px solid #fff; /* Restores standard tab look */
+}

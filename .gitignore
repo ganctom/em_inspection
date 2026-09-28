@@ -1,0 +1,28 @@
+# Pixi environments
+.pixi/
+!.pixi/config.toml
+
+# Python / Pytest / Caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+*.so
+.ruff_cache/
+
+# IDE / Editors
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Application & local scratch data
+app_data/
+src/scratch/
+tests/__pycache__/
+site/
+.venv/
+uv.lock
