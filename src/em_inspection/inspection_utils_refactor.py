@@ -171,7 +171,7 @@ def read_coarse_mat(path: Path) -> CoarseData:
         cx: coarse shifts between horizontal neighbors
         cy: coarse shifts between vertical neighbors
     """
-    path = Path(path)
+    path = Path(cross_platform_path(str(path)))
     try:
         reader = CoarseDataFactory.get_reader(path)
         return reader.read(path)
@@ -198,76 +198,177 @@ def write_dict_to_yaml(file_path: str, data: Union[Dict[int, float], Iterable[in
             "The 'data' parameter must be a dictionary with integer keys and float values, or an iterable of integers."
         )
     try:
-        with open(file_path, "w") as file:
+        target_path = Path(cross_platform_path(str(file_path)))
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w") as file:
             yaml.dump(converted_data, file, default_flow_style=False)
     except Exception as e:
         print(f"An error occurred while writing to the file: {e}")
 
 
 def cross_platform_path(path: str) -> str:
+    """Translates filesystem paths between host OS conventions (macOS, Linux, Windows).
+
+    Ensures remote network mount paths (e.g. /tachyon/..., /tungstenfs/...) are properly
+    prefixed with /Volumes on macOS, stripped of /Volumes on Linux/Windows, and formatted
+    with appropriate path separators.
+    """
+    if path is None:
+        return ""
+
+    path = str(path).strip()
+    if not path:
+        return ""
 
     OS_WIN = "Windows"
     OS_UX = "Linux"
     OS_MAC = "Darwin"
+
     FS = os.environ.get("EM_STORAGE_LINUX", r"/mnt/storage")
     STORAGE_PATH = os.environ.get("EM_STORAGE_BASE", "/storage/")
-
     NAS_PREFIX = os.environ.get("EM_NAS_PREFIX", r"\\nas.company.internal\storage")
     STORAGE_PREFIX = os.environ.get(
         "EM_STORAGE_PREFIX", r"\\storage.company.internal\storage"
     )
     STORAGE_PREFIX_MAC = os.environ.get("EM_STORAGE_PREFIX_MAC", "/Volumes/storage/")
 
-    PREFIXES = FS, NAS_PREFIX, STORAGE_PREFIX
-
-    def_ret_val = ""
-
-    def win_to_ux_path(win_path: str, remove_substring=None) -> str:
-        if remove_substring:
-            win_path = win_path.replace(remove_substring, FS)
-        linux_path = win_path.replace("\\", "/")
-        linux_path = linux_path.replace("//", "", 1)
-        return linux_path
-
-    def ux_to_win_path(ux_path: str, remove_substring=None) -> str:
-        if remove_substring:
-            ux_path = ux_path.replace(remove_substring, STORAGE_PREFIX)
-        win_path = ux_path.replace("/", "\\")
-        return win_path
-
-    # Get the operating system name
     os_name = system()
 
-    # Early return
-    if path is None:
-        return def_ret_val
+    # 1. Custom explicit mapping from environment (if set)
+    custom_map_str = os.environ.get("EM_REMOTE_MOUNT_MAP", "")
+    if custom_map_str:
+        try:
+            mapping = json.loads(custom_map_str)
+            for k, v in mapping.items():
+                if path.startswith(k):
+                    path = v + path[len(k) :]
+                    break
+        except Exception:
+            for pair in custom_map_str.split(","):
+                if ":" in pair:
+                    k, v = pair.split(":", 1)
+                    k, v = k.strip(), v.strip()
+                    if k and path.startswith(k):
+                        path = v + path[len(k) :]
+                        break
 
-    path = str(path)
+    # 2. Normalize Windows backslashes for POSIX systems
+    if os_name in (OS_MAC, OS_UX):
+        if "\\" in path:
+            path = path.replace("\\", "/")
 
-    if os_name == OS_MAC and "Volumes" not in path:
-        p_new = path.replace(STORAGE_PATH, STORAGE_PREFIX_MAC)
-        return str(p_new)
+    # 3. macOS Resolution
+    if os_name == OS_MAC:
+        # Translate Windows UNC paths if present
+        if path.startswith("//nas.company.internal/storage") or path.startswith(
+            "//storage.company.internal/storage"
+        ):
+            path = path.replace(
+                "//nas.company.internal/storage", STORAGE_PREFIX_MAC.rstrip("/")
+            )
+            path = path.replace(
+                "//storage.company.internal/storage",
+                STORAGE_PREFIX_MAC.rstrip("/"),
+            )
+        elif path.startswith("W:/") or path.startswith("w:/"):
+            path = STORAGE_PREFIX_MAC.rstrip("/") + "/" + path[3:].lstrip("/")
 
-    if os_name == OS_WIN and "/" in path:
-        # Running on Windows but path in UX style
-        path = ux_to_win_path(path, remove_substring=FS)
+        # If already starts with /Volumes/, it's already a macOS mount path
+        if path.startswith("/Volumes/"):
+            return path
+
+        # Check legacy storage path replacement
+        if STORAGE_PATH in path:
+            path = path.replace(STORAGE_PATH, STORAGE_PREFIX_MAC)
+            if path.startswith("/Volumes/"):
+                return path
+
+        if FS in path:
+            path = path.replace(FS, STORAGE_PREFIX_MAC.rstrip("/"))
+            if path.startswith("/Volumes/"):
+                return path
+
+        # If path already exists locally on disk, keep it
+        if os.path.exists(path):
+            return path
+
+        # If prepending /Volumes directly points to an existing file/folder
+        volumes_candidate = "/Volumes" + (path if path.startswith("/") else "/" + path)
+        if os.path.exists(volumes_candidate):
+            return volumes_candidate
+
+        # If it's an absolute path, check if the first path element is a mount point in /Volumes
+        # or a non-local root directory (e.g. /tachyon, /tungstenfs, /storage, /scratch)
+        if path.startswith("/"):
+            parts = Path(path).parts  # e.g. ('/', 'tachyon', 'scratch', ...)
+            if len(parts) > 1:
+                mount_name = parts[1]
+                # If /Volumes/<mount_name> is an active mount point
+                if os.path.exists(f"/Volumes/{mount_name}"):
+                    return volumes_candidate
+
+                # Non-local standard system directories on macOS
+                local_mac_roots = {
+                    "Users",
+                    "Applications",
+                    "Library",
+                    "System",
+                    "private",
+                    "tmp",
+                    "var",
+                    "etc",
+                    "opt",
+                    "dev",
+                    "bin",
+                    "sbin",
+                    "usr",
+                }
+                if mount_name not in local_mac_roots:
+                    return volumes_candidate
+
         return path
 
-    prefix = None
-    for p in PREFIXES:
-        if p in path:
-            prefix = p
-            break
+    # 4. Linux Resolution
+    if os_name == OS_UX:
+        # Strip /Volumes/ prefix if originating from macOS
+        if path.startswith("/Volumes/"):
+            path = path[len("/Volumes") :]
 
-    if prefix is None:
+        # Translate Windows paths
+        prefixes = (FS, NAS_PREFIX, STORAGE_PREFIX)
+        prefix = None
+        for p in prefixes:
+            if p in path:
+                prefix = p
+                break
+
+        if prefix is not None and "\\" in path:
+            path = path.replace(prefix, FS).replace("\\", "/").replace("//", "", 1)
+        elif STORAGE_PREFIX_MAC in path:
+            path = path.replace(STORAGE_PREFIX_MAC, STORAGE_PATH)
+
         return path
 
+    # 5. Windows Resolution
     if os_name == OS_WIN:
-        path = path.replace(prefix, "W:")
-        path = path.replace("\\", "/")
-    elif os_name == OS_UX and "\\" in path:
-        # Running on UX but path in WinOS style
-        path = win_to_ux_path(path, prefix)
+        if path.startswith("/Volumes/"):
+            path = path[len("/Volumes") :]
+
+        prefixes = (FS, NAS_PREFIX, STORAGE_PREFIX)
+        prefix = None
+        for p in prefixes:
+            if p in path:
+                prefix = p
+                break
+
+        if prefix is not None:
+            path = path.replace(prefix, "W:").replace("/", "\\")
+        elif "/" in path:
+            # General Unix to Windows translation
+            path = path.replace(FS, STORAGE_PREFIX).replace("/", "\\")
+
+        return path
+
     return path
 
 
@@ -282,7 +383,7 @@ def process_dirs(
     :return: Lists and dictionaries of directories, names, numbers, and dicts based on section number.
     """
 
-    root = Path(directory_path)
+    root = Path(cross_platform_path(str(directory_path)))
     if not root.is_dir():
         return None
 
@@ -346,7 +447,7 @@ def filter_and_sort_sections(sections_dir: str) -> Optional[list[str]]:
     regex_pattern = re.compile(pattern)
 
     # Use glob to filter the section directory names
-    dirs = glob(str(Path(sections_dir) / "*"))
+    dirs = glob(str(Path(cross_platform_path(str(sections_dir))) / "*"))
 
     # Filter and sort the matching section directory names
     sorted_dirs = sorted(
@@ -366,6 +467,7 @@ def process_dirs_unix(
 ) -> Optional[tuple[list[Path], list[str], list[int], dict[int, str]]]:
     """Process directories using Unix commands and return lists and dictionaries based on section number."""
 
+    directory_path = cross_platform_path(str(directory_path))
     if not Path(directory_path).exists():
         logging.warning(f"process_dirs_unix found no specified path: {directory_path}")
         return None
@@ -397,7 +499,7 @@ def process_dirs_unix(
 
 
 def get_tile_ids_from_yaml(path: UniPath) -> Optional[list[int]]:
-    section_yaml = Path(path) / "section.yaml"
+    section_yaml = Path(cross_platform_path(str(path))) / "section.yaml"
     try:
         with open(section_yaml, "r") as file:
             contents = yaml.safe_load(file)
@@ -416,7 +518,7 @@ def read_tile_id_map(dir_section: UniPath) -> Optional[np.ndarray]:
     :param dir_section: Path to directory containing tile_id_map.json
     :return: tile id map as a numpy array
     """
-    fp_json = Path(dir_section) / "tile_id_map.json"
+    fp_json = Path(cross_platform_path(str(dir_section))) / "tile_id_map.json"
     if not fp_json.exists():
         print(f"tile_id_map file is missing: {fp_json}")
         return None
@@ -425,13 +527,14 @@ def read_tile_id_map(dir_section: UniPath) -> Optional[np.ndarray]:
 
 
 def get_tile_id_map(path_tid_map: UniPath) -> npt.NDArray[np.int_]:
+    norm_path = Path(cross_platform_path(str(path_tid_map)))
     try:
-        with open(path_tid_map, "r") as file:
+        with open(norm_path, "r") as file:
             return np.array(json.load(file), dtype=np.int_)
     except FileNotFoundError:
-        raise FileNotFoundError(f"Tile-ID map missing at {path_tid_map}")
+        raise FileNotFoundError(f"Tile-ID map missing at {norm_path}")
     except (json.JSONDecodeError, TypeError) as e:
-        raise ValueError(f"Malformed Tile-ID map at {path_tid_map}: {e}")
+        raise ValueError(f"Malformed Tile-ID map at {norm_path}: {e}")
 
 
 def aggregate_parallel(
@@ -618,7 +721,10 @@ def tile_id_from_coord(coord: TileCoord, tile_id_map: np.ndarray) -> Optional[in
 
 def get_tile_ids_set(path_all_tid_maps: str) -> set[int]:
     try:
-        path_tid_maps = Path(path_all_tid_maps).parent / "all_tile_id_maps.npz"
+        path_tid_maps = (
+            Path(cross_platform_path(str(path_all_tid_maps))).parent
+            / "all_tile_id_maps.npz"
+        )
         tid_maps = np.load(str(path_tid_maps), allow_pickle=True)
     except FileNotFoundError as _:
         tid_maps = None
@@ -875,8 +981,10 @@ def save_img(path: str, data: np.ndarray):
         logging.warning(f"Image {Path(path).stem} could not be resized.")
         return
 
-    logging.info(f"Saving thumbnail to: {path}")
-    skimage.io.imsave(path, data)
+    path_obj = Path(cross_platform_path(str(path)))
+    path_obj.parent.mkdir(parents=True, exist_ok=True)
+    logging.info(f"Saving thumbnail to: {path_obj}")
+    skimage.io.imsave(str(path_obj), data)
     return
 
 
@@ -944,6 +1052,7 @@ def list_arrays(group: zarr.Group, prefix: str = "") -> list[str]:
 def get_tile_shape(fp_yaml: UniPath) -> Optional[TileXY]:
     try:
         # Load the YAML data
+        fp_yaml = cross_platform_path(str(fp_yaml))
         with open(fp_yaml, "r") as yaml_file:
             data = yaml.safe_load(yaml_file)
             h = data["tile_height"]
@@ -955,14 +1064,14 @@ def get_tile_shape(fp_yaml: UniPath) -> Optional[TileXY]:
 
 
 def load_mapped_npz(fp: str) -> Optional[MaskMap]:
-    file_path = Path(fp)
+    file_path = Path(cross_platform_path(str(fp)))
     if not file_path.exists():
         logging.info(f"File '{file_path}' not found.")
         return None
 
     fmt_data = {}
     try:
-        with np.load(fp, allow_pickle=True) as data:
+        with np.load(str(file_path), allow_pickle=True) as data:
             for key in data.keys():
                 fmt_data[eval(key)] = data[key]
             return fmt_data
@@ -1311,8 +1420,10 @@ def plot_tile_pair(
             plt.show()
 
         if path_plot is not None:
-            logging.info(f"storing plot to: {path_plot}")
-            plt.savefig(path_plot, dpi=600)
+            norm_plot = Path(cross_platform_path(str(path_plot)))
+            norm_plot.parent.mkdir(parents=True, exist_ok=True)
+            logging.info(f"storing plot to: {norm_plot}")
+            plt.savefig(str(norm_plot), dpi=600)
 
         plt.close(fig)
 
@@ -1350,7 +1461,7 @@ def get_ov_tid_pairs(directory: UniPath) -> list[tuple[int, int]]:
     pattern = re.compile(r"^t(\d{4})_t(\d{4})$")  # Exact match for 'tXXXX_tYYYY'
     matches: list[tuple[int, int]] = []
 
-    dir_path = Path(directory)
+    dir_path = Path(cross_platform_path(str(directory)))
 
     if not dir_path.is_dir():
         raise ValueError(f"The provided path '{directory}' is not a valid directory.")
@@ -1399,7 +1510,7 @@ def save_coarse_mat(
     :param file_format: format for saving ('json' or 'npz')
     :return: None
     """
-    dir_path = Path(dir_path)
+    dir_path = Path(cross_platform_path(str(dir_path)))
 
     if not dir_path.is_dir():
         logging.error(f"save_coarse_mat: directory {dir_path} does not exist.")
@@ -1597,7 +1708,8 @@ def validate_section_numbers(
 
 def list_stitched(dir_stitched: str) -> list[str]:
     """Returns sorted list of full paths to all *.zarr files in the input folder."""
-    pattern = os.path.join(dir_stitched, "*.zarr")
+    norm_dir = cross_platform_path(str(dir_stitched))
+    pattern = os.path.join(norm_dir, "*.zarr")
     return sorted(glob(pattern))
 
 
@@ -1799,7 +1911,7 @@ def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
     :return: A dictionary where keys are slice numbers and values are
     lists of tuples, each containing two integers (TileID, TileID_nn).
     """
-    path = Path(path_outliers)
+    path = Path(cross_platform_path(str(path_outliers)))
 
     if not path.is_file():
         logging.warning(f"Outliers file not found: {path}")
@@ -1842,6 +1954,7 @@ def load_outliers(path_outliers: UniPath) -> Dict[int, list[tuple[int, int]]]:
 def process_single_section(path_to_check: Path, sec_num_str: str):
     """Worker function to read and process a single JSON file."""
     try:
+        path_to_check = Path(cross_platform_path(str(path_to_check)))
         if not path_to_check.exists():
             return sec_num_str, None, f"s{sec_num_str}\n"
 
@@ -1900,12 +2013,13 @@ def make_hashable_params(params: dict | None) -> tuple[tuple[str, any], ...] | N
     return tuple(sorted(params.items())) if params else None
 
 
-def io_read_tif(path: Path, retries: int = 3) -> np.ndarray | None:
+def io_read_tif(path: Path | str, retries: int = 3) -> np.ndarray | None:
     """Low-level I/O with exponential backoff for SMB stability."""
+    norm_path = cross_platform_path(str(path))
     for attempt in range(retries):
         try:
             # EAFP: Direct read avoids redundant SMB 'stat' calls
-            return skimage.io.imread(str(path))
+            return skimage.io.imread(norm_path)
         except OSError as e:
             if e.errno == 1 and attempt < retries - 1:  # Operation not permitted
                 delay = (0.1 * (2**attempt)) + random.uniform(0, 0.1)
@@ -1929,7 +2043,7 @@ def store_section_zarr(
         out_dir: Parent directory for the output.
         chunks: Zarr chunk size. Defaults to 2048 for balanced UI/IO performance.
     """
-    zarr_path = Path(out_dir) / section_name
+    zarr_path = Path(cross_platform_path(str(out_dir))) / section_name
     zarr_path.parent.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -1988,7 +2102,8 @@ def identify_missing_ids(
 
 
 def get_existing_ids(path_stitched: str) -> Set[int]:
-    with os.scandir(path_stitched) as entries:
+    norm_path = cross_platform_path(str(path_stitched))
+    with os.scandir(norm_path) as entries:
         zarr_dirs = (e.name for e in entries if e.is_dir() and e.name.endswith(".zarr"))
         extr_nums = (parse_sec_num(name) for name in zarr_dirs)
         return {n for n in extr_nums if n is not None}
@@ -1998,6 +2113,7 @@ def get_missing_stitched_sections(
     target_path: Path | str, expected_ids: Sequence[int]
 ) -> List[int]:
     """I/O Orchestration Layer."""
+    target_path = cross_platform_path(str(target_path))
     if not os.path.exists(target_path):
         logging.error(f"Target path not found: {target_path}")
         return sorted(list(expected_ids))

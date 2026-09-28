@@ -337,11 +337,13 @@ class CoarseOffsetRepository:
 class CoarseOffsetProcessor:
     def __init__(self, config: cfg.ExpConfig, paths: dict):
         self.config = config
-        self.dir_inspect = paths["inspect"]
-        self.path_co_outliers = paths["co_outliers"]
+        self.dir_inspect = Path(utils.cross_platform_path(str(paths["inspect"])))
+        self.path_co_outliers = Path(
+            utils.cross_platform_path(str(paths["co_outliers"]))
+        )
 
         # Data containers
-        self.db_path = Path(paths["inspect"]) / "all_offsets.db"
+        self.db_path = self.dir_inspect / "all_offsets.db"
         self.cxyz_obj = None
         self.tile_id_maps_obj = None
         self.co_outliers = {}

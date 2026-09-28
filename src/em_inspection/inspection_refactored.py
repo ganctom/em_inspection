@@ -34,12 +34,12 @@ class Inspection:
     def __init__(self, config: cfg.ExpConfig):
 
         self.config = config
-        self.root = Path(config.proc_dir)
+        self.root = Path(utils.cross_platform_path(str(config.proc_dir)))
         self.grid_nr = config.grid_num
         self.first_sec = config.first_sec
         self.last_sec = config.last_sec
         self.grid_shape = config.grid_shape
-        self.acq_dir = utils.cross_platform_path(config.acq_dir)
+        self.acq_dir = utils.cross_platform_path(str(config.acq_dir))
         self.os_name = system()
 
         # 1. Initialize Primary Directory Structure using the Schema

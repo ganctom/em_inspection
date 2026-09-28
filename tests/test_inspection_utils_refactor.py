@@ -4,7 +4,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from em_inspection.inspection_utils_refactor import CoarseData, read_coarse_mat
+from em_inspection.inspection_utils_refactor import (
+    CoarseData,
+    cross_platform_path,
+    read_coarse_mat,
+)
 
 # --- FIXTURES (Setup code) ---
 
@@ -93,3 +97,112 @@ def test_json_loading(sample_json):
 
     assert result.coarse_mesh is None
     assert result.cx.shape == (1, 2)
+
+
+def test_cross_platform_path_empty_and_none():
+    assert cross_platform_path(None) == ""
+    assert cross_platform_path("") == ""
+    assert cross_platform_path("   ") == ""
+
+
+def test_cross_platform_path_macos_prepends_volumes(monkeypatch):
+    monkeypatch.setattr(
+        "em_inspection.inspection_utils_refactor.system", lambda: "Darwin"
+    )
+
+    path = "/tachyon/scratch/data/tiles/tile_001.tif"
+    resolved = cross_platform_path(path)
+    assert resolved == "/Volumes/tachyon/scratch/data/tiles/tile_001.tif"
+
+
+def test_cross_platform_path_macos_already_has_volumes(monkeypatch):
+    monkeypatch.setattr(
+        "em_inspection.inspection_utils_refactor.system", lambda: "Darwin"
+    )
+
+    path = "/Volumes/tachyon/scratch/data/tiles/tile_001.tif"
+    resolved = cross_platform_path(path)
+    assert resolved == "/Volumes/tachyon/scratch/data/tiles/tile_001.tif"
+
+
+def test_cross_platform_path_macos_local_system_path(monkeypatch):
+    monkeypatch.setattr(
+        "em_inspection.inspection_utils_refactor.system", lambda: "Darwin"
+    )
+
+    path = "/Users/testuser/experiments/file.tif"
+    resolved = cross_platform_path(path)
+    assert resolved == "/Users/testuser/experiments/file.tif"
+
+
+def test_cross_platform_path_linux_strips_volumes(monkeypatch):
+    monkeypatch.setattr(
+        "em_inspection.inspection_utils_refactor.system", lambda: "Linux"
+    )
+
+    path = "/Volumes/tachyon/scratch/data/tiles/tile_001.tif"
+    resolved = cross_platform_path(path)
+    assert resolved == "/tachyon/scratch/data/tiles/tile_001.tif"
+
+
+def test_cross_platform_path_custom_mount_map(monkeypatch):
+    monkeypatch.setenv(
+        "EM_REMOTE_MOUNT_MAP",
+        '{"/remote_nas": "/Volumes/local_nas"}',
+    )
+    monkeypatch.setattr(
+        "em_inspection.inspection_utils_refactor.system", lambda: "Darwin"
+    )
+
+    path = "/remote_nas/data/tile.tif"
+    resolved = cross_platform_path(path)
+    assert resolved == "/Volumes/local_nas/data/tile.tif"
+
+
+def test_write_dict_to_yaml_creates_parent_and_resolves_path(tmp_path):
+    from em_inspection.inspection_utils_refactor import write_dict_to_yaml
+
+    target_file = tmp_path / "nested" / "dir" / "data.yaml"
+    write_dict_to_yaml(str(target_file), {1: 1.5, 2: 2.5})
+
+    assert target_file.exists()
+
+
+def test_read_coarse_mat_with_cross_platform_path(tmp_path, sample_json, monkeypatch):
+    path, _ = sample_json
+    # Pass a path that resolves correctly
+    result = read_coarse_mat(str(path))
+    assert result.cx.shape == (1, 2)
+
+
+def test_get_missing_stitched_sections_resolution(tmp_path):
+    from em_inspection.inspection_utils_refactor import get_missing_stitched_sections
+
+    stitched_dir = tmp_path / "stitched"
+    stitched_dir.mkdir()
+    (stitched_dir / "s0001_g0.zarr").mkdir()
+    (stitched_dir / "s0002_g0.zarr").mkdir()
+
+    missing = get_missing_stitched_sections(str(stitched_dir), [1, 2, 3, 4])
+    assert missing == [3, 4]
+
+
+def test_save_img_creates_directories_and_resolves(tmp_path):
+    from em_inspection.inspection_utils_refactor import save_img
+
+    target_img = tmp_path / "nested" / "thumb.jpg"
+    data = np.zeros((10, 10), dtype=np.uint8)
+    save_img(str(target_img), data)
+    assert target_img.exists()
+
+
+def test_save_coarse_mat_resolution(tmp_path):
+    from em_inspection.inspection_utils_refactor import save_coarse_mat
+
+    sec_dir = tmp_path / "s0001"
+    sec_dir.mkdir()
+    cxy = np.zeros((2, 2, 3, 3), dtype=np.float32)
+    save_coarse_mat(cxy, str(sec_dir), file_format="json")
+
+    cx_cy_file = sec_dir / "cx_cy.json"
+    assert cx_cy_file.exists()

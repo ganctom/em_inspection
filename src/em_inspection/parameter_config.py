@@ -22,9 +22,11 @@ def save_to_disk(cfg_obj: BaseModel, path_out: str):
     Saves a BaseModel to a clean, standard YAML file.
     Tuples are exported as standard YAML sequences (lists).
     """
+    clean_path = Path(cross_platform_path(str(path_out)))
+    clean_path.parent.mkdir(parents=True, exist_ok=True)
     raw_data = cfg_obj.model_dump()
     clean_data = prepare_for_yaml(raw_data)
-    with open(path_out, "w") as f:
+    with open(clean_path, "w") as f:
         yaml.safe_dump(clean_data, f, default_flow_style=False, sort_keys=False)
 
 

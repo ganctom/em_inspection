@@ -325,10 +325,11 @@ class DataService:
         return str(Path(self.exp_config.proc_dir) / UI.FN_CFG_TILE_STITCHING)
 
     def load_stitching_config(self, config_path: str) -> StitchingConfig:
-        with open(config_path, "r") as f:
+        norm_path = utils.cross_platform_path(str(config_path))
+        with open(norm_path, "r") as f:
             data = yaml.safe_load(f)
 
-        logging.info(f"loading {config_path}")
+        logging.info(f"loading {norm_path}")
 
         cfg = StitchingConfig(**data)
         self.stitch_config = cfg
@@ -1110,12 +1111,14 @@ class DataService:
 
         # 1. Load the raw dictionary from disk
         raw_dict: dict = {}
-        if config_path and Path(config_path).exists():
-            try:
-                with open(config_path, encoding="utf-8") as f:
-                    raw_dict = yaml.safe_load(f) or {}
-            except Exception as e:
-                logging.error(f"IO Error: {e}")
+        if config_path:
+            norm_config_path = Path(utils.cross_platform_path(str(config_path)))
+            if norm_config_path.exists():
+                try:
+                    with open(norm_config_path, encoding="utf-8") as f:
+                        raw_dict = yaml.safe_load(f) or {}
+                except Exception as e:
+                    logging.error(f"IO Error: {e}")
 
         # 2. Map UI Overrides to the correct nested structure
         def _apply_overrides(target_dict):

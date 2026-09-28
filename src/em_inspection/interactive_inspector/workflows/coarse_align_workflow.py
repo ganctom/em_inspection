@@ -25,7 +25,8 @@ class CoarseAlignManager:
         if not file_path:
             raise ValueError("Please enter a valid path")
 
-        with open(file_path, "r") as f:
+        norm_path = pcfg.cross_platform_path(str(file_path))
+        with open(norm_path, "r") as f:
             data = yaml.safe_load(f)
 
         cfg = pcfg.StitchingConfig(**data)
@@ -69,9 +70,10 @@ class CoarseAlignManager:
             return "Save failed: Invalid configuration data object type passed."
 
         try:
+            norm_path = pcfg.cross_platform_path(str(path))
             stitch_config.acquisition_config = service.acq_config
-            pcfg.save_to_disk(stitch_config, path)
-            return f"Successfully saved to {path}."
+            pcfg.save_to_disk(stitch_config, norm_path)
+            return f"Successfully saved to {norm_path}."
         except Exception as e:
             return f"Save failed: {str(e)}"
 

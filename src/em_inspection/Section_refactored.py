@@ -70,7 +70,7 @@ class SectionInfrastructureError(DataServiceError):
 def cached_read_image(path: str):
     # This ensures that if the same tile is requested twice,
     # it returns the numpy array from RAM instantly.
-    return skimage.io.imread(path)
+    return skimage.io.imread(utils.cross_platform_path(path))
 
 
 @dataclass(frozen=False)
@@ -706,8 +706,8 @@ class Section:
         # Fix ordering of tiles
         tid_a, tid_b = min(tid_a, tid_b), max(tid_a, tid_b)
 
-        path_a = self.tile_dicts[tid_a]
-        path_b = self.tile_dicts[tid_b]
+        path_a = utils.cross_platform_path(self.tile_dicts[tid_a])
+        path_b = utils.cross_platform_path(self.tile_dicts[tid_b])
 
         if not Path(path_a).exists() or not Path(path_b).exists():
             logging.warning("Image files could not be loaded:")
@@ -747,7 +747,7 @@ class Section:
 
         path_plot = None  # Do not store the OV image to HDD
         if dir_out is not None:
-            dir_ov = Path(dir_out)
+            dir_ov = Path(utils.cross_platform_path(str(dir_out)))
             str_tid_a, str_tid_b = f"t{tid_a:04d}", f"t{tid_b:04d}"
             if not store_to_root:
                 dir_ov = Path(dir_out) / f"{str_tid_a}_{str_tid_b}"
@@ -1825,7 +1825,7 @@ class Section:
 
         # === Tile dictionary lookup ===
         try:
-            tile_path = self.tile_dicts[tile_id]
+            tile_path = utils.cross_platform_path(self.tile_dicts[tile_id])
         except (KeyError, IndexError, ValueError):
             logging.error(f"Critical Mapping Error: ID {tile_id} not in tile_dicts.")
             raise  # Re-raising is correct here to trigger the 'Atomic Failure'

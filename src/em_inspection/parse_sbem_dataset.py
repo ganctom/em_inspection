@@ -24,7 +24,7 @@ UniPath = Union[Path, str]
 
 class Validator:
     def __init__(self, root, first_sec, last_sec):
-        self.root = Path(root)
+        self.root = Path(cross_platform_path(str(root)))
         self.first_sec = first_sec
         self.last_sec = last_sec
         self.dir_sections = self.root / "sections"
@@ -190,7 +190,9 @@ def write_dict_to_yaml(file_path: str, data: Union[Dict[int, float], Iterable[in
             "The 'data' parameter must be a dictionary with integer keys and float values, or an iterable of integers."
         )
     try:
-        with open(file_path, "w") as file:
+        target_path = Path(cross_platform_path(str(file_path)))
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w") as file:
             yaml.dump(converted_data, file, default_flow_style=False)
     except Exception as e:
         print(f"An error occurred while writing to the file: {e}")
@@ -208,7 +210,7 @@ def get_missing_tile_specs(
     if not missing_section_nums:
         return []
 
-    dir_tiles = Path(sbem_root_dir) / "tiles" / tile_grid
+    dir_tiles = Path(cross_platform_path(str(sbem_root_dir))) / "tiles" / tile_grid
     tile_folders = [Path(d) for d in dir_tiles.glob("*") if d.is_dir()]
     prefix = get_raw_tile_prefix(tile_folders[0])
     new_tile_specs = []
@@ -248,6 +250,8 @@ def parse_data(
     start_section: int,
     end_section: int,
 ):
+    output_dir = cross_platform_path(str(output_dir))
+    sbem_root_dir = cross_platform_path(str(sbem_root_dir))
     tile_grid_num = int(tile_grid[1:])
 
     metadata_files = sorted(glob(join(sbem_root_dir, "meta", "logs", "metadata_*")))
