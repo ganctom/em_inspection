@@ -1,0 +1,1432 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Interactive inspection and processing of SBEM datasets">
+      
+      
+        <meta name="author" content="Tomáš Gancarčik">
+      
+      
+        <link rel="canonical" href="https://ganctom.github.io/em_inspection/workflow/03_inspection/">
+      
+      
+        <link rel="prev" href="../02_coarse_alignment/">
+      
+      
+        <link rel="next" href="../04_stitching/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>3. Inspection & Curation - em_inspection</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#3-interactive-inspection-curation" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="em_inspection" class="md-header__button md-logo" aria-label="em_inspection" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            em_inspection
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              3. Inspection & Curation
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/ganctom/em_inspection" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ganctom/em_inspection
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="em_inspection" class="md-nav__button md-logo" aria-label="em_inspection" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    em_inspection
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/ganctom/em_inspection" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    ganctom/em_inspection
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Pipeline Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Pipeline Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/pipeline_overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview & Architecture
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/data_structures/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Data Models & Storage
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow Guide
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Workflow Guide
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../01_setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    1. Setup & Ingestion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../02_coarse_alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    2. Coarse Alignment
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Inspection & Curation
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    3. Inspection & Curation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layout-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-grid-navigator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Grid Navigator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Grid Navigator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-navigation-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Navigation Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-quad-drift-curves-box-multi-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Quad Drift Curves &amp; Box Multi-Selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Quad Drift Curves &amp; Box Multi-Selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#staging-offsets-into-the-basket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Staging Offsets into the Basket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-basket-authors-coarse-offset-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The Basket &amp; Author's Coarse Offset Refinement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. The Basket &amp; Author&#39;s Coarse Offset Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-tools-per-staged-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostic Tools per Staged Item
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authors-overlap-evaluation-coarse-offset-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Author's Overlap-Evaluation Coarse Offset Refinement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Author&#39;s Overlap-Evaluation Coarse Offset Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-pair-batch-refinement-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single-Pair &amp; Batch Refinement Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#persisting-curated-offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Persisting Curated Offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-overlap-inspection-viewer-manual-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Overlap Inspection Viewer &amp; Manual Nudging
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Overlap Inspection Viewer &amp; Manual Nudging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sub-pixel-manual-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sub-Pixel Manual Nudging
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sub-Pixel Manual Nudging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-shortcuts-for-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Shortcuts for Nudging
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../04_stitching/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    4. Section Stitching
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../05_fine_alignment/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    5. Fine Alignment (Roadmap)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+          
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/configuration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Parameters
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operational Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#layout-overview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Layout Overview
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-grid-navigator" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Grid Navigator
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="1. Grid Navigator">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-navigation-shortcuts" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Navigation Shortcuts
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-quad-drift-curves-box-multi-selection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. Quad Drift Curves &amp; Box Multi-Selection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="2. Quad Drift Curves &amp; Box Multi-Selection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#staging-offsets-into-the-basket" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Staging Offsets into the Basket
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-the-basket-authors-coarse-offset-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. The Basket &amp; Author's Coarse Offset Refinement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. The Basket &amp; Author&#39;s Coarse Offset Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#diagnostic-tools-per-staged-item" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostic Tools per Staged Item
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#authors-overlap-evaluation-coarse-offset-refinement" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Author's Overlap-Evaluation Coarse Offset Refinement
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Author&#39;s Overlap-Evaluation Coarse Offset Refinement">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#single-pair-batch-refinement-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Single-Pair &amp; Batch Refinement Modes
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#persisting-curated-offsets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Persisting Curated Offsets
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-overlap-inspection-viewer-manual-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Overlap Inspection Viewer &amp; Manual Nudging
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Overlap Inspection Viewer &amp; Manual Nudging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#sub-pixel-manual-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sub-Pixel Manual Nudging
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Sub-Pixel Manual Nudging">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#keyboard-shortcuts-for-nudging" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keyboard Shortcuts for Nudging
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#next-steps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Next Steps
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="3-interactive-inspection-curation">3. Interactive Inspection &amp; Curation<a class="headerlink" href="#3-interactive-inspection-curation" title="Permanent link">&para;</a></h1>
+<p>The <strong>Inspection</strong> tab is the interactive quality control and curation center of <code>em_inspection</code>. In multi-terabyte serial block-face datasets, automated algorithms can occasionally produce suboptimal offsets when tile overlaps fall on featureless resin, blood vessel lumens, or areas disrupted by knife marks.</p>
+<p>The Inspection dashboard provides a <strong>human-in-the-loop</strong> visual interface to track drift across tens of thousands of sections, stage suspect offsets using box multi-selection, apply the author's custom coarse offset refinement method (both for single tile pairs and across large batches), visually verify ultrastructural alignment, and perform sub-pixel manual nudging.</p>
+<p><img alt="Tab 3: Interactive Inspection &amp; Outlier Curation Interface" src="../../assets/screenshots/page_3_inspection.png" /></p>
+<hr />
+<h2 id="layout-overview">Layout Overview<a class="headerlink" href="#layout-overview" title="Permanent link">&para;</a></h2>
+<p>The interface is divided into two primary columns:
+1. <strong>Left Sidebar</strong>: Grid Navigation, Curation Shopping Basket, and Event Logs.
+2. <strong>Right Canvas</strong>: Quad Drift Curves and the High-Resolution Overlap Inspection Viewer.</p>
+<hr />
+<h2 id="1-grid-navigator">1. Grid Navigator<a class="headerlink" href="#1-grid-navigator" title="Permanent link">&para;</a></h2>
+<p>The Grid Navigator allows you to explore the 3D volume along the <span class="arithmatex">\(Z\)</span>-axis and select specific physical tiles in the 2D mosaic:</p>
+<ul>
+<li><strong>Section Input &amp; Slider</strong>: Jump directly to any physical section cut (e.g., <code>13212</code>) or drag the vertical slider across dataset milestones (e.g., <code>1250</code> to <code>22814</code>).</li>
+<li><strong>Interactive Mosaic Grid</strong>: A 2D schematic representing the physical tile layout of the selected section. </li>
+<li>Clicking any tile number (such as <code>362</code>, highlighted in cyan) selects it as the active tile.</li>
+<li>The Quad Drift Plots immediately update to show the full <span class="arithmatex">\(Z\)</span>-trace for that specific tile's horizontal (<span class="arithmatex">\(H\)</span>) and vertical (<span class="arithmatex">\(V\)</span>) overlaps across the entire experiment.</li>
+</ul>
+<h3 id="keyboard-navigation-shortcuts">Keyboard Navigation Shortcuts<a class="headerlink" href="#keyboard-navigation-shortcuts" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Key</th>
+<th style="text-align: left;">Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><kbd>w</kbd></td>
+<td style="text-align: left;">Move to the next section (<span class="arithmatex">\(Z + 1\)</span>)</td>
+</tr>
+<tr>
+<td style="text-align: left;"><kbd>s</kbd></td>
+<td style="text-align: left;">Move to the previous section (<span class="arithmatex">\(Z - 1\)</span>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-quad-drift-curves-box-multi-selection">2. Quad Drift Curves &amp; Box Multi-Selection<a class="headerlink" href="#2-quad-drift-curves-box-multi-selection" title="Permanent link">&para;</a></h2>
+<p>The upper right canvas renders four synchronized interactive Plotly charts tracking translational displacement vectors over thousands of sections:</p>
+<ul>
+<li><strong>H-Overlap: <span class="arithmatex">\(\Delta x\)</span></strong>: Lateral displacement for horizontal tile neighbors.</li>
+<li><strong>H-Overlap: <span class="arithmatex">\(\Delta y\)</span></strong>: Shear displacement for horizontal tile neighbors.</li>
+<li><strong>V-Overlap: <span class="arithmatex">\(\Delta x\)</span></strong>: Shear displacement for vertical tile neighbors.</li>
+<li><strong>V-Overlap: <span class="arithmatex">\(\Delta y\)</span></strong>: Longitudinal displacement for vertical tile neighbors.</li>
+</ul>
+<h3 id="staging-offsets-into-the-basket">Staging Offsets into the Basket<a class="headerlink" href="#staging-offsets-into-the-basket" title="Permanent link">&para;</a></h3>
+<p>To curate suspect offsets:</p>
+<ul>
+<li><strong>Rectangle / Box Selection Tool</strong>: Using Plotly's box selection mode in the chart toolbar, click and drag a rectangular region over any cluster of points on the drift curve. All selected tile-section pairs are immediately staged into the <strong>Basket</strong> in a single operation.</li>
+<li><strong>Single Point Click</strong>: Clicking directly on an individual data point in any quadrant adds that specific tile overlap pair to the Basket.</li>
+</ul>
+<hr />
+<h2 id="3-the-basket-authors-coarse-offset-refinement">3. The Basket &amp; Author's Coarse Offset Refinement<a class="headerlink" href="#3-the-basket-authors-coarse-offset-refinement" title="Permanent link">&para;</a></h2>
+<p>The Basket serves as the staging queue for reviewing, refining, and committing tile offsets:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a>[T362 Z18323 H]  [Tile Image] [RangeMasks] [Flow] [CleanFlow] [OV] [Calc] [x]
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>[T362 Z6435  V]  [Tile Image] [RangeMasks] [Flow] [CleanFlow] [OV] [Calc] [x]
+</span></code></pre></div>
+<h3 id="diagnostic-tools-per-staged-item">Diagnostic Tools per Staged Item<a class="headerlink" href="#diagnostic-tools-per-staged-item" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>Tile Image</code></strong>: Displays the raw EM tile image to check for charging, debris, or knife stripes.</li>
+<li><strong><code>RangeMasks</code></strong>: Displays the intensity threshold mask to verify if untextured resin margins were correctly identified.</li>
+<li><strong><code>Flow</code></strong>: Visualizes the raw dense optical flow vector field across the overlap ribbon.</li>
+<li><strong><code>CleanFlow</code></strong>: Visualizes the filtered vector field after peak-ratio, sharpness, and magnitude filtering.</li>
+<li><strong><code>OV</code> (Overlap Viewer)</strong>: Loads the overlapping tile pair into the interactive inspection viewer below.</li>
+<li><strong><code>Calc</code></strong>: Recomputes the shift vector using the <strong>Author's Overlap-Evaluation Coarse Offset Refinement</strong> method.</li>
+<li><strong><code>x</code></strong>: Removes the item from the curation basket.</li>
+</ul>
+<h3 id="authors-overlap-evaluation-coarse-offset-refinement">Author's Overlap-Evaluation Coarse Offset Refinement<a class="headerlink" href="#authors-overlap-evaluation-coarse-offset-refinement" title="Permanent link">&para;</a></h3>
+<p>Rather than re-running a naive global Fourier cross-correlation (which can latch onto repetitive knife chatter or background noise), the author's custom refinement algorithm (<code>refine_coarse_offset_eval_ov</code>) evaluates actual image consistency across candidate displacement grids:</p>
+<ol>
+<li><strong>Shift Grid Evaluation</strong>: The algorithm constructs a localized spatial search grid around the initial offset estimate.</li>
+<li><strong>Overlap Quality Metric</strong>: For each candidate offset, the overlapping region is extracted and evaluated using seam structural similarity / consistency metrics.</li>
+<li><strong>Sub-Pixel Grid Interpolation</strong>: The computed quality landscape is interpolated to extract the refined displacement vector.</li>
+</ol>
+<h4 id="single-pair-batch-refinement-modes">Single-Pair &amp; Batch Refinement Modes<a class="headerlink" href="#single-pair-batch-refinement-modes" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>Single Item Refinement (<code>Calc</code>)</strong>: Refines an individual tile overlap on demand with instant feedback in the Overlap Viewer.</li>
+<li><strong>Batch Refinement (<code>Run Batch Registration</code>)</strong>: Iterates across <strong>all</strong> items currently staged in the Basket, automatically refining each coarse offset vector using the configured search radius (<code>max_ext</code>), stride, and pyramidal levels.</li>
+</ul>
+<h3 id="persisting-curated-offsets">Persisting Curated Offsets<a class="headerlink" href="#persisting-curated-offsets" title="Permanent link">&para;</a></h3>
+<p>Once offsets are verified or refined:</p>
+<ul>
+<li><strong><code>Store (Global database)</code></strong>: Commits the updated shift vectors directly into the DuckDB <code>coarse_offsets.db</code> registry.</li>
+<li><strong><code>Store (Individual offset files)</code></strong>: Reconstructs the 4D <span class="arithmatex">\((2, 2, Y, X)\)</span> tensor and writes section-level <code>cx_cy.json</code> files for distributed workers.</li>
+<li><strong><code>Clear Basket</code></strong>: Empties the current staging queue.</li>
+</ul>
+<hr />
+<h2 id="4-overlap-inspection-viewer-manual-nudging">4. Overlap Inspection Viewer &amp; Manual Nudging<a class="headerlink" href="#4-overlap-inspection-viewer-manual-nudging" title="Permanent link">&para;</a></h2>
+<p>When an overlap is loaded (e.g., <code>OVERLAP V | 362 &lt;-&gt; 387 | Z=6435</code>), the bottom canvas displays a blended high-resolution composite of the seam:</p>
+<ul>
+<li><strong>Ultrastructure Verification</strong>: Inspect fine subcellular landmarks—such as double nuclear membranes, mitochondrial cristae, synaptic vesicles, and myelin sheaths—crossing the boundary.</li>
+<li><strong>Visual Alignment Feedback</strong>: Seamless alignment indicates accurate offsets; doubling or shearing indicates residual shift.</li>
+</ul>
+<h3 id="sub-pixel-manual-nudging">Sub-Pixel Manual Nudging<a class="headerlink" href="#sub-pixel-manual-nudging" title="Permanent link">&para;</a></h3>
+<p>For cases requiring direct human adjustment, use the nudge controls:</p>
+<ul>
+<li><strong>Navigation Controls</strong>: <code>|&lt;</code>, <code>&lt;&lt;</code>, <code>&gt;&gt;</code>, <code>&gt;|</code> cycle through items in the basket.</li>
+<li><strong>Directional Nudge Buttons</strong>: <code>←</code>, <code>↑</code>, <code>↓</code>, <code>→</code> shift the active tile by the configured step size.</li>
+<li><strong>Step Size Field</strong>: Sets the displacement per click (default: <code>10</code> pixels).</li>
+</ul>
+<h4 id="keyboard-shortcuts-for-nudging">Keyboard Shortcuts for Nudging<a class="headerlink" href="#keyboard-shortcuts-for-nudging" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Keystroke</th>
+<th style="text-align: left;">Direction</th>
+<th style="text-align: left;">Displacement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;"><kbd>←</kbd> (Left Arrow)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\Delta x - \text{step}\)</span></td>
+<td style="text-align: left;">Shifts tile left</td>
+</tr>
+<tr>
+<td style="text-align: left;"><kbd>→</kbd> (Right Arrow)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\Delta x + \text{step}\)</span></td>
+<td style="text-align: left;">Shifts tile right</td>
+</tr>
+<tr>
+<td style="text-align: left;"><kbd>↑</kbd> (Up Arrow)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\Delta y - \text{step}\)</span></td>
+<td style="text-align: left;">Shifts tile up</td>
+</tr>
+<tr>
+<td style="text-align: left;"><kbd>↓</kbd> (Down Arrow)</td>
+<td style="text-align: left;"><span class="arithmatex">\(\Delta y + \text{step}\)</span></td>
+<td style="text-align: left;">Shifts tile down</td>
+</tr>
+</tbody>
+</table>
+<p>The viewer updates dynamically with every keystroke, allowing sub-pixel precision before saving back to the database.</p>
+<hr />
+<h2 id="next-steps">Next Steps<a class="headerlink" href="#next-steps" title="Permanent link">&para;</a></h2>
+<p>With coarse offsets curated and refined, proceed to <a href="../04_stitching/"><strong>4. Section Stitching</strong></a> to generate seamlessly warped 2D mosaics.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.expand", "navigation.indexes", "navigation.top", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+        <script src="../../javascripts/mathjax.js"></script>
+      
+        <script src="https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js"></script>
+      
+    
+  </body>
+</html>
