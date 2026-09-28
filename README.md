@@ -4,11 +4,11 @@
 [![Docs](https://github.com/ganctom/em_inspection/actions/workflows/docs.yml/badge.svg)](https://ganctom.github.io/em_inspection/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A Python application for interactive inspection, coarse offset estimation, and processing of **Serial Block-Face Electron Microscopy (SBEM)** datasets.
+A Python application for interactive inspection, alignment, and stitching of **Serial Block-Face Electron Microscopy (SBEM)** datasets.
 
 ---
 
-## 🌟 Features
+## Features
 
 - 🔬 **SBEM Dataset Parsing**: High-performance parsing and alignment verification for electron microscopy section datasets.
 - ⚡ **Interactive Inspection**: Modern Dash-based dashboard for interactive visualization of section overlaps and tiles.
@@ -17,7 +17,7 @@ A Python application for interactive inspection, coarse offset estimation, and p
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -51,13 +51,13 @@ pixi run docs-serve
 
 ---
 
-## 📖 Documentation
+## Documentation
 
 For detailed manuals, tutorials, and API reference, visit our online documentation:
 👉 **[https://ganctom.github.io/em_inspection/](https://ganctom.github.io/em_inspection/)**
 
 ---
 
-## 📄 License
+## License
 
 This project is licensed under the [MIT License](LICENSE).
