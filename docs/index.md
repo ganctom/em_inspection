@@ -64,3 +64,9 @@ flowchart LR
 
 - **SOFIMA**: Januszewski, M., Blakely, T., & Lueckmann, J.-M. (2024). *SOFIMA: Scalable Optical Flow-based Image Montaging and Alignment* [Computer software]. Zenodo. [https://doi.org/10.5281/zenodo.10534541](https://doi.org/10.5281/zenodo.10534541) / [GitHub](https://github.com/google-research/sofima).
 - **SBEMimage**: Benjamin Titze et al., *SBEMimage: Open-source acquisition software for serial block-face electron microscopy*, [SBEMimage Repository](https://github.com/SBEMimage/SBEMimage).
+
+---
+
+## License
+
+This project is licensed under the [MIT License](https://github.com/ganctom/em_inspection/blob/main/LICENSE). External dependencies—specifically [**SOFIMA**](https://github.com/google-research/sofima)—are distributed under their respective licenses ([Apache License 2.0](https://github.com/google-research/sofima/blob/main/LICENSE)).

@@ -81,3 +81,8 @@ For full guides, architecture concepts, workflow tutorials, and configuration re
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
+
+### Third-Party Licenses
+
+External dependencies utilized by this project are distributed under their respective licenses:
+- **SOFIMA**: Licensed under the [Apache License 2.0](https://github.com/google-research/sofima/blob/main/LICENSE) (Copyright Google LLC).
