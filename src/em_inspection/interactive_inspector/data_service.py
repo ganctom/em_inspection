@@ -166,6 +166,39 @@ class DataService:
 
         self.initialize_experiment_from_config(new_conf)
 
+    def delete_experiment(
+        self, name: str, quarantine_proc_dir: bool = False
+    ) -> Tuple[bool, Optional[str], bool]:
+        """Deletes an experiment from the registry and resets active session if needed."""
+        success, trashed_path, proc_dir_existed = self.registry.delete(
+            name, quarantine_proc_dir=quarantine_proc_dir
+        )
+
+        if self.exp_config and self.exp_config.name == name:
+            self.reset_experiment_session()
+
+        return success, trashed_path, proc_dir_existed
+
+    @property
+    def config_path(self) -> Path:
+        """Returns the Path to the active experiments.yaml configuration file."""
+        return Path(self.registry.app_cfg.exp_yaml_path)
+
+    def reset_experiment_session(self) -> None:
+        """Cleans active in-memory experiment references."""
+        self.exp_config = None
+        self.acq_config = None
+        self.inspection = None
+        self.processor = None
+        self.stitch_config = None
+        self.reg_config = None
+        self.mesh_config = None
+        self.warp_config = None
+        self.mask_config = None
+        self.service_initialized = False
+        self.clear_cache()
+        logging.info("DataService: Active experiment session reset.")
+
     @staticmethod
     def create_default_stitch_config(exp_config: ExpConfig) -> StitchingConfig:
         return StitchingConfig().from_experiment(exp_config)

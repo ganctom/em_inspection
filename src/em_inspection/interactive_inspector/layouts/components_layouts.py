@@ -194,7 +194,23 @@ def to_details_card(exp_config: ExpConfig) -> dbc.Card:
     """Generates a standardized Dash card UI component from the model instance."""
     return dbc.Card(
         [
-            dbc.CardHeader(html.Strong(exp_config.name)),
+            dbc.CardHeader(
+                html.Div(
+                    [
+                        html.Strong(exp_config.name, className="align-middle"),
+                        dbc.Button(
+                            html.I(className="bi bi-trash"),
+                            id=UI.ID_BTN_DELETE_EXP,
+                            color="danger",
+                            size="sm",
+                            outline=True,
+                            title=f"Delete experiment '{exp_config.name}'",
+                            className="py-0 px-2",
+                        ),
+                    ],
+                    className="d-flex justify-content-between align-items-center w-100",
+                )
+            ),
             dbc.CardBody(
                 [
                     html.P(

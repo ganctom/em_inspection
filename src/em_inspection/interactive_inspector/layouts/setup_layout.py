@@ -167,6 +167,44 @@ def layout():
                                         ],
                                         className="d-grid gap-2 mt-3",
                                     ),
+                                    # --- CONFIG FILE PATH INFO ---
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.I(
+                                                        className="bi bi-file-earmark-code me-1 text-primary"
+                                                    ),
+                                                    html.Span(
+                                                        "Config File:",
+                                                        className="fw-semibold text-muted small me-2",
+                                                    ),
+                                                    html.Code(
+                                                        str(service.config_path),
+                                                        id="cfg-yaml-filepath",
+                                                        className="user-select-all p-1 bg-white border rounded small text-break font-monospace flex-grow-1 me-2",
+                                                    ),
+                                                    dcc.Clipboard(
+                                                        target_id="cfg-yaml-filepath",
+                                                        content=str(
+                                                            service.config_path
+                                                        ),
+                                                        title="Copy configuration file path to clipboard",
+                                                        style={
+                                                            "display": "inline-flex",
+                                                            "alignItems": "center",
+                                                            "justifyContent": "center",
+                                                            "fontSize": "0.9rem",
+                                                            "cursor": "pointer",
+                                                        },
+                                                        className="btn btn-sm btn-outline-secondary",
+                                                    ),
+                                                ],
+                                                className="d-flex align-items-center w-100",
+                                            ),
+                                        ],
+                                        className="mt-3 pt-3 border-top",
+                                    ),
                                 ],
                                 className="p-4 bg-light border rounded h-100",
                             )
@@ -178,6 +216,49 @@ def layout():
             ),
             # Feedback Toast/Alert
             html.Div(id="setup-feedback", className="mt-4"),
+            # Delete Confirmation Modal
+            dbc.Modal(
+                [
+                    dbc.ModalHeader(
+                        dbc.ModalTitle(
+                            "Confirm Experiment Removal",
+                            className="text-danger fw-bold",
+                        )
+                    ),
+                    dbc.ModalBody(
+                        [
+                            html.P(id="delete-modal-msg", className="mb-2"),
+                            dbc.Checkbox(
+                                id=UI.ID_CHK_TRASH_PROC_DIR,
+                                label="Quarantine processing directory on disk (rename to .trash_...)",
+                                value=False,
+                                className="mt-3 text-danger fw-semibold",
+                            ),
+                            html.Small(
+                                "Note: Raw acquisition files are never touched. Renaming is instantaneous (~5ms).",
+                                className="text-muted d-block mt-1",
+                            ),
+                        ]
+                    ),
+                    dbc.ModalFooter(
+                        [
+                            dbc.Button(
+                                "Cancel",
+                                id=UI.ID_BTN_CANCEL_DELETE,
+                                color="secondary",
+                                outline=True,
+                            ),
+                            dbc.Button(
+                                "Delete Experiment",
+                                id=UI.ID_BTN_CONFIRM_DELETE,
+                                color="danger",
+                            ),
+                        ]
+                    ),
+                ],
+                id=UI.ID_MODAL_DELETE_EXP,
+                is_open=False,
+            ),
         ],
         fluid=True,
     )

@@ -3,13 +3,14 @@ import threading
 from os.path import isdir
 
 import dash_bootstrap_components as dbc
-from dash import ALL, Input, Output, State, callback, ctx, html, no_update
+from dash import ALL, Input, Output, State, callback, ctx, dcc, html, no_update
 from pydantic import ValidationError
 
 from em_inspection.experiment_configs import (
     ExpConfig,
     ExperimentRegistryError,
     get_experiment_configurations,
+    get_purge_command_variants,
 )
 from em_inspection.interactive_inspector.assets.dash_helpers import (
     create_alert,
@@ -164,6 +165,220 @@ def update_details(exp_name):
         return create_alert("Error", "Configuration not found."), True
 
     return to_details_card(cfg), False
+
+
+# ==============================================================================
+# --- 3B. DELETE EXPERIMENT MODAL & EXECUTION ---
+# ==============================================================================
+@callback(
+    [
+        Output(UI.ID_MODAL_DELETE_EXP, "is_open"),
+        Output("delete-modal-msg", "children"),
+        Output(UI.ID_CHK_TRASH_PROC_DIR, "value"),
+    ],
+    Input(UI.ID_BTN_DELETE_EXP, "n_clicks"),
+    State("experiment-select", "value"),
+    prevent_initial_call=True,
+)
+def open_delete_modal(n_clicks, exp_name):
+    if not n_clicks or not exp_name:
+        return False, "", False
+
+    cfg = get_experiment_configurations().get(exp_name)
+    if not cfg:
+        return False, "", False
+
+    proc_info = (
+        html.Div(
+            [
+                html.Span(
+                    "Processing path: ", className="fw-semibold text-muted small"
+                ),
+                html.Code(
+                    cfg.proc_dir, className="bg-light p-1 rounded small text-break"
+                ),
+            ],
+            className="mt-2",
+        )
+        if cfg.proc_dir
+        else None
+    )
+
+    msg = [
+        html.P(
+            [
+                "Are you sure you want to remove experiment ",
+                html.Strong(f"'{exp_name}'"),
+                " from the configuration registry?",
+            ],
+            className="mb-1",
+        ),
+        proc_info,
+    ]
+    return True, msg, False
+
+
+@callback(
+    Output(UI.ID_MODAL_DELETE_EXP, "is_open", allow_duplicate=True),
+    Input(UI.ID_BTN_CANCEL_DELETE, "n_clicks"),
+    prevent_initial_call=True,
+)
+def cancel_delete_modal(n_clicks):
+    return False
+
+
+@callback(
+    [
+        Output(UI.ID_MODAL_DELETE_EXP, "is_open", allow_duplicate=True),
+        Output("experiment-select", "options"),
+        Output("experiment-select", "value"),
+        Output("setup-feedback", "children", allow_duplicate=True),
+        Output(UI.ID_GLOBAL_SETTINGS_STORE, "data", allow_duplicate=True),
+    ],
+    Input(UI.ID_BTN_CONFIRM_DELETE, "n_clicks"),
+    [
+        State("experiment-select", "value"),
+        State(UI.ID_CHK_TRASH_PROC_DIR, "value"),
+    ],
+    prevent_initial_call=True,
+)
+def confirm_delete_experiment(n_clicks, exp_name, quarantine_proc):
+    if not n_clicks or not exp_name:
+        return no_update, no_update, no_update, no_update, no_update
+
+    try:
+        # Pre-fetch proc_dir for clear feedback if it doesn't exist on disk
+        cfg = get_experiment_configurations().get(exp_name)
+        proc_dir = cfg.proc_dir if cfg else None
+
+        success, trashed_path, proc_dir_existed = service.delete_experiment(
+            exp_name, quarantine_proc_dir=bool(quarantine_proc)
+        )
+
+        # Refresh options from updated registry
+        configs = get_experiment_configurations()
+        new_options = [{"label": name, "value": name} for name in configs.keys()]
+
+        # Generate feedback component
+        if trashed_path:
+            purge_variants = get_purge_command_variants(trashed_path)
+
+            command_items = []
+            for idx, variant in enumerate(purge_variants):
+                cmd_id = f"rm-purge-cmd-{idx}"
+                command_items.append(
+                    html.Div(
+                        [
+                            html.Div(
+                                [
+                                    html.I(className=f"{variant.icon} me-1"),
+                                    html.Span(
+                                        variant.label,
+                                        className="fw-semibold small",
+                                    ),
+                                ],
+                                className="text-secondary small mb-1",
+                            ),
+                            html.Div(
+                                [
+                                    html.Code(
+                                        variant.command,
+                                        id=cmd_id,
+                                        className="user-select-all p-2 bg-dark text-white rounded small flex-grow-1 font-monospace me-2 text-break",
+                                    ),
+                                    dcc.Clipboard(
+                                        target_id=cmd_id,
+                                        content=variant.command,
+                                        title=f"Copy {variant.label} command to clipboard",
+                                        style={
+                                            "display": "inline-flex",
+                                            "alignItems": "center",
+                                            "justifyContent": "center",
+                                            "fontSize": "1rem",
+                                            "cursor": "pointer",
+                                        },
+                                        className="btn btn-sm btn-outline-secondary",
+                                    ),
+                                ],
+                                className="d-flex align-items-center mb-2",
+                            ),
+                        ],
+                        className="mb-2",
+                    )
+                )
+
+            feedback = dbc.Alert(
+                [
+                    html.H5(
+                        "✅ Experiment Removed & Quarantined",
+                        className="alert-heading fw-bold",
+                    ),
+                    html.P(
+                        f"Experiment '{exp_name}' was removed from the registry and its processing folder was renamed:"
+                    ),
+                    html.Pre(
+                        html.Code(trashed_path, className="text-break"),
+                        className="p-2 bg-light rounded small border mb-2",
+                    ),
+                    html.P(
+                        "To permanently delete this folder from disk, run the purge command in your terminal:",
+                        className="small mb-2 fw-bold text-muted",
+                    ),
+                    html.Div(command_items),
+                    html.Small(
+                        "Raw acquisition files were left untouched.",
+                        className="text-muted",
+                    ),
+                ],
+                color="success",
+                dismissable=True,
+                className="shadow-sm",
+            )
+        elif quarantine_proc and not proc_dir_existed:
+            feedback = dbc.Alert(
+                [
+                    html.H5(
+                        "⚠️ Experiment Removed (Processing Directory Not Found)",
+                        className="alert-heading fw-bold",
+                    ),
+                    html.P(
+                        f"Experiment '{exp_name}' was removed from the configuration registry.",
+                        className="mb-1",
+                    ),
+                    html.P(
+                        [
+                            "The configured processing directory does not exist on disk, so no files were quarantined or deleted: ",
+                            html.Code(proc_dir or "None", className="text-break"),
+                        ],
+                        className="small mb-0 text-muted",
+                    ),
+                ],
+                color="warning",
+                dismissable=True,
+                className="shadow-sm",
+            )
+        else:
+            feedback = dbc.Alert(
+                [
+                    html.H5("✅ Experiment Removed", className="alert-heading fw-bold"),
+                    html.P(
+                        f"Experiment '{exp_name}' was removed from the registry. Processing files on disk were left untouched."
+                    ),
+                ],
+                color="success",
+                dismissable=True,
+                className="shadow-sm",
+            )
+
+        new_settings = (
+            service.stitch_config.model_dump() if service.stitch_config else {}
+        )
+        return False, new_options, None, feedback, new_settings
+
+    except Exception as e:
+        logging.error("Error deleting experiment: %s", e, exc_info=True)
+        feedback = create_alert("Deletion Failed", color="danger", exception=e)
+        return False, no_update, no_update, feedback, no_update
 
 
 # ==============================================================================

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, Tuple
 
 import yaml
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .inspection_utils_refactor import cross_platform_path
 from .interactive_inspector.constants import DataConstants as DC
@@ -117,8 +117,12 @@ class ExpConfig(BaseModel):
 
 
 class AppConfig(BaseModel):
-    exp_yaml_path: str = EXP_YAML_PATH
-    projects: Dict[str, ExpConfig] = {}
+    exp_yaml_path: str = Field(
+        default_factory=lambda: os.environ.get(
+            "EM_INSPECTION_CONFIG", str(DEFAULT_CONFIG_PATH)
+        )
+    )
+    projects: Dict[str, ExpConfig] = Field(default_factory=dict)
 
 
 @dataclass(frozen=False)
