@@ -12,12 +12,12 @@ A Python application and interactive web dashboard for inspection, coarse offset
 
 ## Overview & Scientific Integrations
 
-- 🔬 **SBEMimage Integration**: Raw acquisition parsing and section indexing primarily supports datasets acquired with [**SBEMimage**](https://github.com/SBEMimage/SBEMimage), an open-source acquisition software package for serial block-face scanning electron microscopy.
-- 🧩 **Powered by Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily build upon the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Mosaic and Alignment) library developed by Google Research.
-- ⚡ **Interactive Dash Dashboard**: Rapid visual inspection of stage drift curves across tens of thousands of sections, dual-tile ultrastructure seam verification, box selection of outliers, and manual sub-pixel vector nudging.
-- 🎯 **Author's Coarse Offset Refinement**: Features a custom overlap-evaluation registration method that refines coarse offset vectors both for individual tile pairs and in high-throughput batch mode.
-- 🗄️ **Embedded DuckDB Spatial Database**: Ultra-fast relational registry storing and querying millions of coarse offset coordinates with atomic scratch compilation.
-- 🛠️ **Pixi Managed Environment**: Fast, reproducible Conda & PyPI dependency management via [Pixi](https://pixi.sh).
+- **SBEMimage Integration**: Raw acquisition parsing and section indexing primarily supports datasets acquired with [**SBEMimage**](https://github.com/SBEMimage/SBEMimage), an open-source acquisition software package for serial block-face scanning electron microscopy.
+- **Powered by Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily build upon the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Mosaic and Alignment) library developed by Google Research.
+- **Interactive Dash Dashboard**: Rapid visual inspection of stage drift curves across tens of thousands of sections, dual-tile ultrastructure seam verification, box selection of outliers, and manual sub-pixel vector nudging.
+- **Author's Coarse Offset Refinement**: Features a custom overlap-evaluation registration method that refines coarse offset vectors both for individual tile pairs and in high-throughput batch mode.
+- **Embedded DuckDB Spatial Database**: Ultra-fast relational registry storing and querying millions of coarse offset coordinates with atomic scratch compilation.
+- **Pixi Managed Environment**: Fast, reproducible Conda & PyPI dependency management via [Pixi](https://pixi.sh).
 
 ---
 
@@ -67,7 +67,7 @@ View the documentation at `http://127.0.0.1:8000`.
 ## Documentation
 
 For full guides, architecture concepts, workflow tutorials, and configuration references, visit our online documentation:
-👉 **[https://ganctom.github.io/em_inspection/](https://ganctom.github.io/em_inspection/)**
+**[https://ganctom.github.io/em_inspection/](https://ganctom.github.io/em_inspection/)**
 
 ---
 
