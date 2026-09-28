@@ -1,6 +1,6 @@
 # 4. Section Stitching & Warping
 
-The **Stitching** tab executes the non-rigid, elastic 2D assembly of individual microscope tiles into globally seamless section mosaics. Leveraging Google Research's [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Mosaic and Alignment) library (Januszewski & Kornfeld), this phase compensates for local non-linear lens distortions, specimen charging shears, and residual stage inaccuracies.
+The **Stitching** tab executes the non-rigid, elastic 2D assembly of individual microscope tiles into globally seamless section mosaics. Leveraging Google Research's [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Montaging and Alignment) library (Januszewski et al., 2024), this phase compensates for local non-linear lens distortions, specimen charging shears, and residual stage inaccuracies.
 
 ![Tab 4: Section Stitching Pipeline Interface](../assets/screenshots/page_4_stitching.png)
 
@@ -104,7 +104,7 @@ Once a section completes, the following files are saved in its section folder:
 
 ## References
 
-- **SOFIMA**: Michal Januszewski & Jörgen Kornfeld, *Scalable optical flow-based image mosaic and alignment*, [Google Research](https://github.com/google-research/sofima).
+- **SOFIMA**: Januszewski, M., Blakely, T., & Lueckmann, J.-M. (2024). *SOFIMA: Scalable Optical Flow-based Image Montaging and Alignment* [Computer software]. Zenodo. [https://doi.org/10.5281/zenodo.10534541](https://doi.org/10.5281/zenodo.10534541) / [GitHub](https://github.com/google-research/sofima).
 
 ---
 

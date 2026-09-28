@@ -9,7 +9,7 @@ Serial Block-Face Scanning Electron Microscopy (SBEM) combines iterative diamond
 To ensure high performance and reproducibility, `em_inspection` bridges standard acquisition software with state-of-the-art alignment libraries:
 
 - **SBEMimage Integration**: Raw dataset parsing and coordinate indexing are primarily designed for datasets acquired with [**SBEMimage**](https://github.com/SBEMimage/SBEMimage), the established open-source microscope control software for serial block-face imaging.
-- **Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily utilize the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Mosaic and Alignment) library developed by Google Research (Januszewski & Kornfeld).
+- **Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily utilize the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Montaging and Alignment) library developed by Google Research (Januszewski et al., 2024).
 - **Author's Coarse Offset Refinement**: Features a custom overlap-evaluation registration method that evaluates overlap consistency across candidate displacement grids to refine coarse offsets individually or in batch.
 
 ---
@@ -106,5 +106,5 @@ Once all sections are stitched into 2D mosaics, cross-section optical flow is co
 
 ## References
 
-- **SOFIMA**: Michal Januszewski & Jörgen Kornfeld, *Scalable optical flow-based image mosaic and alignment*, [Google Research](https://github.com/google-research/sofima).
+- **SOFIMA**: Januszewski, M., Blakely, T., & Lueckmann, J.-M. (2024). *SOFIMA: Scalable Optical Flow-based Image Montaging and Alignment* [Computer software]. Zenodo. [https://doi.org/10.5281/zenodo.10534541](https://doi.org/10.5281/zenodo.10534541) / [GitHub](https://github.com/google-research/sofima).
 - **SBEMimage**: Benjamin Titze et al., *SBEMimage: Open-source acquisition software for serial block-face electron microscopy*, [SBEMimage Repository](https://github.com/SBEMimage/SBEMimage).

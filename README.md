@@ -13,7 +13,7 @@ A Python application and interactive web dashboard for inspection, coarse offset
 ## Overview & Scientific Integrations
 
 - **SBEMimage Integration**: Raw acquisition parsing and section indexing primarily supports datasets acquired with [**SBEMimage**](https://github.com/SBEMimage/SBEMimage), an open-source acquisition software package for serial block-face scanning electron microscopy.
-- **Powered by Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily build upon the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Mosaic and Alignment) library developed by Google Research.
+- **Powered by Google Research SOFIMA**: High-throughput 2D mesh relaxation, fine optical flow estimation, and non-rigid elastic section warping heavily build upon the [**SOFIMA**](https://github.com/google-research/sofima) (Scalable Optical Flow-based Image Montaging and Alignment) library developed by Google Research (Januszewski et al., 2024).
 - **Interactive Dash Dashboard**: Rapid visual inspection of stage drift curves across tens of thousands of sections, dual-tile ultrastructure seam verification, box selection of outliers, and manual sub-pixel vector nudging.
 - **Author's Coarse Offset Refinement**: Features a custom overlap-evaluation registration method that refines coarse offset vectors both for individual tile pairs and in high-throughput batch mode.
 - **Embedded DuckDB Spatial Database**: Ultra-fast relational registry storing and querying millions of coarse offset coordinates with atomic scratch compilation.
@@ -73,7 +73,7 @@ For full guides, architecture concepts, workflow tutorials, and configuration re
 
 ## References & Acknowledgments
 
-- **SOFIMA**: Michal Januszewski & Jörgen Kornfeld, *Scalable optical flow-based image mosaic and alignment*, [Google Research](https://github.com/google-research/sofima).
+- **SOFIMA**: Januszewski, M., Blakely, T., & Lueckmann, J.-M. (2024). *SOFIMA: Scalable Optical Flow-based Image Montaging and Alignment* [Computer software]. Zenodo. [https://doi.org/10.5281/zenodo.10534541](https://doi.org/10.5281/zenodo.10534541) / [GitHub](https://github.com/google-research/sofima).
 - **SBEMimage**: Benjamin Titze et al., *SBEMimage: Open-source acquisition software for serial block-face electron microscopy*, [SBEMimage Repository](https://github.com/SBEMimage/SBEMimage).
 
 ---
